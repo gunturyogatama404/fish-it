@@ -9,12 +9,12 @@ local GITHUB_REPO = "fish-it" -- Change this to your repository name
 local BRANCH = "main" -- or "master" depending on your default branch
 
 -- Base URL for raw GitHub content
-local BASE_URL = string.format("https://raw.githubusercontent.com/DarylLoudi/fish-it/main/", GITHUB_USER, GITHUB_REPO, BRANCH)
+local BASE_URL = string.format("https://raw.githubusercontent.com/%s/%s/%s/", GITHUB_USER, GITHUB_REPO, BRANCH)
 
 -- Module URLs
 local MODULE_URLS = {
     AutoFeatures = BASE_URL .. "AutoFeatures.lua",
-    Performance = BASE_URL .. "Performance.lua", 
+    Performance = BASE_URL .. "Performance.lua",
     Teleport = BASE_URL .. "Teleport.lua",
     UIControls = BASE_URL .. "UIControls.lua"
 }
@@ -64,31 +64,28 @@ local sessionStats = {
 
 -- ====== MODULE LOADER ======
 local function loadModule(moduleName, url)
+    print("🔍 Checking " .. moduleName .. " at " .. url)
     local success, result = pcall(function()
         return loadstring(game:HttpGet(url))()
     end)
-    
     if success then
         print("✅ " .. moduleName .. " loaded successfully")
         return result
     else
-        warn("❌ Failed to load " .. moduleName .. ": " .. tostring(result))
+        warn("❌ Failed to load " .. moduleName .. " from " .. url .. ": " .. tostring(result))
         return nil
     end
 end
 
 -- ====== FALLBACK LOCAL MODULES ======
--- These will be used if GitHub loading fails
 local function loadLocalModules()
     warn("🔄 GitHub loading failed, using fallback method...")
-    
-    -- You can paste your module codes here as fallback
-    -- For now, we'll return nil to indicate failure
+    -- Return any successfully loaded modules as fallback
     return {
-        AutoFeatures = nil,
-        Performance = nil,
-        Teleport = nil,
-        UIControls = nil
+        AutoFeatures = _G.AutoFishDebug.reloadModule("AutoFeatures") or nil,
+        Performance = _G.AutoFishDebug.reloadModule("Performance") or nil,
+        Teleport = _G.AutoFishDebug.reloadModule("Teleport") or nil,
+        UIControls = _G.AutoFishDebug.reloadModule("UIControls") or nil
     }
 end
 
@@ -209,8 +206,6 @@ local function safeMain()
         warn("❌ Auto Fish initialization failed:")
         warn(tostring(error))
         warn("🔧 Please check your GitHub configuration or network connection")
-        
-        -- You can add a simple fallback UI here if needed
         print("💡 You can still try loading individual modules manually")
     end
 end
@@ -219,7 +214,6 @@ end
 safeMain()
 
 -- ====== UTILITY FUNCTIONS FOR DEBUGGING ======
--- Global functions for manual module management (useful for debugging)
 _G.AutoFishDebug = {
     reloadModule = function(moduleName)
         if MODULE_URLS[moduleName] then
