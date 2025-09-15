@@ -1,7 +1,3 @@
--- Auto Farm GUI - versi UI rapi (Kavo) + MINIMIZE + Custom Delay + Auto Bait Upgrade + GPU Saver Mode + Integrated Fishing Stats Display
--- Version 4.5 with Integrated Fishing Status Display (No Config Save/Load)
-
--- ====== Bagian asli dengan improved WaitForChild ======
 local player = game.Players.LocalPlayer
 local replicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -25,7 +21,69 @@ local sessionStats = {
 
 -- Database ikan lengkap
 local fishDatabase = {
-    [163] = {name = "Viperfish", sellPrice = 94}
+    [163] = {name = "Viperfish", sellPrice = 94},
+    [153] = {name = "Dark Eel", sellPrice = 96},
+    [161] = {name = "Spotted Lantern Fish", sellPrice = 88},
+    [157] = {name = "JellyFish", sellPrice = 402},
+    [162] = {name = "Vampire Squid", sellPrice = 3770},
+    [160] = {name = "Monk Fish", sellPrice = 3200},
+    [149] = {name = "Angler Fish", sellPrice = 3620},
+    [152] = {name = "Deep Sea Crab", sellPrice = 4680},
+    [150] = {name = "Blob FIsh", sellPrice = 26200},
+    [156] = {name = "Giant Squid", sellPrice = 162300},
+    [152] = {name = "Deep Sea Crab", sellPrice = 4680},
+    [159] = {name = "Robot Kraken", sellPrice = 327500},
+
+    [190] = {name = "Salmon ", sellPrice = 103},
+    [202] = {name = "Flat Fish", sellPrice = 58},
+    [203] = {name = "Flying fish", sellPrice = 55},
+    [211] = {name = "wahoo", sellPrice = 105},
+    [30] = {name = "tricolore butterfly", sellPrice = 112},
+    [204] = {name = "lion fish", sellPrice = 143},
+    [23] = {name = "maze angelfish", sellPrice = 153},
+    [28] = {name = "white clownfish", sellPrice = 347},
+    [29] = {name = "scissortail dartfish", sellPrice = 369},
+    [209] = {name = "starfish", sellPrice = 385},
+    [27] = {name = "panther grouper", sellPrice = 1044},
+    [26] = {name = "domino damsel", sellPrice = 1444},
+    [10] = {name = "enchant stone", sellPrice = 1000},
+    [24] = {name = "starjam tang", sellPrice = 4200},
+    [207] = {name = "pink dolphin", sellPrice = 3910},
+    [25] = {name = "greenbee grouper", sellPrice = 5732},
+    [208] = {name = "saw fish", sellPrice = 11250},
+    [22] = {name = "blue lobster", sellPrice = 11355},
+    [21] = {name = "hawks turtle", sellPrice = 40500},
+    [205] = {name = "luminous fish", sellPrice = 31150},
+
+    [50] = {name = "magma goby", sellPrice = 135},
+    [87] = {name = "lava butterfly", sellPrice = 153},
+    [88] = {name = "rockform cardianl", sellPrice = 347},
+    [89] = {name = "volsail tang", sellPrice = 369},
+    [49] = {name = "firecoal damsel", sellPrice = 1044},
+    [48] = {name = "lavafin tuna", sellPrice = 4500},
+    [47] = {name = "blueflame ray", sellPrice = 45000},
+
+    [189] = {name = "rockfish", sellPrice = 92},
+    [19] = {name = "coal tang", sellPrice = 74},
+    [210] = {name = "dark tentacle", sellPrice = 392},
+    [18] = {name = "charmed tang", sellPrice = 393},
+    [17] = {name = "astra damsel", sellPrice = 1633},
+    [14] = {name = "enchanted anglefish", sellPrice = 4200},
+    [218] = {name = "thin armor shark", sellPrice = 91000},
+    [225] = {name = "scare", sellPrice = 280000},
+
+    [140] = {name = "pilot fish", sellPrice = 58},
+    [188] = {name = "red snaper", sellPrice = 97},
+    [186] = {name = "parrot fish", sellPrice = 93},
+    [182] = {name = "blackcap", sellPrice = 95},
+    [139] = {name = "silver tuna", sellPrice = 62},
+    [183] = {name = "catfish", sellPrice = 422},
+    [191] = {name = "sheepshead", sellPrice = 412},
+    [184] = {name = "coney", sellPrice = 287},
+    [138] = {name = "axolotl", sellPrice = 3971},
+    [136] = {name = "frostborn shark", sellPrice = 100000},
+    [137] = {name = "plasma shark", sellPrice = 94500}
+
 }
 -- State variables
 local isAutoFarmOn = false
@@ -82,6 +140,34 @@ local function getCurrentLevel()
     end)
     
     return success and result or "Lvl 0"
+end
+
+-- fungsi quest
+
+local function getQuestText(labelName)
+    local success, result = pcall(function()
+        local menuRings = workspace:FindFirstChild("!!! MENU RINGS")
+        if not menuRings then return "Quest not found" end
+        
+        local deepSeaTracker = menuRings:FindFirstChild("Deep Sea Tracker")
+        if not deepSeaTracker then return "Quest not found" end
+        
+        local board = deepSeaTracker:FindFirstChild("Board")
+        if not board then return "Quest not found" end
+        
+        local gui = board:FindFirstChild("Gui")
+        if not gui then return "Quest not found" end
+        
+        local content = gui:FindFirstChild("Content")
+        if not content then return "Quest not found" end
+        
+        local label = content:FindFirstChild(labelName)
+        if not label then return "Quest not found" end
+        
+        return label.Text or "No data"
+    end)
+    
+    return success and result or "Error fetching quest"
 end
 
 -- ====== FISHING STATS FUNCTIONS ======
@@ -213,27 +299,15 @@ local function createWhiteScreen()
     titleLabel.TextYAlignment = Enum.TextYAlignment.Center
     titleLabel.Parent = frame
     
-    -- Subtitle
-    local subtitleLabel = Instance.new("TextLabel")
-    subtitleLabel.Size = UDim2.new(0, 500, 0, 30)
-    subtitleLabel.Position = UDim2.new(0.5, -250, 0, 170)
-    subtitleLabel.BackgroundTransparency = 1
-    subtitleLabel.Text = "Real-time fishing session monitoring"
-    subtitleLabel.TextColor3 = Color3.new(0.7, 0.7, 0.7)
-    subtitleLabel.TextSize = 18
-    subtitleLabel.Font = Enum.Font.SourceSans
-    subtitleLabel.TextXAlignment = Enum.TextXAlignment.Center
-    subtitleLabel.Parent = frame
-    
     -- Session time (centered)
     local sessionLabel = Instance.new("TextLabel")
     sessionLabel.Name = "SessionLabel"
     sessionLabel.Size = UDim2.new(0, 400, 0, 40)
-    sessionLabel.Position = UDim2.new(0.5, -200, 0, 220)
+    sessionLabel.Position = UDim2.new(0.5, -200, 0, 180)
     sessionLabel.BackgroundTransparency = 1
     sessionLabel.Text = "⏱️ Uptime: 00:00:00"
     sessionLabel.TextColor3 = Color3.new(1, 1, 1)
-    sessionLabel.TextSize = 20
+    sessionLabel.TextSize = 22
     sessionLabel.Font = Enum.Font.SourceSansBold
     sessionLabel.TextXAlignment = Enum.TextXAlignment.Center
     sessionLabel.Parent = frame
@@ -242,11 +316,11 @@ local function createWhiteScreen()
     local fishStatsLabel = Instance.new("TextLabel")
     fishStatsLabel.Name = "FishStatsLabel"
     fishStatsLabel.Size = UDim2.new(0, 400, 0, 40)
-    fishStatsLabel.Position = UDim2.new(0.5, -200, 0, 280)
+    fishStatsLabel.Position = UDim2.new(0.5, -200, 0, 200)
     fishStatsLabel.BackgroundTransparency = 1
     fishStatsLabel.Text = "🎣 Fish Caught: " .. FormatNumber(sessionStats.totalFish)
     fishStatsLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
-    fishStatsLabel.TextSize = 18
+    fishStatsLabel.TextSize = 22
     fishStatsLabel.Font = Enum.Font.SourceSans
     fishStatsLabel.TextXAlignment = Enum.TextXAlignment.Center
     fishStatsLabel.Parent = frame
@@ -255,11 +329,11 @@ local function createWhiteScreen()
     local coinLabel = Instance.new("TextLabel")
     coinLabel.Name = "CoinLabel"
     coinLabel.Size = UDim2.new(0, 400, 0, 40)
-    coinLabel.Position = UDim2.new(0.5, -200, 0, 330)
+    coinLabel.Position = UDim2.new(0.5, -200, 0, 220)
     coinLabel.BackgroundTransparency = 1
     coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
     coinLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
-    coinLabel.TextSize = 18
+    coinLabel.TextSize = 22
     coinLabel.Font = Enum.Font.SourceSans
     coinLabel.TextXAlignment = Enum.TextXAlignment.Center
     coinLabel.Parent = frame
@@ -268,14 +342,66 @@ local function createWhiteScreen()
     local levelLabel = Instance.new("TextLabel")
     levelLabel.Name = "LevelLabel"
     levelLabel.Size = UDim2.new(0, 400, 0, 40)
-    levelLabel.Position = UDim2.new(0.5, -200, 0, 380)
+    levelLabel.Position = UDim2.new(0.5, -200, 0, 240)
     levelLabel.BackgroundTransparency = 1
     levelLabel.Text = "⭐ " .. getCurrentLevel()
     levelLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
-    levelLabel.TextSize = 18
+    levelLabel.TextSize = 22
     levelLabel.Font = Enum.Font.SourceSans
     levelLabel.TextXAlignment = Enum.TextXAlignment.Center
     levelLabel.Parent = frame
+
+        local quest1Label = Instance.new("TextLabel")
+    quest1Label.Name = "Quest1Label"
+    quest1Label.Size = UDim2.new(0, 600, 0, 30)  -- Lebar lebih untuk 2 quests, height compact
+    quest1Label.Position = UDim2.new(0.5, -300, 0, 310)  -- Di bawah level
+    quest1Label.BackgroundTransparency = 1
+    quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1")
+    quest1Label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+    quest1Label.TextSize = 20  -- Tetap pas seperti sekarang
+    quest1Label.Font = Enum.Font.SourceSans
+    quest1Label.TextXAlignment = Enum.TextXAlignment.Center
+    quest1Label.TextWrapped = true  -- Wrap jika panjang
+    quest1Label.Parent = frame
+
+    local quest2Label = Instance.new("TextLabel")
+    quest2Label.Name = "Quest2Label"
+    quest2Label.Size = UDim2.new(0, 600, 0, 30)  -- Lebar lebih untuk 2 quests, height compact
+    quest2Label.Position = UDim2.new(0.5, -300, 0, 330)  -- Di bawah level
+    quest2Label.BackgroundTransparency = 1
+    quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2")
+    quest2Label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+    quest2Label.TextSize = 20  -- Tetap pas seperti sekarang
+    quest2Label.Font = Enum.Font.SourceSans
+    quest2Label.TextXAlignment = Enum.TextXAlignment.Center
+    quest2Label.TextWrapped = true  -- Wrap jika panjang
+    quest2Label.Parent = frame
+
+    local quest3Label = Instance.new("TextLabel")
+    quest3Label.Name = "Quest3Label"
+    quest3Label.Size = UDim2.new(0, 600, 0, 30)  -- Lebar lebih untuk 2 quests, height compact
+    quest3Label.Position = UDim2.new(0.5, -300, 0, 350)  -- Di bawah level
+    quest3Label.BackgroundTransparency = 1
+    quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3")
+    quest3Label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+    quest3Label.TextSize = 20  -- Tetap pas seperti sekarang
+    quest3Label.Font = Enum.Font.SourceSans
+    quest3Label.TextXAlignment = Enum.TextXAlignment.Center
+    quest3Label.TextWrapped = true  -- Wrap jika panjang
+    quest3Label.Parent = frame
+
+    local quest4Label = Instance.new("TextLabel")
+    quest4Label.Name = "Quest4Label"
+    quest4Label.Size = UDim2.new(0, 600, 0, 30)  -- Lebar lebih untuk 2 quests, height compact
+    quest4Label.Position = UDim2.new(0.5, -300, 0, 370)  -- Di bawah level
+    quest4Label.BackgroundTransparency = 1
+    quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4")
+    quest4Label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+    quest4Label.TextSize = 20  -- Tetap pas seperti sekarang
+    quest4Label.Font = Enum.Font.SourceSans
+    quest4Label.TextXAlignment = Enum.TextXAlignment.Center
+    quest4Label.TextWrapped = true  -- Wrap jika panjang
+    quest4Label.Parent = frame
     
     -- Auto features status (centered)
     local statusLabel = Instance.new("TextLabel")
@@ -305,6 +431,23 @@ local function createWhiteScreen()
     instructionsLabel.TextXAlignment = Enum.TextXAlignment.Center
     instructionsLabel.TextYAlignment = Enum.TextYAlignment.Center
     instructionsLabel.Parent = frame
+
+        -- Close button for Android/mobile users
+    local closeButton = Instance.new("TextButton")
+    closeButton.Size = UDim2.new(0, 200, 0, 40)
+    closeButton.Position = UDim2.new(1, -220, 0, 100)
+    closeButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+    closeButton.BorderSizePixel = 0
+    closeButton.Text = "❌ Disable GPU Saver"
+    closeButton.TextColor3 = Color3.new(1, 0, 0)
+    closeButton.TextSize = 16
+    closeButton.Font = Enum.Font.SourceSansBold
+    closeButton.TextXAlignment = Enum.TextXAlignment.Center
+    closeButton.Parent = frame
+
+    closeButton.MouseButton1Click:Connect(function()
+        disableGPUSaver()
+    end)
     
     -- FPS Counter (top right)
     local fpsLabel = Instance.new("TextLabel")
@@ -376,6 +519,31 @@ local function createWhiteScreen()
                 pcall(function()
                     if levelLabel and levelLabel.Parent then
                         levelLabel.Text = "⭐ " .. getCurrentLevel()
+                    end
+                end)
+
+                -- Safe quest
+                pcall(function()
+                    if quest1Label and quest1Label.Parent then
+                        quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1")
+                    end
+                end)
+
+                pcall(function()
+                    if quest2Label and quest2Label.Parent then
+                        quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2")
+                    end
+                end)
+                
+                pcall(function()
+                    if quest3Label and quest3Label.Parent then
+                        quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3")
+                    end
+                end)
+
+                pcall(function()
+                    if quest4Label and quest4Label.Parent then
+                        quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4")
                     end
                 end)
                 
@@ -1277,8 +1445,8 @@ SecUI:NewKeybind("Minimize/Restore (RightShift)", "Toggle UI cepat", Enum.KeyCod
     if isMinimized then restoreUI() else minimizeUI() end
 end)
 
-SecUI:NewButton("Force Show UI", "Paksa tampilkan UI jika tersembunyi", function()
-    restoreUI()
+SecUI:NewButton("Minimize UI" function()
+    minimizeUI()
 end)
 
 -- Custom minimize button
@@ -1526,7 +1694,7 @@ end)
 -- Counts by species (Tile.ItemName), shows pretty display (Variant + Base when available)
 
 -- ============ CONFIG ============
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1378767185643831326/b0mB-z4r5YTQGeQnX7EwyvXoo1yiO7UcZzeOKeS9JKcKn-6AWVnicplzs6duT6Jt80kK"
+local WEBHOOK_URL = webhook2
 
 -- Whitelist pakai NAMA SPECIES (tanpa prefix varian)
 local WHITELIST = {"Robot Kraken", "Giant Squid", "Thin Armor Shark", "Frostborn Shark", "Plasma Shark", "Eerie Shark", "Scare", "Ghost Shark", "Blob Shark", "Megalodon", "Lochness Monster"}
