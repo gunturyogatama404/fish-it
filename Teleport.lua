@@ -1445,7 +1445,7 @@ SecUI:NewKeybind("Minimize/Restore (RightShift)", "Toggle UI cepat", Enum.KeyCod
     if isMinimized then restoreUI() else minimizeUI() end
 end)
 
-SecUI:NewButton("Minimize UI", function()
+SecUI:NewButton("Minimize UI", "Hide the interface", function()
     minimizeUI()
 end)
 
