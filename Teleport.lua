@@ -21,7 +21,69 @@ local sessionStats = {
 
 -- Database ikan lengkap
 local fishDatabase = {
-    [163] = {name = "Viperfish", sellPrice = 94}
+    [163] = {name = "Viperfish", sellPrice = 94},
+    [153] = {name = "Dark Eel", sellPrice = 96},
+    [161] = {name = "Spotted Lantern Fish", sellPrice = 88},
+    [157] = {name = "JellyFish", sellPrice = 402},
+    [162] = {name = "Vampire Squid", sellPrice = 3770},
+    [160] = {name = "Monk Fish", sellPrice = 3200},
+    [149] = {name = "Angler Fish", sellPrice = 3620},
+    [152] = {name = "Deep Sea Crab", sellPrice = 4680},
+    [150] = {name = "Blob FIsh", sellPrice = 26200},
+    [156] = {name = "Giant Squid", sellPrice = 162300},
+    [152] = {name = "Deep Sea Crab", sellPrice = 4680},
+    [159] = {name = "Robot Kraken", sellPrice = 327500},
+
+    [190] = {name = "Salmon ", sellPrice = 103},
+    [202] = {name = "Flat Fish", sellPrice = 58},
+    [203] = {name = "Flying fish", sellPrice = 55},
+    [211] = {name = "wahoo", sellPrice = 105},
+    [30] = {name = "tricolore butterfly", sellPrice = 112},
+    [204] = {name = "lion fish", sellPrice = 143},
+    [23] = {name = "maze angelfish", sellPrice = 153},
+    [28] = {name = "white clownfish", sellPrice = 347},
+    [29] = {name = "scissortail dartfish", sellPrice = 369},
+    [209] = {name = "starfish", sellPrice = 385},
+    [27] = {name = "panther grouper", sellPrice = 1044},
+    [26] = {name = "domino damsel", sellPrice = 1444},
+    [10] = {name = "enchant stone", sellPrice = 1000},
+    [24] = {name = "starjam tang", sellPrice = 4200},
+    [207] = {name = "pink dolphin", sellPrice = 3910},
+    [25] = {name = "greenbee grouper", sellPrice = 5732},
+    [208] = {name = "saw fish", sellPrice = 11250},
+    [22] = {name = "blue lobster", sellPrice = 11355},
+    [21] = {name = "hawks turtle", sellPrice = 40500},
+    [205] = {name = "luminous fish", sellPrice = 31150},
+
+    [50] = {name = "magma goby", sellPrice = 135},
+    [87] = {name = "lava butterfly", sellPrice = 153},
+    [88] = {name = "rockform cardianl", sellPrice = 347},
+    [89] = {name = "volsail tang", sellPrice = 369},
+    [49] = {name = "firecoal damsel", sellPrice = 1044},
+    [48] = {name = "lavafin tuna", sellPrice = 4500},
+    [47] = {name = "blueflame ray", sellPrice = 45000},
+
+    [189] = {name = "rockfish", sellPrice = 92},
+    [19] = {name = "coal tang", sellPrice = 74},
+    [210] = {name = "dark tentacle", sellPrice = 392},
+    [18] = {name = "charmed tang", sellPrice = 393},
+    [17] = {name = "astra damsel", sellPrice = 1633},
+    [14] = {name = "enchanted anglefish", sellPrice = 4200},
+    [218] = {name = "thin armor shark", sellPrice = 91000},
+    [225] = {name = "scare", sellPrice = 280000},
+
+    [140] = {name = "pilot fish", sellPrice = 58},
+    [188] = {name = "red snaper", sellPrice = 97},
+    [186] = {name = "parrot fish", sellPrice = 93},
+    [182] = {name = "blackcap", sellPrice = 95},
+    [139] = {name = "silver tuna", sellPrice = 62},
+    [183] = {name = "catfish", sellPrice = 422},
+    [191] = {name = "sheepshead", sellPrice = 412},
+    [184] = {name = "coney", sellPrice = 287},
+    [138] = {name = "axolotl", sellPrice = 3971},
+    [136] = {name = "frostborn shark", sellPrice = 100000},
+    [137] = {name = "plasma shark", sellPrice = 94500}
+
 }
 -- State variables
 local isAutoFarmOn = false
@@ -231,7 +293,7 @@ local function createWhiteScreen()
     titleLabel.Text = "🟢 " .. LocalPlayer.Name .. "\nTotal Caught: " .. totalCaught .. "\nBest Caught: " .. bestCaught
     titleLabel.TextColor3 = Color3.new(0, 1, 0)
     titleLabel.TextScaled = false
-    titleLabel.TextSize = 24
+    titleLabel.TextSize = 32
     titleLabel.Font = Enum.Font.SourceSansBold
     titleLabel.TextXAlignment = Enum.TextXAlignment.Center
     titleLabel.TextYAlignment = Enum.TextYAlignment.Center
@@ -356,8 +418,21 @@ local function createWhiteScreen()
     statusLabel.TextXAlignment = Enum.TextXAlignment.Center
     statusLabel.TextYAlignment = Enum.TextYAlignment.Center
     statusLabel.Parent = frame
+    
+    -- Instructions (centered)
+    local instructionsLabel = Instance.new("TextLabel")
+    instructionsLabel.Size = UDim2.new(0, 600, 0, 60)
+    instructionsLabel.Position = UDim2.new(0.5, -300, 1, -120)
+    instructionsLabel.BackgroundTransparency = 1
+    instructionsLabel.Text = "💡 Press RightControl to toggle GPU Saver Mode\n🎮 Use the GUI or hotkeys to control auto features"
+    instructionsLabel.TextColor3 = Color3.new(0.6, 0.6, 0.6)
+    instructionsLabel.TextSize = 16
+    instructionsLabel.Font = Enum.Font.SourceSans
+    instructionsLabel.TextXAlignment = Enum.TextXAlignment.Center
+    instructionsLabel.TextYAlignment = Enum.TextYAlignment.Center
+    instructionsLabel.Parent = frame
 
-    -- Close button for Android/mobile users
+        -- Close button for Android/mobile users
     local closeButton = Instance.new("TextButton")
     closeButton.Size = UDim2.new(0, 200, 0, 40)
     closeButton.Position = UDim2.new(1, -220, 0, 100)
@@ -385,6 +460,18 @@ local function createWhiteScreen()
     fpsLabel.Font = Enum.Font.SourceSansBold
     fpsLabel.TextXAlignment = Enum.TextXAlignment.Right
     fpsLabel.Parent = frame
+    
+    -- Last update time (top right below FPS)
+    local lastUpdateLabel = Instance.new("TextLabel")
+    lastUpdateLabel.Size = UDim2.new(0, 200, 0, 30)
+    lastUpdateLabel.Position = UDim2.new(1, -220, 0, 70)
+    lastUpdateLabel.BackgroundTransparency = 1
+    lastUpdateLabel.Text = "Last Update: " .. os.date("%H:%M:%S")
+    lastUpdateLabel.TextColor3 = Color3.new(0.7, 0.7, 0.7)
+    lastUpdateLabel.TextSize = 14
+    lastUpdateLabel.Font = Enum.Font.SourceSans
+    lastUpdateLabel.TextXAlignment = Enum.TextXAlignment.Right
+    lastUpdateLabel.Parent = frame
     
 -- ====== IMPROVED UPDATE SYSTEM ======
     task.spawn(function()
@@ -654,10 +741,33 @@ local teleportLocations = {
 local rodIDs = {79, 76, 85, 76, 78, 4, 80, 6, 7, 5}
 local baitIDs = {10, 2, 3, 6, 8, 15, 16}
 local WeatherIDs = {"Cloudy", "Storm","Wind"}
-local rodDatabase = {luck = 79,carbon = 76,grass = 85,demascus = 76,ice = 78,lucky = 4,midnight = 80,steampunk = 6,chrome = 7,astral = 5}
-local BaitDatabase = {topwaterbait = 10,luckbait = 2,midnightbait = 3,chromabait = 6,darkmatterbait = 8,corruptbait = 15,aetherbait = 16}
+local rodDatabase = {
+    luck = 79,
+    carbon = 76,
+    grass = 85,
+    demascus = 76,
+    ice = 78,
+    lucky = 4,
+    midnight = 80,
+    steampunk = 6,
+    chrome = 7,
+    astral = 5
+}
+local BaitDatabase = {
+    topwaterbait = 10,
+    luckbait = 2,
+    midnightbait = 3,
+    chromabait = 6,
+    darkmatterbait = 8,
+    corruptbait = 15,
+    aetherbait = 16
+}
 -- Database ID Enchant
-local enchantDatabase = {["Cursed I"] = 12,["Leprechaun I"] = 5,["Leprechaun II"] = 6}
+local enchantDatabase = {
+    ["Cursed I"] = 12,
+    ["Leprechaun I"] = 5,
+    ["Leprechaun II"] = 6
+}
 
 -- ====== CORE FUNCTIONS ======
 local function chargeFishingRod()
@@ -1600,15 +1710,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
-local GuiService = game:GetService("GuiService")
-
-
-local hasSentDisconnectWebhook = false  -- Flag untuk avoid kirim berulang
-local PING_THRESHOLD = 1000  -- ms, jika > ini = poor connection
-local FREEZE_THRESHOLD = 3  -- detik, jika delta > ini = freeze
-
-local hasSentDisconnectWebhook = false  -- Flag untuk avoid kirim berulang
 local player = Players.LocalPlayer
+
 -- ============ UTIL ============
 local function trim(s) return (s or ""):gsub("^%s+",""):gsub("%s+$","") end
 local function normSpaces(s) return trim((s or ""):gsub("%s+"," ")) end
@@ -1857,98 +1960,6 @@ local function scanAndNotifySingle()
     seenCounts = counts
     closeInventory()
 end
-
--- ============ DISCONNECT NOTIFIER ============
-
-local function sendDisconnectWebhook(username, reason)
-    if hasSentDisconnectWebhook then return end
-    hasSentDisconnectWebhook = true
-    
-    local embed = {
-        title = "⚠️ Roblox Account Disconnected",
-        description = "Akun Roblox telah disconnect dari game.",
-        color = 16711680,
-        fields = {
-            { name = "👤 Username", value = username or "Unknown", inline = true },
-            { name = "❓ Reason", value = reason or "Unknown", inline = true },
-            { name = "🕒 Waktu", value = os.date("%H:%M:%S"), inline = true },
-        },
-        footer = { text = "Disconnect Notifier • Auto Fish Script" }
-    }
-    local body = HttpService:JSONEncode({ embeds = {embed} })
-
-    local ok, err = pcall(function()
-        if syn and syn.request then
-            syn.request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif http_request then
-            http_request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif fluxus and fluxus.request then
-            fluxus.request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif request then
-            request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        else
-            error("Executor tidak support HTTP requests")
-        end
-    end)
-    if not ok then warn("❌ Gagal kirim webhook disconnect:", err) else print("✅ Webhook disconnect terkirim") end
-end
-
-local function setupDisconnectNotifier()
-    local username = Players.LocalPlayer.Name  -- Atau DisplayName jika mau
-    
-    -- Kode lama: Error message dan PlayerRemoving
-    GuiService.ErrorMessageChanged:Connect(function(message)
-        local lowerMessage = string.lower(message)
-        local reason = "Unknown"
-        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") then
-            reason = "Connection Lost: " .. message
-        elseif lowerMessage:find("kick") or lowerMessage:find("banned") then
-            reason = "Kicked: " .. message
-        elseif lowerMessage:find("timeout") then
-            reason = "Timeout: " .. message
-        elseif lowerMessage:find("error") then
-            reason = "General Error: " .. message
-        else
-            return
-        end
-        task.spawn(function() sendDisconnectWebhook(username, reason) end)
-    end)
-    
-    Players.PlayerRemoving:Connect(function(removedPlayer)
-        if removedPlayer == Players.LocalPlayer and not hasSentDisconnectWebhook then
-            task.spawn(function() sendDisconnectWebhook(username, "Disconnected (Player Removed)") end)
-        end
-    end)
-    
-    -- Baru: Loop check ping untuk internet loss
-    task.spawn(function()
-        while true do
-            local success, ping = pcall(function()
-                return Players.LocalPlayer:GetNetworkPing()
-            end)
-            if not success or ping > PING_THRESHOLD then
-                local reason = not success and "Connection Lost (Ping Failed)" or "High Ping Detected (" .. ping .. "ms)"
-                task.spawn(function() sendDisconnectWebhook(username, reason) end)
-                break  -- Stop loop setelah kirim
-            end
-            task.wait(5)  -- Check setiap 5 detik
-        end
-    end)
-    
-    -- Baru: Detect freeze via Stepped delta
-    local lastTime = tick()
-    RunService.Stepped:Connect(function(_, delta)
-        if delta > FREEZE_THRESHOLD then
-            task.spawn(function() sendDisconnectWebhook(username, "Game Freeze Detected (Delta: " .. delta .. "s)") end)
-        end
-        lastTime = tick()
-    end)
-    
-    print("🚨 Advanced disconnect notifier setup complete")
-end
-
--- Panggil setup
-setupDisconnectNotifier()
 
 -- ============ LOOP ============
 print("🚀 Inventory Whitelist Notifier (mutation-aware) start...")
