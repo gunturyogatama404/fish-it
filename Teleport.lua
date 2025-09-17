@@ -1587,7 +1587,7 @@ end)
 local WEBHOOK_URL = webhook2
 
 -- Whitelist pakai NAMA SPECIES (tanpa prefix varian)
-local WHITELIST = {"Robot Kraken", "Giant Squid", "Thin Armor Shark", "Frostborn Shark", "Plasma Shark", "Eerie Shark", "Scare", "Ghost Shark", "Blob Shark", "Megalodon", "Lochness Monster"}
+local WHITELIST = {"Robot Kraken", "Giant Squid", "Thin Armor Shark", "Frostborn Shark", "Plasma Shark", "Eerie Shark", "Scare", "Ghost Shark", "Blob Shark", "Megalodon", "Lochness Monster", "Worm Fish"}
 
 local SCAN_WAIT    = 3     -- detik tunggu setelah buka agar tile render
 local COOLDOWN     = 10    -- detik jeda antar loop
