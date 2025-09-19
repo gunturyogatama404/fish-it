@@ -1,3 +1,54 @@
+--[[
+    AUTO FISH V5.1.1 STABLE
+
+    IMPORTANT: SETUP WEBHOOK URLs BEFORE RUNNING!
+
+    1. For Megalodon notifications: Edit line ~1234 and set MEGALODON_WEBHOOK_URL
+    2. For fish catch notifications: Edit line ~2200 and set WEBHOOK_URL
+
+    Example webhook URL: "https://discord.com/api/webhooks/1234567890/abcdefghijklmnop"
+
+    To get Discord webhook URL:
+    1. Go to your Discord server
+    2. Right click on channel → Settings → Integrations → Webhooks
+    3. Create New Webhook
+    4. Copy webhook URL
+    5. Paste it in the webhook variables below
+--]]
+
+-- ====== ERROR HANDLING SETUP ======
+-- Suppress asset loading errors (like sound approval issues)
+local function suppressAssetErrors()
+    local oldWarn = warn
+    local oldError = error
+
+    warn = function(...)
+        local message = tostring(...)
+        -- Suppress known asset approval errors
+        if string.find(message:lower(), "asset is not approved") or
+           string.find(message:lower(), "failed to load sound") or
+           string.find(message:lower(), "rbxassetid") then
+            -- Silently ignore these errors
+            return
+        end
+        oldWarn(...)
+    end
+
+    -- Also wrap error function for safety
+    error = function(...)
+        local message = tostring(...)
+        if string.find(message:lower(), "asset is not approved") or
+           string.find(message:lower(), "failed to load sound") then
+            warn("[Auto Fish] Asset loading error suppressed: " .. message)
+            return
+        end
+        oldError(...)
+    end
+end
+
+-- Enable error suppression
+suppressAssetErrors()
+
 local player = game.Players.LocalPlayer
 local replicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -1073,7 +1124,7 @@ local function buyRod(rodDatabase)
             purchaseRodEvent:InvokeServer(rodDatabase)
         end)
     else
-        pcall(function()
+        local success, err = pcall(function()
             local replicatedStorage = game:GetService("ReplicatedStorage")
             if replicatedStorage then
                 local directEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseFishingRod"]
@@ -1083,6 +1134,17 @@ local function buyRod(rodDatabase)
                 end
             end
         end)
+
+        if not success then
+            -- Check if it's an asset or network error
+            if string.find(tostring(err):lower(), "asset is not approved") or
+               string.find(tostring(err):lower(), "failed to load") or
+               string.find(tostring(err):lower(), "network") then
+                -- Silently continue
+            else
+                warn("[Purchase Rod] Error: " .. tostring(err))
+            end
+        end
     end
 end
 
@@ -1093,7 +1155,7 @@ local function buyBait(BaitDatabase)
             purchaseBaitEvent:InvokeServer(BaitDatabase)
         end)
     else
-        pcall(function()
+        local success, err = pcall(function()
             local replicatedStorage = game:GetService("ReplicatedStorage")
             if replicatedStorage then
                 local directEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseBait"]
@@ -1103,6 +1165,17 @@ local function buyBait(BaitDatabase)
                 end
             end
         end)
+
+        if not success then
+            -- Check if it's an asset or network error
+            if string.find(tostring(err):lower(), "asset is not approved") or
+               string.find(tostring(err):lower(), "failed to load") or
+               string.find(tostring(err):lower(), "network") then
+                -- Silently continue
+            else
+                warn("[Purchase Bait] Error: " .. tostring(err))
+            end
+        end
     end
 end
 
@@ -1147,6 +1220,119 @@ local function disableMegalodonLock()
         currentBodyPosition:Destroy()
         currentBodyPosition = nil
     end
+end
+
+-- ====== MEGALODON WEBHOOK ======
+local lastWebhookTime = 0
+local WEBHOOK_COOLDOWN = 15 -- 15 seconds cooldown between webhooks to prevent rate limiting
+local webhookRetryDelay = 5 -- Base retry delay in seconds
+local maxRetryAttempts = 3
+
+-- ====== WEBHOOK CONFIGURATION ======
+-- Set your Discord webhook URL here for megalodon notifications
+-- Example: "https://discord.com/api/webhooks/1234567890/abcdefghijklmnop"
+local MEGALODON_WEBHOOK_URL = "https://discord.com/api/webhooks/1378767185643831326/b0mB-z4r5YTQGeQnX7EwyvXoo1yiO7UcZzeOKeS9JKcKn-6AWVnicplzs6duT6Jt80kK"  -- PASTE YOUR DISCORD WEBHOOK URL HERE
+
+local sendMegalodonEventWebhook = function(status, data)
+    -- Check if webhook URL is configured
+    if not MEGALODON_WEBHOOK_URL or MEGALODON_WEBHOOK_URL == "" then
+        warn('[Megalodon] Webhook URL not configured! Please set MEGALODON_WEBHOOK_URL variable.')
+        return
+    end
+
+    -- Rate limiting check
+    local currentTime = tick()
+    if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then
+        print('[Megalodon] Webhook cooldown active, skipping...')
+        return
+    end
+
+    local title, description, color
+    local duration = (data and data.duration) or 0
+
+    if status == "started" then
+        title = '[Megalodon] Event Started'
+        description = 'Megalodon hunt detected! Teleporting to event location.'
+        color = 65280 -- Green
+    elseif status == "ended" then
+        title = '[Megalodon] Event Finished'
+        description = 'Megalodon hunt despawned. Returned to saved position.'
+        color = 16776960 -- Yellow
+        if duration > 0 then
+            description = description .. string.format('\nDuration: %d seconds', duration)
+        end
+    elseif status == "missing" then
+        title = '[Megalodon] Event Missing'
+        description = 'No Megalodon Hunt props detected in this server.'
+        color = 16711680 -- Red
+    else
+        return
+    end
+
+    local embed = {
+        title = title,
+        description = description,
+        color = color,
+        fields = {
+            { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+            { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true }
+        },
+        footer = { text = 'Megalodon Watch - Auto Fish' }
+    }
+    local body = HttpService:JSONEncode({ embeds = {embed} })
+
+    -- Send webhook with exponential backoff retry logic
+    task.spawn(function()
+        local attempt = 1
+        local success = false
+
+        while attempt <= maxRetryAttempts and not success do
+            local currentRetryDelay = webhookRetryDelay * (2 ^ (attempt - 1)) -- Exponential backoff
+
+            if attempt > 1 then
+                print('[Megalodon] Retry attempt ' .. attempt .. ' after ' .. currentRetryDelay .. ' seconds...')
+                task.wait(currentRetryDelay)
+            end
+
+            success, err = pcall(function()
+                if syn and syn.request then
+                    syn.request({ Url=MEGALODON_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif http_request then
+                    http_request({ Url=MEGALODON_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif fluxus and fluxus.request then
+                    fluxus.request({ Url=MEGALODON_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif request then
+                    request({ Url=MEGALODON_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                else
+                    error("Executor tidak support HTTP requests")
+                end
+            end)
+
+            if success then
+                lastWebhookTime = tick()
+                print('[Megalodon] Webhook sent successfully (' .. status .. ') on attempt ' .. attempt)
+                break
+            else
+                warn('[Megalodon] Webhook attempt ' .. attempt .. ' failed: ' .. tostring(err))
+
+                -- Handle specific rate limiting errors
+                if string.find(tostring(err):lower(), "429") or string.find(tostring(err):lower(), "rate") then
+                    print('[Megalodon] Rate limited detected, extending cooldown...')
+                    lastWebhookTime = tick() + 60 -- Block webhooks for 60 seconds on rate limit
+                    task.wait(60) -- Wait longer for rate limit recovery
+                    break -- Don't retry immediately on rate limit
+                elseif string.find(tostring(err):lower(), "network") or string.find(tostring(err):lower(), "timeout") then
+                    print('[Megalodon] Network error detected, will retry...')
+                end
+
+                attempt = attempt + 1
+            end
+        end
+
+        if not success then
+            warn('[Megalodon] All webhook attempts failed for status: ' .. status)
+        end
+    end)
 end
 
 local function autoDetectMegalodon()
@@ -1964,11 +2150,11 @@ end)
 
 -- ====== AUTO LOOPS WITH ENHANCED LOGIC ======
 
--- Enhanced Auto Farm Loop (combines equip + fishing)
+-- Enhanced Auto Farm Loop (combines equip + fishing) with asset error protection
 task.spawn(function()
     while true do
         if isAutoFarmOn then
-            pcall(function()
+            local success, err = pcall(function()
                 -- Check if rod is equipped by looking for tool in character
                 local character = player.Character
                 if character then
@@ -1978,15 +2164,26 @@ task.spawn(function()
                         task.wait(1) -- Wait for rod to equip
                     end
                 end
-                
+
                 -- Perform fishing sequence
                 chargeFishingRod()
                 task.wait(autoFishMainDelay)
-                
-                if fishingEvent then 
-                    fishingEvent:FireServer() 
+
+                if fishingEvent then
+                    fishingEvent:FireServer()
                 end
             end)
+
+            if not success then
+                -- Check if it's an asset loading error
+                if string.find(tostring(err):lower(), "asset is not approved") or
+                   string.find(tostring(err):lower(), "failed to load sound") or
+                   string.find(tostring(err):lower(), "rbxassetid") then
+                    -- Silently continue, don't spam console
+                else
+                    warn("[Auto Farm] Loop error: " .. tostring(err))
+                end
+            end
         end
         task.wait(0.1)
     end
@@ -2086,123 +2283,34 @@ task.spawn(function()
     end
 end)
 
--- Auto Megalodon Hunt Loop
+-- Auto Megalodon Hunt Loop with enhanced error protection
 task.spawn(function()
     while true do
         if isAutoMegalodonOn then
-            pcall(function()
+            local success, err = pcall(function()
                 autoDetectMegalodon()
             end)
+
+            if not success then
+                -- Check if it's an asset loading error
+                if string.find(tostring(err):lower(), "asset is not approved") or
+                   string.find(tostring(err):lower(), "failed to load sound") then
+                    -- Silently continue, don't spam console
+                else
+                    warn("[Megalodon] Loop error: " .. tostring(err))
+                end
+            end
         end
         task.wait(8) -- Check every 8 seconds
     end
 end)
 
--- ====== MEGALODON WEBHOOK ======
-local lastWebhookTime = 0
-local WEBHOOK_COOLDOWN = 15 -- 15 seconds cooldown between webhooks to prevent rate limiting
-local webhookRetryDelay = 5 -- Base retry delay in seconds
-local maxRetryAttempts = 3
-
-local sendMegalodonEventWebhook = function(status, data)
-    -- Rate limiting check
-    local currentTime = tick()
-    if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then
-        print('[Megalodon] Webhook cooldown active, skipping...')
-        return
-    end
-
-    local title, description, color
-    local duration = (data and data.duration) or 0
-
-    if status == "started" then
-        title = '[Megalodon] Event Started'
-        description = 'Megalodon hunt detected! Teleporting to event location.'
-        color = 65280 -- Green
-    elseif status == "ended" then
-        title = '[Megalodon] Event Finished'
-        description = 'Megalodon hunt despawned. Returned to saved position.'
-        color = 16776960 -- Yellow
-        if duration > 0 then
-            description = description .. string.format('\nDuration: %d seconds', duration)
-        end
-    elseif status == "missing" then
-        title = '[Megalodon] Event Missing'
-        description = 'No Megalodon Hunt props detected in this server.'
-        color = 16711680 -- Red
-    else
-        return
-    end
-
-    local embed = {
-        title = title,
-        description = description,
-        color = color,
-        fields = {
-            { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
-            { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true }
-        },
-        footer = { text = 'Megalodon Watch - Auto Fish' }
-    }
-    local body = HttpService:JSONEncode({ embeds = {embed} })
-
-    -- Send webhook with exponential backoff retry logic
-    task.spawn(function()
-        local attempt = 1
-        local success = false
-
-        while attempt <= maxRetryAttempts and not success do
-            local currentRetryDelay = webhookRetryDelay * (2 ^ (attempt - 1)) -- Exponential backoff
-
-            if attempt > 1 then
-                print('[Megalodon] Retry attempt ' .. attempt .. ' after ' .. currentRetryDelay .. ' seconds...')
-                task.wait(currentRetryDelay)
-            end
-
-            success, err = pcall(function()
-                if syn and syn.request then
-                    syn.request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                elseif http_request then
-                    http_request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                elseif fluxus and fluxus.request then
-                    fluxus.request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                elseif request then
-                    request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                end
-            end)
-
-            if success then
-                lastWebhookTime = tick()
-                print('[Megalodon] Webhook sent successfully (' .. status .. ') on attempt ' .. attempt)
-                break
-            else
-                warn('[Megalodon] Webhook attempt ' .. attempt .. ' failed: ' .. tostring(err))
-
-                -- Handle specific rate limiting errors
-                if string.find(tostring(err):lower(), "429") or string.find(tostring(err):lower(), "rate") then
-                    print('[Megalodon] Rate limited detected, extending cooldown...')
-                    lastWebhookTime = tick() + 60 -- Block webhooks for 60 seconds on rate limit
-                    task.wait(60) -- Wait longer for rate limit recovery
-                    break -- Don't retry immediately on rate limit
-                elseif string.find(tostring(err):lower(), "network") or string.find(tostring(err):lower(), "timeout") then
-                    print('[Megalodon] Network error detected, will retry...')
-                end
-
-                attempt = attempt + 1
-            end
-        end
-
-        if not success then
-            warn('[Megalodon] All webhook attempts failed for status: ' .. status)
-        end
-    end)
-end
 
 -- Inventory Whitelist Notifier (mutations-aware, single message per loop)
 -- Counts by species (Tile.ItemName), shows pretty display (Variant + Base when available)
 
 -- ============ CONFIG ============
-local WEBHOOK_URL = webhook2
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1378767185643831326/b0mB-z4r5YTQGeQnX7EwyvXoo1yiO7UcZzeOKeS9JKcKn-6AWVnicplzs6duT6Jt80kK"  -- Set your Discord webhook URL here for fish notifications
 
 -- Whitelist pakai NAMA SPECIES (tanpa prefix varian)
 local WHITELIST = {"Robot Kraken", "Giant Squid", "Thin Armor Shark", "Frostborn Shark", "Plasma Shark", "Eerie Shark", "Scare", "Ghost Shark", "Blob Shark", "Megalodon", "Lochness Monster"}
