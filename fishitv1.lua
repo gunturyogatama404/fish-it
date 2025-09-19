@@ -1152,13 +1152,52 @@ end
 local function autoDetectMegalodon()
     local eventFound = false
     local eventPosition = nil
+    local debugMode = false -- Set to true for troubleshooting
 
-    -- Search for Megalodon event in Workspace
+    -- Search for Megalodon event in Workspace (handle multiple Props folders)
     for _, child in ipairs(workspace:GetChildren()) do
-        if child.Name == "props" and child:FindFirstChild("megalodon hunt") and child["megalodon hunt"]:FindFirstChild("Color") then
-            eventPosition = child["megalodon hunt"].Color.Position
-            eventFound = true
-            break
+        -- Only check children named "Props" or "props" (case insensitive)
+        if string.lower(child.Name) == "props" then
+            if debugMode then
+                print("[Megalodon Debug] Checking Props folder: " .. child.Name)
+                for _, subChild in ipairs(child:GetChildren()) do
+                    print("[Megalodon Debug] - Found: " .. subChild.Name)
+                end
+            end
+            -- Try different variations of megalodon hunt naming
+            local megalodonHunt = child:FindFirstChild("Megalodon Hunt") or
+                                child:FindFirstChild("megalodon hunt") or
+                                child:FindFirstChild("Megalodon_Hunt") or
+                                child:FindFirstChild("megalodon_hunt") or
+                                child:FindFirstChild("MegalodonHunt") or
+                                child:FindFirstChild("megalodonh hunt")
+
+            if megalodonHunt and megalodonHunt:FindFirstChild("Color") then
+                eventPosition = megalodonHunt.Color.Position
+                eventFound = true
+                print("[Megalodon] Event found in: " .. child.Name .. "/" .. megalodonHunt.Name)
+                break
+            end
+        end
+    end
+
+    -- Fallback: Search all children for any megalodon-related folders
+    if not eventFound then
+        for _, child in ipairs(workspace:GetChildren()) do
+            if string.lower(child.Name) == "props" then
+                -- Search all children of Props for megalodon-related items
+                for _, subChild in ipairs(child:GetChildren()) do
+                    if string.find(string.lower(subChild.Name), "megalodon") then
+                        if subChild:FindFirstChild("Color") then
+                            eventPosition = subChild.Color.Position
+                            eventFound = true
+                            print("[Megalodon] Fallback detection found in: " .. child.Name .. "/" .. subChild.Name)
+                            break
+                        end
+                    end
+                end
+                if eventFound then break end
+            end
         end
     end
 
