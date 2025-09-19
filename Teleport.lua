@@ -36,6 +36,96 @@ local megalodonSavedPosition = nil
 local hasTeleportedToMegalodon = false
 local currentBodyPosition = nil
 
+local isAutoPreset1On = false
+local isAutoPreset2On = false
+
+local HttpService = game:GetService("HttpService")
+
+local CONFIG_FILE = "auto_fish_v51_disconnect_config.json"
+local defaultConfig = {
+    autoFarm = false,
+    autoSell = false,
+    autoCatch = false,
+    autoWeather = false,
+    autoMegalodon = false,
+    activePreset = "none"
+}
+local config = {}
+for key, value in pairs(defaultConfig) do
+    config[key] = value
+end
+
+local isApplyingConfig = false
+
+local function saveConfig()
+    if not writefile then return end
+
+    local success, encoded = pcall(function()
+        return HttpService:JSONEncode(config)
+    end)
+
+    if success then
+        pcall(writefile, CONFIG_FILE, encoded)
+    end
+end
+
+local function loadConfig()
+    if not readfile or not isfile then
+        return
+    end
+
+    local success, content = pcall(function()
+        if isfile(CONFIG_FILE) then
+            return readfile(CONFIG_FILE)
+        end
+
+        return nil
+    end)
+
+    if success and content and content ~= "" then
+        local ok, decoded = pcall(function()
+            return HttpService:JSONDecode(content)
+        end)
+
+        if ok and type(decoded) == "table" then
+            for key, value in pairs(defaultConfig) do
+                if decoded[key] ~= nil then
+                    config[key] = decoded[key]
+                else
+                    config[key] = value
+                end
+            end
+        end
+    end
+
+    saveConfig()
+end
+
+local function updateConfigField(key, value)
+    config[key] = value
+    if not isApplyingConfig then
+        saveConfig()
+    end
+end
+
+local function syncConfigFromStates()
+    config.autoFarm = isAutoFarmOn
+    config.autoSell = isAutoSellOn
+    config.autoCatch = isAutoCatchOn
+    config.autoWeather = isAutoWeatherOn
+    config.autoMegalodon = isAutoMegalodonOn
+end
+
+loadConfig()
+
+local autoFarmToggle
+local autoSellToggle
+local autoCatchToggle
+local autoWeatherToggle
+local autoMegalodonToggle
+local autoPreset1Toggle
+local autoPreset2Toggle
+
 -- ====== FUNGSI UNTUK MENDAPATKAN COIN DAN LEVEL ======
 local function getCurrentCoins()
     local success, result = pcall(function()
@@ -231,7 +321,7 @@ local function createWhiteScreen()
     titleLabel.Text = "🟢 " .. LocalPlayer.Name .. "\nTotal Caught: " .. totalCaught .. "\nBest Caught: " .. bestCaught
     titleLabel.TextColor3 = Color3.new(0, 1, 0)
     titleLabel.TextScaled = false
-    titleLabel.TextSize = 24
+    titleLabel.TextSize = 32
     titleLabel.Font = Enum.Font.SourceSansBold
     titleLabel.TextXAlignment = Enum.TextXAlignment.Center
     titleLabel.TextYAlignment = Enum.TextYAlignment.Center
@@ -650,6 +740,192 @@ local teleportLocations = {
     { Name = "Kohana",  CFrame = CFrame.new(-663.904236, 3.04580712, 718.796875, -0.100799225, -2.14183729e-08, -0.994906783, -1.12300391e-08, 1, -2.03902459e-08, 0.994906783, 9.11752096e-09, -0.100799225) }
 }
 
+local function teleportToNamedLocation(targetName)
+    if not targetName then
+        return
+    end
+
+    if targetName == "Sisyphus State" then
+        targetName = "Sisyphus Statue"
+    end
+
+    pcall(function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+        if not rootPart then
+            return
+        end
+
+        for _, location in ipairs(teleportLocations) do
+            if location.Name == targetName and location.CFrame then
+                rootPart.CFrame = location.CFrame
+                print("[AutoFish] Teleported to: " .. targetName)
+                break
+            end
+        end
+    end)
+end
+
+local PRESET_DELAY = 0.5
+local presetActionLock = false
+
+local function runPresetSequence(steps)
+    if type(steps) ~= "table" or #steps == 0 then
+        return
+    end
+
+    while presetActionLock do
+        task.wait(0.05)
+    end
+
+    presetActionLock = true
+    isApplyingConfig = true
+
+    local success, err = pcall(function()
+        for index, step in ipairs(steps) do
+            step()
+            if index < #steps then
+                task.wait(PRESET_DELAY)
+            end
+        end
+    end)
+
+    isApplyingConfig = false
+    syncConfigFromStates()
+    presetActionLock = false
+
+    if not success then
+        warn("[AutoFish] Preset sequence error:", err)
+    end
+end
+
+local function enablePreset(presetKey, locationName)
+    task.spawn(function()
+        local steps = {}
+
+        if config.activePreset and config.activePreset ~= "none" and config.activePreset ~= presetKey then
+            table.insert(steps, function()
+                if autoMegalodonToggle then
+                    autoMegalodonToggle:UpdateToggle(nil, false)
+                end
+            end)
+            table.insert(steps, function()
+                if autoWeatherToggle then
+                    autoWeatherToggle:UpdateToggle(nil, false)
+                end
+            end)
+            table.insert(steps, function()
+                if autoCatchToggle then
+                    autoCatchToggle:UpdateToggle(nil, false)
+                end
+            end)
+            table.insert(steps, function()
+                if autoSellToggle then
+                    autoSellToggle:UpdateToggle(nil, false)
+                end
+            end)
+            table.insert(steps, function()
+                if autoFarmToggle then
+                    autoFarmToggle:UpdateToggle(nil, false)
+                end
+            end)
+        end
+
+        table.insert(steps, function()
+            if autoFarmToggle then
+                autoFarmToggle:UpdateToggle(nil, true)
+            end
+        end)
+        table.insert(steps, function()
+            if autoSellToggle then
+                autoSellToggle:UpdateToggle(nil, true)
+            end
+        end)
+        table.insert(steps, function()
+            if autoCatchToggle then
+                autoCatchToggle:UpdateToggle(nil, true)
+            end
+        end)
+        table.insert(steps, function()
+            if autoWeatherToggle then
+                autoWeatherToggle:UpdateToggle(nil, true)
+            end
+        end)
+        table.insert(steps, function()
+            if autoMegalodonToggle then
+                autoMegalodonToggle:UpdateToggle(nil, true)
+            end
+        end)
+
+        runPresetSequence(steps)
+
+        if presetKey == "auto1" then
+            isAutoPreset1On = true
+            isAutoPreset2On = false
+        else
+            isAutoPreset1On = false
+            isAutoPreset2On = true
+        end
+
+        config.activePreset = presetKey
+        saveConfig()
+        teleportToNamedLocation(locationName)
+    end)
+end
+
+local function disablePreset(presetKey)
+    task.spawn(function()
+        if config.activePreset ~= presetKey then
+            if presetKey == "auto1" then
+                isAutoPreset1On = false
+            elseif presetKey == "auto2" then
+                isAutoPreset2On = false
+            end
+            return
+        end
+
+        local steps = {
+            function()
+                if autoMegalodonToggle then
+                    autoMegalodonToggle:UpdateToggle(nil, false)
+                end
+            end,
+            function()
+                if autoWeatherToggle then
+                    autoWeatherToggle:UpdateToggle(nil, false)
+                end
+            end,
+            function()
+                if autoCatchToggle then
+                    autoCatchToggle:UpdateToggle(nil, false)
+                end
+            end,
+            function()
+                if autoSellToggle then
+                    autoSellToggle:UpdateToggle(nil, false)
+                end
+            end,
+            function()
+                if autoFarmToggle then
+                    autoFarmToggle:UpdateToggle(nil, false)
+                end
+            end,
+        }
+
+        runPresetSequence(steps)
+
+        if presetKey == "auto1" then
+            isAutoPreset1On = false
+        else
+            isAutoPreset2On = false
+        end
+
+        config.activePreset = "none"
+        saveConfig()
+    end)
+end
+
+
 -- ====== DAFTAR IDS ======
 local rodIDs = {79, 76, 85, 76, 78, 4, 80, 6, 7, 5}
 local baitIDs = {10, 2, 3, 6, 8, 15, 16}
@@ -808,6 +1084,7 @@ end
 
 local function setAutoMegalodon(state)
     isAutoMegalodonOn = state
+    updateConfigField("autoMegalodon", state)
     if not state then
         disableMegalodonLock()
         megalodonSavedPosition = nil
@@ -944,6 +1221,7 @@ end
 -- ====== ENHANCED TOGGLE FUNCTIONS ======
 local function setAutoFarm(state)
     isAutoFarmOn = state
+    updateConfigField("autoFarm", state)
     
     if state then
         equipRod() -- Auto equip rod when starting
@@ -957,6 +1235,7 @@ end
 
 local function setSell(state)
     isAutoSellOn = state
+    updateConfigField("autoSell", state)
     print("💰 Auto Sell: " .. (state and "ENABLED" or "DISABLED"))
 end
 
@@ -972,11 +1251,13 @@ end
 
 local function setAutoCatch(state)
     isAutoCatchOn = state
+    updateConfigField("autoCatch", state)
     print("🎯 Auto Catch: " .. (state and "ENABLED" or "DISABLED"))
 end
 
 local function setAutoWeather(state)
     isAutoWeatherOn = state
+    updateConfigField("autoWeather", state)
     print("🌤️ Auto Weather: " .. (state and "ENABLED" or "DISABLED"))
 end
 
@@ -991,16 +1272,32 @@ local SecOther     = TabAuto:NewSection("Other Features")
 local SecDelays    = TabAuto:NewSection("Delay Settings")
 
 -- Main toggles with new Auto Farm feature
-SecMain:NewToggle("Auto Farm", "Auto equip rod + fishing (kombinasi)", function(state) 
+autoFarmToggle = SecMain:NewToggle("Auto Farm", "Auto equip rod + fishing (kombinasi)", function(state) 
     setAutoFarm(state) 
 end)
 
-SecMain:NewToggle("Auto Sell", "Auto jual hasil", function(state) 
+autoSellToggle = SecMain:NewToggle("Auto Sell", "Auto jual hasil", function(state) 
     setSell(state) 
 end)
 
-SecMain:NewToggle("Auto Catch", "Auto catch fish", function(state) 
+autoCatchToggle = SecMain:NewToggle("Auto Catch", "Auto catch fish", function(state) 
     setAutoCatch(state) 
+end)
+
+autoPreset1Toggle = SecMain:NewToggle("Auto 1", "Enable core auto features with 0.5s stagger then teleport to Crater Island", function(state)
+    if state then
+        enablePreset("auto1", "Crater Island")
+    else
+        disablePreset("auto1")
+    end
+end)
+
+autoPreset2Toggle = SecMain:NewToggle("Auto 2", "Enable core auto features with 0.5s stagger then teleport to Sisyphus State", function(state)
+    if state then
+        enablePreset("auto2", "Sisyphus State")
+    else
+        disablePreset("auto2")
+    end
 end)
 
 -- Other features
@@ -1012,7 +1309,7 @@ SecOther:NewToggle("Auto Upgrade Bait", "Auto upgrade bait", function(state)
     setUpgradeBait(state) 
 end)
 
-SecOther:NewToggle("Auto Weather", "Auto weather events", function(state) 
+autoWeatherToggle = SecOther:NewToggle("Auto Weather", "Auto weather events", function(state) 
     setAutoWeather(state) 
 end)
 
@@ -1126,9 +1423,43 @@ SecBait:NewButton("Aether Bait 3.7m", "Buy Bait", function()
 end)
 
 -- Add this in SecOther section after Auto Weather toggle
-SecOther:NewToggle("Auto Megalodon Hunt", "Auto teleport to Megalodon events", function(state) 
+autoMegalodonToggle = SecOther:NewToggle("Auto Megalodon Hunt", "Auto teleport to Megalodon events", function(state) 
     setAutoMegalodon(state) 
 end)
+
+local function applyLoadedConfig()
+    if config.activePreset == "none" then
+        isApplyingConfig = true
+
+        if config.autoFarm and autoFarmToggle then
+            autoFarmToggle:UpdateToggle(nil, true)
+        end
+        if config.autoSell and autoSellToggle then
+            autoSellToggle:UpdateToggle(nil, true)
+        end
+        if config.autoCatch and autoCatchToggle then
+            autoCatchToggle:UpdateToggle(nil, true)
+        end
+        if config.autoWeather and autoWeatherToggle then
+            autoWeatherToggle:UpdateToggle(nil, true)
+        end
+        if config.autoMegalodon and autoMegalodonToggle then
+            autoMegalodonToggle:UpdateToggle(nil, true)
+        end
+
+        isApplyingConfig = false
+        syncConfigFromStates()
+        saveConfig()
+    end
+
+    if config.activePreset == "auto1" and autoPreset1Toggle then
+        autoPreset1Toggle:UpdateToggle(nil, true)
+    elseif config.activePreset == "auto2" and autoPreset2Toggle then
+        autoPreset2Toggle:UpdateToggle(nil, true)
+    end
+end
+
+task.defer(applyLoadedConfig)
 
 -- ====== ENCHANT TAB UI ======
 local TabEnchant = Window:NewTab("Enchant")
@@ -1584,7 +1915,7 @@ end)
 -- Counts by species (Tile.ItemName), shows pretty display (Variant + Base when available)
 
 -- ============ CONFIG ============
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1378767185643831326/b0mB-z4r5YTQGeQnX7EwyvXoo1yiO7UcZzeOKeS9JKcKn-6AWVnicplzs6duT6Jt80kK"
+local WEBHOOK_URL = webhook2
 
 -- Whitelist pakai NAMA SPECIES (tanpa prefix varian)
 local WHITELIST = {"Robot Kraken", "Giant Squid", "Thin Armor Shark", "Frostborn Shark", "Plasma Shark", "Eerie Shark", "Scare", "Ghost Shark", "Blob Shark", "Megalodon", "Lochness Monster"}
@@ -1599,9 +1930,15 @@ local DEBUG = false
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
-local player = Players.LocalPlayer
+local GuiService = game:GetService("GuiService")
 
+
+local hasSentDisconnectWebhook = false  -- Flag untuk avoid kirim berulang
+local PING_THRESHOLD = 1000  -- ms, jika > ini = poor connection
+local FREEZE_THRESHOLD = 3  -- detik, jika delta > ini = freeze
+
+local hasSentDisconnectWebhook = false  -- Flag untuk avoid kirim berulang
+local player = Players.LocalPlayer
 -- ============ UTIL ============
 local function trim(s) return (s or ""):gsub("^%s+",""):gsub("%s+$","") end
 local function normSpaces(s) return trim((s or ""):gsub("%s+"," ")) end
@@ -1850,6 +2187,98 @@ local function scanAndNotifySingle()
     seenCounts = counts
     closeInventory()
 end
+
+-- ============ DISCONNECT NOTIFIER ============
+
+local function sendDisconnectWebhook(username, reason)
+    if hasSentDisconnectWebhook then return end
+    hasSentDisconnectWebhook = true
+    
+    local embed = {
+        title = "⚠️ Roblox Account Disconnected",
+        description = "Akun Roblox telah disconnect dari game.",
+        color = 16711680,
+        fields = {
+            { name = "👤 Username", value = username or "Unknown", inline = true },
+            { name = "❓ Reason", value = reason or "Unknown", inline = true },
+            { name = "🕒 Waktu", value = os.date("%H:%M:%S"), inline = true },
+        },
+        footer = { text = "Disconnect Notifier • Auto Fish Script" }
+    }
+    local body = HttpService:JSONEncode({ embeds = {embed} })
+
+    local ok, err = pcall(function()
+        if syn and syn.request then
+            syn.request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+        elseif http_request then
+            http_request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+        elseif fluxus and fluxus.request then
+            fluxus.request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+        elseif request then
+            request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+        else
+            error("Executor tidak support HTTP requests")
+        end
+    end)
+    if not ok then warn("❌ Gagal kirim webhook disconnect:", err) else print("✅ Webhook disconnect terkirim") end
+end
+
+local function setupDisconnectNotifier()
+    local username = Players.LocalPlayer.Name  -- Atau DisplayName jika mau
+    
+    -- Kode lama: Error message dan PlayerRemoving
+    GuiService.ErrorMessageChanged:Connect(function(message)
+        local lowerMessage = string.lower(message)
+        local reason = "Unknown"
+        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") then
+            reason = "Connection Lost: " .. message
+        elseif lowerMessage:find("kick") or lowerMessage:find("banned") then
+            reason = "Kicked: " .. message
+        elseif lowerMessage:find("timeout") then
+            reason = "Timeout: " .. message
+        elseif lowerMessage:find("error") then
+            reason = "General Error: " .. message
+        else
+            return
+        end
+        task.spawn(function() sendDisconnectWebhook(username, reason) end)
+    end)
+    
+    Players.PlayerRemoving:Connect(function(removedPlayer)
+        if removedPlayer == Players.LocalPlayer and not hasSentDisconnectWebhook then
+            task.spawn(function() sendDisconnectWebhook(username, "Disconnected (Player Removed)") end)
+        end
+    end)
+    
+    -- Baru: Loop check ping untuk internet loss
+    task.spawn(function()
+        while true do
+            local success, ping = pcall(function()
+                return Players.LocalPlayer:GetNetworkPing()
+            end)
+            if not success or ping > PING_THRESHOLD then
+                local reason = not success and "Connection Lost (Ping Failed)" or "High Ping Detected (" .. ping .. "ms)"
+                task.spawn(function() sendDisconnectWebhook(username, reason) end)
+                break  -- Stop loop setelah kirim
+            end
+            task.wait(5)  -- Check setiap 5 detik
+        end
+    end)
+    
+    -- Baru: Detect freeze via Stepped delta
+    local lastTime = tick()
+    RunService.Stepped:Connect(function(_, delta)
+        if delta > FREEZE_THRESHOLD then
+            task.spawn(function() sendDisconnectWebhook(username, "Game Freeze Detected (Delta: " .. delta .. "s)") end)
+        end
+        lastTime = tick()
+    end)
+    
+    print("🚨 Advanced disconnect notifier setup complete")
+end
+
+-- Panggil setup
+setupDisconnectNotifier()
 
 -- ============ LOOP ============
 print("🚀 Inventory Whitelist Notifier (mutation-aware) start...")
