@@ -525,60 +525,155 @@ local weatherCycleDelay = 100
 
 local HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool
 
--- ====== FISH NOTIFICATION CONTROL ======
+-- ====== FISH NOTIFICATION REMOVAL SYSTEM ======
 local isFishNotificationDisabled = false
-local destroyedNotifications = {}
+local notificationConnections = {}
+local removedEvents = {}
 
--- Function to disable fish notifications
-local function disableFishNotifications()
-    if isFishNotificationDisabled then return end
+-- Advanced notification blocking system
+local function blockFishNotifications()
+    print("🔇 Initializing fish notification blocker...")
 
-    pcall(function()
-        local replicatedStorage = game:GetService("ReplicatedStorage")
-        local packages = replicatedStorage:FindFirstChild("Packages")
-        if packages then
-            local index = packages:FindFirstChild("_Index")
-            if index then
-                local net = index:FindFirstChild("sleitnick_net@0.2.0")
-                if net then
-                    local netFolder = net:FindFirstChild("net")
-                    if netFolder then
-                        local notificationEvents = {
-                            "RE/ObtainedNewFishNotification",
-                            "RE/ShowNotification",
-                            "RE/PlaySound"
-                        }
+    -- Method 1: Destroy notification remote events
+    task.spawn(function()
+        local success = false
+        local attempts = 0
+        local maxAttempts = 30 -- 30 seconds timeout
 
-                        for _, eventName in pairs(notificationEvents) do
-                            local event = netFolder:FindFirstChild(eventName)
-                            if event then
-                                -- Store reference before destroying
-                                destroyedNotifications[eventName] = {
-                                    parent = netFolder,
-                                    className = event.ClassName
-                                }
-                                event:Destroy()
-                                print("🔇 Disabled " .. eventName .. " notification")
+        while not success and attempts < maxAttempts do
+            attempts = attempts + 1
+
+            success = pcall(function()
+                local replicatedStorage = game:GetService("ReplicatedStorage")
+                local packages = replicatedStorage:WaitForChild("Packages", 1)
+                local index = packages:WaitForChild("_Index", 1)
+                local netPackage = index:WaitForChild("sleitnick_net@0.2.0", 1)
+                local netFolder = netPackage:WaitForChild("net", 1)
+
+                local targetEvents = {
+                    "RE/ObtainedNewFishNotification",
+                    "RE/ShowNotification",
+                    "RE/PlaySound"
+                }
+
+                for _, eventName in pairs(targetEvents) do
+                    local event = netFolder:FindFirstChild(eventName)
+                    if event then
+                        removedEvents[eventName] = true
+                        event:Destroy()
+                        print("🗑️ Destroyed: " .. eventName)
+                    end
+                end
+
+                return true
+            end)
+
+            if not success then
+                task.wait(1)
+            end
+        end
+
+        if success then
+            isFishNotificationDisabled = true
+            print("✅ Fish notification events destroyed successfully!")
+        else
+            warn("❌ Failed to destroy notification events after " .. attempts .. " attempts")
+        end
+    end)
+
+    -- Method 2: Hook and block notification functions (backup method)
+    task.spawn(function()
+        task.wait(2) -- Wait a bit for game to initialize
+
+        -- Block StarterGui notifications
+        pcall(function()
+            local starterGui = game:GetService("StarterGui")
+
+            -- Hook SetCore to block notifications
+            local oldSetCore = starterGui.SetCore
+            starterGui.SetCore = function(self, key, ...)
+                local args = {...}
+                if key == "SendNotification" then
+                    local notification = args[1]
+                    if notification and notification.Title then
+                        local title = tostring(notification.Title):lower()
+                        if title:find("fish") or title:find("caught") or title:find("new") then
+                            print("🚫 Blocked notification: " .. notification.Title)
+                            return -- Block the notification
+                        end
+                    end
+                end
+                return oldSetCore(self, key, ...)
+            end
+
+            print("🛡️ StarterGui notification blocker installed")
+        end)
+
+        -- Block ScreenGui notifications in PlayerGui
+        pcall(function()
+            local player = game:GetService("Players").LocalPlayer
+            local playerGui = player:WaitForChild("PlayerGui", 10)
+
+            -- Monitor for notification GUIs and remove them
+            local function removeNotificationGuis(parent)
+                for _, child in pairs(parent:GetChildren()) do
+                    if child:IsA("ScreenGui") then
+                        local name = child.Name:lower()
+                        if name:find("notification") or name:find("popup") or name:find("alert") then
+                            -- Check if it's a fish notification
+                            local hasTextLabels = false
+                            for _, desc in pairs(child:GetDescendants()) do
+                                if desc:IsA("TextLabel") then
+                                    local text = desc.Text:lower()
+                                    if text:find("fish") or text:find("caught") or text:find("new") then
+                                        child:Destroy()
+                                        print("🗑️ Removed fish notification GUI: " .. child.Name)
+                                        return
+                                    end
+                                    hasTextLabels = true
+                                end
                             end
                         end
                     end
                 end
             end
-        end
-    end)
 
-    isFishNotificationDisabled = true
-    print("🔇 Fish notifications: DISABLED")
+            -- Initial scan
+            removeNotificationGuis(playerGui)
+
+            -- Monitor new GUIs
+            local connection = playerGui.ChildAdded:Connect(function(child)
+                if child:IsA("ScreenGui") then
+                    task.wait(0.1) -- Wait for GUI to populate
+                    removeNotificationGuis(playerGui)
+                end
+            end)
+
+            notificationConnections["playerGuiMonitor"] = connection
+            print("🔍 PlayerGui notification monitor installed")
+        end)
+    end)
 end
 
--- Function to restore fish notifications (if needed)
-local function enableFishNotifications()
-    if not isFishNotificationDisabled then return end
+-- Function to disable fish notifications (UI control)
+local function disableFishNotifications()
+    if not isFishNotificationDisabled then
+        blockFishNotifications()
+    end
+end
 
-    -- Note: Once destroyed, remote events cannot be restored easily
-    -- This function exists for UI consistency but notifications will remain disabled until script restart
+-- Function to check if notifications are disabled
+local function enableFishNotifications()
+    -- Can't really re-enable destroyed events, but we can clean up connections
+    for name, connection in pairs(notificationConnections) do
+        if connection and connection.Connected then
+            connection:Disconnect()
+        end
+        notificationConnections[name] = nil
+    end
+
     isFishNotificationDisabled = false
-    print("🔊 Fish notifications: ENABLED (requires script restart to fully restore)")
+    print("🔊 Fish notification hooks removed (events remain destroyed)")
 end
 
 -- Improved WaitForChild chain with error handling
@@ -2030,22 +2125,37 @@ SecGPU:NewButton("Check Graphics Status", "Show current graphics optimization st
 end)
 
 -- Fish notification controls
-SecNotif:NewToggle("Disable Fish Notifications", "Remove new fish notification popups", function(state)
+SecNotif:NewToggle("Disable Fish Notifications", "Remove new fish notification popups (auto-enabled at start)", function(state)
     if state then
-        disableFishNotifications()
+        if not isFishNotificationDisabled then
+            disableFishNotifications()
+        end
     else
         enableFishNotifications()
     end
 end)
 
 SecNotif:NewButton("Check Notification Status", "Show current notification status", function()
+    print("=== FISH NOTIFICATION STATUS ===")
     if isFishNotificationDisabled then
         print("🔇 Fish notifications are DISABLED")
-        print("📋 Destroyed events: " .. table.concat({"RE/ObtainedNewFishNotification", "RE/ShowNotification", "RE/PlaySound"}, ", "))
+        print("📋 Removed events:")
+        for eventName, removed in pairs(removedEvents) do
+            if removed then
+                print("  ✅ " .. eventName)
+            end
+        end
+        print("🔗 Active connections: " .. tostring(#notificationConnections))
     else
         print("🔊 Fish notifications are ENABLED")
         print("💡 Toggle 'Disable Fish Notifications' to remove popups")
     end
+    print("================================")
+end)
+
+SecNotif:NewButton("Force Re-Block Notifications", "Manually trigger notification blocking", function()
+    print("🔄 Force re-blocking notifications...")
+    blockFishNotifications()
 end)
 
 -- ====== UI CONTROLS ======
@@ -2775,7 +2885,11 @@ end
 setupDisconnectNotifier()
 
 -- ============ SCRIPT INITIALIZATION ============
-print("🚀 Auto Fish v5.1.1 - Enhanced Edition Starting...")
+print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
+
+-- Initialize fish notification blocker immediately (FIRST PRIORITY)
+print("🔇 Starting fish notification blocker...")
+blockFishNotifications()
 
 -- Optimize graphics immediately when script starts
 print("🎨 Initializing graphics optimization...")
