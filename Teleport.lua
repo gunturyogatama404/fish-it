@@ -231,7 +231,7 @@ local function createWhiteScreen()
     titleLabel.Text = "🟢 " .. LocalPlayer.Name .. "\nTotal Caught: " .. totalCaught .. "\nBest Caught: " .. bestCaught
     titleLabel.TextColor3 = Color3.new(0, 1, 0)
     titleLabel.TextScaled = false
-    titleLabel.TextSize = 32
+    titleLabel.TextSize = 24
     titleLabel.Font = Enum.Font.SourceSansBold
     titleLabel.TextXAlignment = Enum.TextXAlignment.Center
     titleLabel.TextYAlignment = Enum.TextYAlignment.Center
@@ -1584,10 +1584,10 @@ end)
 -- Counts by species (Tile.ItemName), shows pretty display (Variant + Base when available)
 
 -- ============ CONFIG ============
-local WEBHOOK_URL = webhook2
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1378767185643831326/b0mB-z4r5YTQGeQnX7EwyvXoo1yiO7UcZzeOKeS9JKcKn-6AWVnicplzs6duT6Jt80kK"
 
 -- Whitelist pakai NAMA SPECIES (tanpa prefix varian)
-local WHITELIST = {"Robot Kraken", "Giant Squid", "Thin Armor Shark", "Frostborn Shark", "Plasma Shark", "Eerie Shark", "Scare", "Ghost Shark", "Blob Shark", "Megalodon", "Lochness Monster", "Worm Fish"}
+local WHITELIST = {"Robot Kraken", "Giant Squid", "Thin Armor Shark", "Frostborn Shark", "Plasma Shark", "Eerie Shark", "Scare", "Ghost Shark", "Blob Shark", "Megalodon", "Lochness Monster"}
 
 local SCAN_WAIT    = 3     -- detik tunggu setelah buka agar tile render
 local COOLDOWN     = 10    -- detik jeda antar loop
@@ -1600,15 +1600,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
-local GuiService = game:GetService("GuiService")
-
-
-local hasSentDisconnectWebhook = false  -- Flag untuk avoid kirim berulang
-local PING_THRESHOLD = 1000  -- ms, jika > ini = poor connection
-local FREEZE_THRESHOLD = 3  -- detik, jika delta > ini = freeze
-
-local hasSentDisconnectWebhook = false  -- Flag untuk avoid kirim berulang
 local player = Players.LocalPlayer
+
 -- ============ UTIL ============
 local function trim(s) return (s or ""):gsub("^%s+",""):gsub("%s+$","") end
 local function normSpaces(s) return trim((s or ""):gsub("%s+"," ")) end
@@ -1857,98 +1850,6 @@ local function scanAndNotifySingle()
     seenCounts = counts
     closeInventory()
 end
-
--- ============ DISCONNECT NOTIFIER ============
-
-local function sendDisconnectWebhook(username, reason)
-    if hasSentDisconnectWebhook then return end
-    hasSentDisconnectWebhook = true
-    
-    local embed = {
-        title = "⚠️ Roblox Account Disconnected",
-        description = "Akun Roblox telah disconnect dari game.",
-        color = 16711680,
-        fields = {
-            { name = "👤 Username", value = username or "Unknown", inline = true },
-            { name = "❓ Reason", value = reason or "Unknown", inline = true },
-            { name = "🕒 Waktu", value = os.date("%H:%M:%S"), inline = true },
-        },
-        footer = { text = "Disconnect Notifier • Auto Fish Script" }
-    }
-    local body = HttpService:JSONEncode({ embeds = {embed} })
-
-    local ok, err = pcall(function()
-        if syn and syn.request then
-            syn.request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif http_request then
-            http_request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif fluxus and fluxus.request then
-            fluxus.request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif request then
-            request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        else
-            error("Executor tidak support HTTP requests")
-        end
-    end)
-    if not ok then warn("❌ Gagal kirim webhook disconnect:", err) else print("✅ Webhook disconnect terkirim") end
-end
-
-local function setupDisconnectNotifier()
-    local username = Players.LocalPlayer.Name  -- Atau DisplayName jika mau
-    
-    -- Kode lama: Error message dan PlayerRemoving
-    GuiService.ErrorMessageChanged:Connect(function(message)
-        local lowerMessage = string.lower(message)
-        local reason = "Unknown"
-        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") then
-            reason = "Connection Lost: " .. message
-        elseif lowerMessage:find("kick") or lowerMessage:find("banned") then
-            reason = "Kicked: " .. message
-        elseif lowerMessage:find("timeout") then
-            reason = "Timeout: " .. message
-        elseif lowerMessage:find("error") then
-            reason = "General Error: " .. message
-        else
-            return
-        end
-        task.spawn(function() sendDisconnectWebhook(username, reason) end)
-    end)
-    
-    Players.PlayerRemoving:Connect(function(removedPlayer)
-        if removedPlayer == Players.LocalPlayer and not hasSentDisconnectWebhook then
-            task.spawn(function() sendDisconnectWebhook(username, "Disconnected (Player Removed)") end)
-        end
-    end)
-    
-    -- Baru: Loop check ping untuk internet loss
-    task.spawn(function()
-        while true do
-            local success, ping = pcall(function()
-                return Players.LocalPlayer:GetNetworkPing()
-            end)
-            if not success or ping > PING_THRESHOLD then
-                local reason = not success and "Connection Lost (Ping Failed)" or "High Ping Detected (" .. ping .. "ms)"
-                task.spawn(function() sendDisconnectWebhook(username, reason) end)
-                break  -- Stop loop setelah kirim
-            end
-            task.wait(5)  -- Check setiap 5 detik
-        end
-    end)
-    
-    -- Baru: Detect freeze via Stepped delta
-    local lastTime = tick()
-    RunService.Stepped:Connect(function(_, delta)
-        if delta > FREEZE_THRESHOLD then
-            task.spawn(function() sendDisconnectWebhook(username, "Game Freeze Detected (Delta: " .. delta .. "s)") end)
-        end
-        lastTime = tick()
-    end)
-    
-    print("🚨 Advanced disconnect notifier setup complete")
-end
-
--- Panggil setup
-setupDisconnectNotifier()
 
 -- ============ LOOP ============
 print("🚀 Inventory Whitelist Notifier (mutation-aware) start...")
