@@ -536,10 +536,6 @@ local function applyUltimatePerformance()
         end
     end)
 
-    print('[Perf] Ultimate performance applied')
-    print('[Perf] Water optimized')
-    print('[Perf] Visual effects disabled\n    print('[Perf] Maximum FPS mode')')
-
     if ENABLE_PERF_FPS_MONITOR then
         task.spawn(function()
             while ENABLE_PERF_FPS_MONITOR do
