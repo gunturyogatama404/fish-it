@@ -247,6 +247,20 @@ local function captureBaselineSettings()
     baselineSettings.fogEnd = Lighting.FogEnd
     baselineSettings.fogStart = Lighting.FogStart
     baselineSettings.brightness = Lighting.Brightness
+    baselineSettings.ambient = Lighting.Ambient
+    baselineSettings.outdoorAmbient = Lighting.OutdoorAmbient
+    baselineSettings.exposure = Lighting.ExposureCompensation
+    baselineSettings.technology = Lighting.Technology
+
+    local terrain = workspace:FindFirstChild('Terrain')
+    if terrain then
+        baselineSettings.terrain = {
+            waterWaveSize = terrain.WaterWaveSize,
+            waterWaveSpeed = terrain.WaterWaveSpeed,
+            waterReflectance = terrain.WaterReflectance,
+            waterTransparency = terrain.WaterTransparency
+        }
+    end
 
     local success, currentQuality = pcall(function()
         return settings().Rendering.QualityLevel
@@ -254,6 +268,16 @@ local function captureBaselineSettings()
     if success then
         baselineSettings.qualityLevel = currentQuality
     end
+
+    pcall(function()
+        local settingsService = UserSettings()
+        if settingsService then
+            local gameSettings = settingsService.GameSettings
+            if gameSettings then
+                baselineSettings.savedQualityLevel = gameSettings.SavedQualityLevel
+            end
+        end
+    end)
 end
 
 local function getNotificationNetFolder()
@@ -313,8 +337,226 @@ local function setNotificationSuppression(state)
     end
 end
 
+local ultimatePerformanceApplied = false
+local performanceConnections = {
+    workspace = nil,
+    playerAdded = nil,
+    characterAdded = {}
+}
+
+local ENABLE_PERF_FPS_MONITOR = false
+
+local function disconnectPerformanceConnections()
+    if performanceConnections.workspace then
+        performanceConnections.workspace:Disconnect()
+        performanceConnections.workspace = nil
+    end
+    if performanceConnections.playerAdded then
+        performanceConnections.playerAdded:Disconnect()
+        performanceConnections.playerAdded = nil
+    end
+    for _, conn in ipairs(performanceConnections.characterAdded) do
+        if conn and conn.Connected then
+            conn:Disconnect()
+        end
+    end
+    performanceConnections.characterAdded = {}
+end
+
+local function optimizeObjectForPerformance(obj)
+    if not obj then return end
+
+    if obj:IsA('BasePart') then
+        obj.CastShadow = false
+        obj.Material = Enum.Material.Plastic
+        obj.Reflectance = 0
+
+        if obj.Material == Enum.Material.Water or (obj.Name and obj.Name:lower():find('water')) then
+            obj.Color = Color3.new(0, 0.8, 1)
+            obj.Material = Enum.Material.Plastic
+            obj.Transparency = 0.2
+            obj.Anchored = true
+        end
+
+    elseif obj:IsA('ParticleEmitter') or obj:IsA('Fire') or obj:IsA('Smoke') or obj:IsA('Sparkles') or
+           obj:IsA('PointLight') or obj:IsA('SpotLight') or obj:IsA('SurfaceLight') or obj:IsA('Beam') then
+        obj.Enabled = false
+
+    elseif obj:IsA('Decal') or obj:IsA('Texture') then
+        if obj.Name ~= 'face' then
+            obj.Transparency = 1
+        end
+
+    elseif obj:IsA('Sound') then
+        obj.Volume = 0
+        obj:Stop()
+
+    elseif obj:IsA('Script') or obj:IsA('LocalScript') then
+        local name = obj.Name and obj.Name:lower() or ''
+        if name:find('water') or name:find('wave') or name:find('cloud') or name:find('particle') or name:find('effect') then
+            obj.Disabled = true
+        end
+    end
+end
+
+local function optimizeCharacterForPerformance(character)
+    if not character then return end
+
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA('BasePart') then
+            part.CastShadow = false
+            part.Material = Enum.Material.Plastic
+            part.Reflectance = 0
+        elseif part:IsA('Accessory') then
+            local handle = part:FindFirstChild('Handle')
+            if handle then
+                handle.CastShadow = false
+                handle.Material = Enum.Material.Plastic
+                local mesh = handle:FindFirstChildOfClass('SpecialMesh')
+                if mesh then
+                    mesh.TextureId = ''
+                end
+            end
+        elseif part:IsA('ParticleEmitter') or part:IsA('Fire') or part:IsA('Smoke') or part:IsA('Sparkles') then
+            part.Enabled = false
+        end
+    end
+end
+
+local function hookCharacterPerformance()
+    for _, conn in ipairs(performanceConnections.characterAdded) do
+        if conn and conn.Connected then
+            conn:Disconnect()
+        end
+    end
+    performanceConnections.characterAdded = {}
+
+    for _, playerObj in ipairs(Players:GetPlayers()) do
+        if playerObj.Character then
+            optimizeCharacterForPerformance(playerObj.Character)
+        end
+        local conn = playerObj.CharacterAdded:Connect(optimizeCharacterForPerformance)
+        table.insert(performanceConnections.characterAdded, conn)
+    end
+
+    if not performanceConnections.playerAdded then
+        performanceConnections.playerAdded = Players.PlayerAdded:Connect(function(playerObj)
+            local conn = playerObj.CharacterAdded:Connect(optimizeCharacterForPerformance)
+            table.insert(performanceConnections.characterAdded, conn)
+        end)
+    end
+end
+
+local function applyUltimatePerformance()
+    if ultimatePerformanceApplied then
+        if not performanceConnections.workspace then
+            performanceConnections.workspace = workspace.DescendantAdded:Connect(optimizeObjectForPerformance)
+        end
+        hookCharacterPerformance()
+        return
+    end
+
+    ultimatePerformanceApplied = true
+
+    pcall(function()
+        local terrain = workspace:FindFirstChild('Terrain')
+        if terrain then
+            if terrain:FindFirstChild('Clouds') then
+                terrain.Clouds:Destroy()
+                print('[Perf] Clouds removed')
+            end
+            terrain.WaterWaveSize = 0
+            terrain.WaterWaveSpeed = 0
+            terrain.WaterReflectance = 0
+            terrain.WaterTransparency = 0
+        end
+    end)
+
+    pcall(function()
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        Lighting.FogStart = 9e9
+        Lighting.Brightness = 0
+        Lighting.Technology = Enum.Technology.Compatibility
+        Lighting.Ambient = Color3.new(1, 1, 1)
+        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+        Lighting.ShadowSoftness = 0
+        Lighting.ExposureCompensation = 0
+
+        for _, effect in ipairs(Lighting:GetChildren()) do
+            if effect:IsA('PostEffect') or effect:IsA('Atmosphere') or effect:IsA('Sky') or effect:IsA('Clouds') then
+                pcall(function() effect:Destroy() end)
+            end
+        end
+    end)
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        optimizeObjectForPerformance(obj)
+    end
+
+    performanceConnections.workspace = workspace.DescendantAdded:Connect(optimizeObjectForPerformance)
+
+    hookCharacterPerformance()
+
+    pcall(function()
+        local camera = workspace.CurrentCamera
+        if camera then
+            for _, effect in ipairs(camera:GetChildren()) do
+                if effect:IsA('PostEffect') then
+                    effect.Enabled = false
+                end
+            end
+        end
+    end)
+
+    pcall(function()
+        local settingsService = UserSettings()
+        if settingsService then
+            local gameSettings = settingsService.GameSettings
+            if gameSettings then
+                gameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
+            end
+        end
+    end)
+
+    pcall(function()
+        if typeof(getconnections) == 'function' then
+            for _, connection in ipairs(getconnections(RunService.Heartbeat)) do
+                pcall(function()
+                    local func = connection.Function
+                    local env = getfenv(func)
+                    if env.script then
+                        local name = env.script.Name:lower()
+                        if name:find('water') or name:find('wave') or name:find('cloud') or name:find('particle') or name:find('effect') then
+                            connection:Disable()
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    print('[Perf] Ultimate performance applied')
+    print('[Perf] Water optimized')
+    print('[Perf] Visual effects disabled\n    print('[Perf] Maximum FPS mode')')
+
+    if ENABLE_PERF_FPS_MONITOR then
+        task.spawn(function()
+            while ENABLE_PERF_FPS_MONITOR do
+                task.wait(3)
+                local fps = workspace:GetRealPhysicsFPS()
+                if fps then
+                    print('[Perf] FPS: ' .. math.floor(fps))
+                end
+            end
+        end)
+    end
+end
+
+
 local function applyBaselinePerformance()
     captureBaselineSettings()
+    applyUltimatePerformance()
     if baselinePerformanceActive then
         disableNotificationRemotes()
         return
@@ -350,6 +592,8 @@ local function restoreBaselinePerformance()
 
     baselinePerformanceActive = false
     setNotificationSuppression(false)
+    disconnectPerformanceConnections()
+    ultimatePerformanceApplied = false
 
     pcall(function()
         RunService:Set3dRenderingEnabled(true)
@@ -362,14 +606,59 @@ local function restoreBaselinePerformance()
         if baselineSettings.shadowSoftness ~= nil then
             Lighting.ShadowSoftness = baselineSettings.shadowSoftness
         end
+        if baselineSettings.fogEnd ~= nil then
+            Lighting.FogEnd = baselineSettings.fogEnd
+        end
+        if baselineSettings.fogStart ~= nil then
+            Lighting.FogStart = baselineSettings.fogStart
+        end
         if baselineSettings.brightness ~= nil then
             Lighting.Brightness = baselineSettings.brightness
+        end
+        if baselineSettings.ambient ~= nil then
+            Lighting.Ambient = baselineSettings.ambient
+        end
+        if baselineSettings.outdoorAmbient ~= nil then
+            Lighting.OutdoorAmbient = baselineSettings.outdoorAmbient
+        end
+        if baselineSettings.exposure ~= nil then
+            Lighting.ExposureCompensation = baselineSettings.exposure
+        end
+        if baselineSettings.technology ~= nil then
+            Lighting.Technology = baselineSettings.technology
+        end
+    end)
+
+    pcall(function()
+        local terrain = workspace:FindFirstChild('Terrain')
+        if terrain and baselineSettings.terrain then
+            if baselineSettings.terrain.waterWaveSize ~= nil then
+                terrain.WaterWaveSize = baselineSettings.terrain.waterWaveSize
+            end
+            if baselineSettings.terrain.waterWaveSpeed ~= nil then
+                terrain.WaterWaveSpeed = baselineSettings.terrain.waterWaveSpeed
+            end
+            if baselineSettings.terrain.waterReflectance ~= nil then
+                terrain.WaterReflectance = baselineSettings.terrain.waterReflectance
+            end
+            if baselineSettings.terrain.waterTransparency ~= nil then
+                terrain.WaterTransparency = baselineSettings.terrain.waterTransparency
+            end
         end
     end)
 
     pcall(function()
         if baselineSettings.qualityLevel ~= nil then
             settings().Rendering.QualityLevel = baselineSettings.qualityLevel
+        end
+        if baselineSettings.savedQualityLevel ~= nil then
+            local settingsService = UserSettings()
+            if settingsService then
+                local gameSettings = settingsService.GameSettings
+                if gameSettings then
+                    gameSettings.SavedQualityLevel = baselineSettings.savedQualityLevel
+                end
+            end
         end
     end)
 
