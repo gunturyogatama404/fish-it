@@ -31,19 +31,21 @@ local isUpgradeOn = false
 local isUpgradeBaitOn = false
 local isAutoWeatherOn = false
 local gpuSaverEnabled = false
+local renderingOptimized = false
 local isAutoMegalodonOn = false
 local megalodonSavedPosition = nil
 local hasTeleportedToMegalodon = false
 local currentBodyPosition = nil
-local megalodonEventActive = false
-local megalodonMissingAlertSent = false
-local megalodonEventStartedAt = 0
 
 local isAutoPreset1On = false
 local isAutoPreset2On = false
 
+-- Megalodon event variables
+local megalodonEventActive = false
+local megalodonMissingAlertSent = false
+local megalodonEventStartedAt = 0
+
 local HttpService = game:GetService("HttpService")
-local sendMegalodonEventWebhook
 
 local CONFIG_FILE = "auto_fish_v51_disconnect_config.json"
 local defaultConfig = {
@@ -226,442 +228,6 @@ end
 
 -- ====== GPU SAVER VARIABLES ======
 local originalSettings = {}
-
-local baselineSettings = { captured = false }
-local baselinePerformanceActive = false
-local notificationsSuppressed = false
-local notificationSuppressionThread = nil
-local suppressedNotifications = {}
-local suppressedNotificationEvents = {
-    "RE/ObtainedNewFishNotification",
-    "RE/ShowNotification",
-    "RE/PlaySound"
-}
-
-local function captureBaselineSettings()
-    if baselineSettings.captured then return end
-    baselineSettings.captured = true
-
-    baselineSettings.globalShadows = Lighting.GlobalShadows
-    baselineSettings.shadowSoftness = Lighting.ShadowSoftness
-    baselineSettings.fogEnd = Lighting.FogEnd
-    baselineSettings.fogStart = Lighting.FogStart
-    baselineSettings.brightness = Lighting.Brightness
-    baselineSettings.ambient = Lighting.Ambient
-    baselineSettings.outdoorAmbient = Lighting.OutdoorAmbient
-    baselineSettings.exposure = Lighting.ExposureCompensation
-    baselineSettings.technology = Lighting.Technology
-
-    local terrain = workspace:FindFirstChild('Terrain')
-    if terrain then
-        baselineSettings.terrain = {
-            waterWaveSize = terrain.WaterWaveSize,
-            waterWaveSpeed = terrain.WaterWaveSpeed,
-            waterReflectance = terrain.WaterReflectance,
-            waterTransparency = terrain.WaterTransparency
-        }
-    end
-
-    local success, currentQuality = pcall(function()
-        return settings().Rendering.QualityLevel
-    end)
-    if success then
-        baselineSettings.qualityLevel = currentQuality
-    end
-
-    pcall(function()
-        local settingsService = UserSettings()
-        if settingsService then
-            local gameSettings = settingsService.GameSettings
-            if gameSettings then
-                baselineSettings.savedQualityLevel = gameSettings.SavedQualityLevel
-            end
-        end
-    end)
-end
-
-local function getNotificationNetFolder()
-    local packages = replicatedStorage:FindFirstChild("Packages")
-    if not packages then return nil end
-
-    local indexFolder = packages:FindFirstChild("_Index")
-    if not indexFolder then return nil end
-
-    local sleitnickFolder = indexFolder:FindFirstChild("sleitnick_net@0.2.0")
-    if not sleitnickFolder then return nil end
-
-    return sleitnickFolder:FindFirstChild("net")
-end
-
-local function disableNotificationRemotes()
-    local netFolder = getNotificationNetFolder()
-    if not netFolder then return end
-
-    for _, eventName in ipairs(suppressedNotificationEvents) do
-        local event = netFolder:FindFirstChild(eventName)
-        if event then
-            if not suppressedNotifications[eventName] then
-                suppressedNotifications[eventName] = true
-                print("[GPU Saver] Disabled notification remote " .. eventName)
-            end
-            event:Destroy()
-        end
-    end
-end
-
-local function setNotificationSuppression(state)
-    if state then
-        if notificationsSuppressed then
-            disableNotificationRemotes()
-            return
-        end
-        notificationsSuppressed = true
-        if notificationSuppressionThread and coroutine.status(notificationSuppressionThread) ~= "dead" then
-            return
-        end
-        notificationSuppressionThread = task.spawn(function()
-            while notificationsSuppressed do
-                local ok, err = pcall(disableNotificationRemotes)
-                if not ok then
-                    warn("[GPU Saver] Notification suppression error: " .. tostring(err))
-                end
-                for _ = 1, 5 do
-                    if not notificationsSuppressed then break end
-                    task.wait(1)
-                end
-            end
-            notificationSuppressionThread = nil
-        end)
-    else
-        notificationsSuppressed = false
-    end
-end
-
-local ultimatePerformanceApplied = false
-local performanceConnections = {
-    workspace = nil,
-    playerAdded = nil,
-    characterAdded = {}
-}
-
-local ENABLE_PERF_FPS_MONITOR = false
-
-local function disconnectPerformanceConnections()
-    if performanceConnections.workspace then
-        performanceConnections.workspace:Disconnect()
-        performanceConnections.workspace = nil
-    end
-    if performanceConnections.playerAdded then
-        performanceConnections.playerAdded:Disconnect()
-        performanceConnections.playerAdded = nil
-    end
-    for _, conn in ipairs(performanceConnections.characterAdded) do
-        if conn and conn.Connected then
-            conn:Disconnect()
-        end
-    end
-    performanceConnections.characterAdded = {}
-end
-
-local function optimizeObjectForPerformance(obj)
-    if not obj then return end
-
-    if obj:IsA('BasePart') then
-        obj.CastShadow = false
-        obj.Material = Enum.Material.Plastic
-        obj.Reflectance = 0
-
-        if obj.Material == Enum.Material.Water or (obj.Name and obj.Name:lower():find('water')) then
-            obj.Color = Color3.new(0, 0.8, 1)
-            obj.Material = Enum.Material.Plastic
-            obj.Transparency = 0.2
-            obj.Anchored = true
-        end
-
-    elseif obj:IsA('ParticleEmitter') or obj:IsA('Fire') or obj:IsA('Smoke') or obj:IsA('Sparkles') or
-           obj:IsA('PointLight') or obj:IsA('SpotLight') or obj:IsA('SurfaceLight') or obj:IsA('Beam') then
-        obj.Enabled = false
-
-    elseif obj:IsA('Decal') or obj:IsA('Texture') then
-        if obj.Name ~= 'face' then
-            obj.Transparency = 1
-        end
-
-    elseif obj:IsA('Sound') then
-        obj.Volume = 0
-        obj:Stop()
-
-    elseif obj:IsA('Script') or obj:IsA('LocalScript') then
-        local name = obj.Name and obj.Name:lower() or ''
-        if name:find('water') or name:find('wave') or name:find('cloud') or name:find('particle') or name:find('effect') then
-            obj.Disabled = true
-        end
-    end
-end
-
-local function optimizeCharacterForPerformance(character)
-    if not character then return end
-
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA('BasePart') then
-            part.CastShadow = false
-            part.Material = Enum.Material.Plastic
-            part.Reflectance = 0
-        elseif part:IsA('Accessory') then
-            local handle = part:FindFirstChild('Handle')
-            if handle then
-                handle.CastShadow = false
-                handle.Material = Enum.Material.Plastic
-                local mesh = handle:FindFirstChildOfClass('SpecialMesh')
-                if mesh then
-                    mesh.TextureId = ''
-                end
-            end
-        elseif part:IsA('ParticleEmitter') or part:IsA('Fire') or part:IsA('Smoke') or part:IsA('Sparkles') then
-            part.Enabled = false
-        end
-    end
-end
-
-local function hookCharacterPerformance()
-    for _, conn in ipairs(performanceConnections.characterAdded) do
-        if conn and conn.Connected then
-            conn:Disconnect()
-        end
-    end
-    performanceConnections.characterAdded = {}
-
-    for _, playerObj in ipairs(Players:GetPlayers()) do
-        if playerObj.Character then
-            optimizeCharacterForPerformance(playerObj.Character)
-        end
-        local conn = playerObj.CharacterAdded:Connect(optimizeCharacterForPerformance)
-        table.insert(performanceConnections.characterAdded, conn)
-    end
-
-    if not performanceConnections.playerAdded then
-        performanceConnections.playerAdded = Players.PlayerAdded:Connect(function(playerObj)
-            local conn = playerObj.CharacterAdded:Connect(optimizeCharacterForPerformance)
-            table.insert(performanceConnections.characterAdded, conn)
-        end)
-    end
-end
-
-local function applyUltimatePerformance()
-    if ultimatePerformanceApplied then
-        if not performanceConnections.workspace then
-            performanceConnections.workspace = workspace.DescendantAdded:Connect(optimizeObjectForPerformance)
-        end
-        hookCharacterPerformance()
-        return
-    end
-
-    ultimatePerformanceApplied = true
-
-    pcall(function()
-        local terrain = workspace:FindFirstChild('Terrain')
-        if terrain then
-            if terrain:FindFirstChild('Clouds') then
-                terrain.Clouds:Destroy()
-                print('[Perf] Clouds removed')
-            end
-            terrain.WaterWaveSize = 0
-            terrain.WaterWaveSpeed = 0
-            terrain.WaterReflectance = 0
-            terrain.WaterTransparency = 0
-        end
-    end)
-
-    pcall(function()
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 9e9
-        Lighting.FogStart = 9e9
-        Lighting.Brightness = 0
-        Lighting.Technology = Enum.Technology.Compatibility
-        Lighting.Ambient = Color3.new(1, 1, 1)
-        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
-        Lighting.ShadowSoftness = 0
-        Lighting.ExposureCompensation = 0
-
-        for _, effect in ipairs(Lighting:GetChildren()) do
-            if effect:IsA('PostEffect') or effect:IsA('Atmosphere') or effect:IsA('Sky') or effect:IsA('Clouds') then
-                pcall(function() effect:Destroy() end)
-            end
-        end
-    end)
-
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        optimizeObjectForPerformance(obj)
-    end
-
-    performanceConnections.workspace = workspace.DescendantAdded:Connect(optimizeObjectForPerformance)
-
-    hookCharacterPerformance()
-
-    pcall(function()
-        local camera = workspace.CurrentCamera
-        if camera then
-            for _, effect in ipairs(camera:GetChildren()) do
-                if effect:IsA('PostEffect') then
-                    effect.Enabled = false
-                end
-            end
-        end
-    end)
-
-    pcall(function()
-        local settingsService = UserSettings()
-        if settingsService then
-            local gameSettings = settingsService.GameSettings
-            if gameSettings then
-                gameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
-            end
-        end
-    end)
-
-    pcall(function()
-        if typeof(getconnections) == 'function' then
-            for _, connection in ipairs(getconnections(RunService.Heartbeat)) do
-                pcall(function()
-                    local func = connection.Function
-                    local env = getfenv(func)
-                    if env.script then
-                        local name = env.script.Name:lower()
-                        if name:find('water') or name:find('wave') or name:find('cloud') or name:find('particle') or name:find('effect') then
-                            connection:Disable()
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-
-    if ENABLE_PERF_FPS_MONITOR then
-        task.spawn(function()
-            while ENABLE_PERF_FPS_MONITOR do
-                task.wait(3)
-                local fps = workspace:GetRealPhysicsFPS()
-                if fps then
-                    print('[Perf] FPS: ' .. math.floor(fps))
-                end
-            end
-        end)
-    end
-end
-
-
-local function applyBaselinePerformance()
-    captureBaselineSettings()
-    applyUltimatePerformance()
-    if baselinePerformanceActive then
-        disableNotificationRemotes()
-        return
-    end
-
-    baselinePerformanceActive = true
-    setNotificationSuppression(true)
-
-    pcall(function()
-        RunService:Set3dRenderingEnabled(false)
-    end)
-
-    pcall(function()
-        Lighting.GlobalShadows = false
-        Lighting.ShadowSoftness = 0
-        if baselineSettings.brightness ~= nil then
-            Lighting.Brightness = math.max(0, baselineSettings.brightness * 0.25)
-        else
-            Lighting.Brightness = 0.25
-        end
-    end)
-
-    pcall(function()
-        local renderSettings = settings().Rendering
-        renderSettings.QualityLevel = Enum.QualityLevel.Level01
-    end)
-
-    print("[GPU Saver] Lite performance mode applied (rendering reduced, notifications suppressed).")
-end
-
-local function restoreBaselinePerformance()
-    if not baselinePerformanceActive and not notificationsSuppressed then return end
-
-    baselinePerformanceActive = false
-    setNotificationSuppression(false)
-    disconnectPerformanceConnections()
-    ultimatePerformanceApplied = false
-
-    pcall(function()
-        RunService:Set3dRenderingEnabled(true)
-    end)
-
-    pcall(function()
-        if baselineSettings.globalShadows ~= nil then
-            Lighting.GlobalShadows = baselineSettings.globalShadows
-        end
-        if baselineSettings.shadowSoftness ~= nil then
-            Lighting.ShadowSoftness = baselineSettings.shadowSoftness
-        end
-        if baselineSettings.fogEnd ~= nil then
-            Lighting.FogEnd = baselineSettings.fogEnd
-        end
-        if baselineSettings.fogStart ~= nil then
-            Lighting.FogStart = baselineSettings.fogStart
-        end
-        if baselineSettings.brightness ~= nil then
-            Lighting.Brightness = baselineSettings.brightness
-        end
-        if baselineSettings.ambient ~= nil then
-            Lighting.Ambient = baselineSettings.ambient
-        end
-        if baselineSettings.outdoorAmbient ~= nil then
-            Lighting.OutdoorAmbient = baselineSettings.outdoorAmbient
-        end
-        if baselineSettings.exposure ~= nil then
-            Lighting.ExposureCompensation = baselineSettings.exposure
-        end
-        if baselineSettings.technology ~= nil then
-            Lighting.Technology = baselineSettings.technology
-        end
-    end)
-
-    pcall(function()
-        local terrain = workspace:FindFirstChild('Terrain')
-        if terrain and baselineSettings.terrain then
-            if baselineSettings.terrain.waterWaveSize ~= nil then
-                terrain.WaterWaveSize = baselineSettings.terrain.waterWaveSize
-            end
-            if baselineSettings.terrain.waterWaveSpeed ~= nil then
-                terrain.WaterWaveSpeed = baselineSettings.terrain.waterWaveSpeed
-            end
-            if baselineSettings.terrain.waterReflectance ~= nil then
-                terrain.WaterReflectance = baselineSettings.terrain.waterReflectance
-            end
-            if baselineSettings.terrain.waterTransparency ~= nil then
-                terrain.WaterTransparency = baselineSettings.terrain.waterTransparency
-            end
-        end
-    end)
-
-    pcall(function()
-        if baselineSettings.qualityLevel ~= nil then
-            settings().Rendering.QualityLevel = baselineSettings.qualityLevel
-        end
-        if baselineSettings.savedQualityLevel ~= nil then
-            local settingsService = UserSettings()
-            if settingsService then
-                local gameSettings = settingsService.GameSettings
-                if gameSettings then
-                    gameSettings.SavedQualityLevel = baselineSettings.savedQualityLevel
-                end
-            end
-        end
-    end)
-
-    print("[GPU Saver] Lite performance mode restored to defaults.")
-end
-
-
 local whiteScreenGui = nil
 local connections = {}
 
@@ -1164,7 +730,6 @@ end
 
 -- Call this function
 setupFishTracking()
-applyBaselinePerformance()
 
 local teleportLocations = {
     { Name = "Kohana Volcano", CFrame = CFrame.new(-572.879456, 22.4521465, 148.355331, -0.995764792, -6.67705606e-08, 0.0919371247, -5.74611505e-08, 1, 1.03905414e-07, -0.0919371247, 9.81825394e-08, -0.995764792) },
@@ -1376,6 +941,39 @@ local BaitDatabase = {topwaterbait = 10,luckbait = 2,midnightbait = 3,chromabait
 -- Database ID Enchant
 local enchantDatabase = {["Cursed I"] = 12,["Leprechaun I"] = 5,["Leprechaun II"] = 6}
 
+-- ====== GRAPHICS OPTIMIZATION ======
+local function optimizeGraphics()
+    if renderingOptimized then return end
+    renderingOptimized = true
+
+    print("🎨 Optimizing graphics for better performance...")
+
+    pcall(function()
+        -- Set quality level to 1 (lowest)
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+
+        -- Disable global shadows
+        Lighting.GlobalShadows = false
+
+        -- Additional optimizations
+        Lighting.FogEnd = 9e9
+        Lighting.FogStart = 9e9
+        Lighting.Brightness = 0
+        Lighting.Technology = Enum.Technology.Compatibility
+        Lighting.ShadowSoftness = 0
+
+        -- Remove lighting effects
+        for _, effect in pairs(Lighting:GetChildren()) do
+            if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or
+               effect:IsA("Sky") or effect:IsA("Clouds") then
+                pcall(function() effect.Enabled = false end)
+            end
+        end
+
+        print("✅ Graphics optimized - Quality Level 1 & Global Shadows disabled")
+    end)
+end
+
 -- ====== CORE FUNCTIONS ======
 local function chargeFishingRod()
     pcall(function()
@@ -1508,6 +1106,7 @@ local function autoDetectMegalodon()
     end
 
     if eventFound and eventPosition then
+        -- Mark event as active if not already
         if not megalodonEventActive then
             megalodonEventActive = true
             megalodonMissingAlertSent = false
@@ -1520,32 +1119,32 @@ local function autoDetectMegalodon()
             disableMegalodonLock()
         end
     else
+        -- Handle event end
         local wasActive = megalodonEventActive
         if wasActive then
             megalodonEventActive = false
         end
 
+        -- Return to saved position when event ends
         if hasTeleportedToMegalodon and megalodonSavedPosition then
             teleportToMegalodon(megalodonSavedPosition, false)
             megalodonSavedPosition = nil
             hasTeleportedToMegalodon = false
-        end
 
-        if wasActive then
-            megalodonMissingAlertSent = true
-            if sendMegalodonEventWebhook then
+            -- Send webhook about event ending if it was active
+            if wasActive and not megalodonMissingAlertSent then
+                megalodonMissingAlertSent = true
                 local duration = 0
                 if megalodonEventStartedAt and megalodonEventStartedAt > 0 then
                     duration = math.max(0, os.time() - megalodonEventStartedAt)
                 end
                 sendMegalodonEventWebhook("ended", { duration = duration })
+                megalodonEventStartedAt = 0
             end
-            megalodonEventStartedAt = 0
         elseif not megalodonMissingAlertSent then
+            -- Send webhook about missing event only once per session
             megalodonMissingAlertSent = true
-            if sendMegalodonEventWebhook then
-                sendMegalodonEventWebhook("missing")
-            end
+            sendMegalodonEventWebhook("missing")
         end
     end
 end
@@ -1553,9 +1152,9 @@ end
 local function setAutoMegalodon(state)
     isAutoMegalodonOn = state
     updateConfigField("autoMegalodon", state)
-    if state then
+    if not state then
+        -- Reset megalodon state
         megalodonMissingAlertSent = false
-    else
         disableMegalodonLock()
         megalodonSavedPosition = nil
         hasTeleportedToMegalodon = false
@@ -1563,8 +1162,9 @@ local function setAutoMegalodon(state)
         megalodonMissingAlertSent = false
         megalodonEventStartedAt = 0
     end
-    print("[Auto] Megalodon Hunt: " .. (state and "ENABLED" or "DISABLED"))
+    print("🦈 Auto Megalodon Hunt: " .. (state and "ENABLED" or "DISABLED"))
 end
+
 -- ====== AUTO ENCHANT FUNCTIONS ======
 -- Function untuk mendapatkan UUID enchant stone
 local function getEnchantStoneUUID()
@@ -1756,7 +1356,7 @@ autoCatchToggle = SecMain:NewToggle("Auto Catch", "Auto catch fish", function(st
     setAutoCatch(state) 
 end)
 
-autoPreset1Toggle = SecMain:NewToggle("Auto 1", "Enable core auto features with 0.5s stagger then teleport to Crater Island", function(state)
+autoPreset1Toggle = SecMain:NewToggle("Auto 1 (Auto Crater)", "Enable core auto features with 0.5s stagger then teleport to Crater Island", function(state)
     if state then
         enablePreset("auto1", "Crater Island")
     else
@@ -1764,7 +1364,7 @@ autoPreset1Toggle = SecMain:NewToggle("Auto 1", "Enable core auto features with 
     end
 end)
 
-autoPreset2Toggle = SecMain:NewToggle("Auto 2", "Enable core auto features with 0.5s stagger then teleport to Sisyphus State", function(state)
+autoPreset2Toggle = SecMain:NewToggle("Auto 2 (Auto Sisyphus)", "Enable core auto features with 0.5s stagger then teleport to Sisyphus State", function(state)
     if state then
         enablePreset("auto2", "Sisyphus State")
     else
@@ -2021,14 +1621,6 @@ end)
 SecGPU:NewButton("Force Remove White Screen", "Emergency remove if stuck", function()
     removeWhiteScreen()
     gpuSaverEnabled = false
-end)
-
-SecGPU:NewButton("Reapply Lite Performance", "Apply safe GPU tweaks again", function()
-    applyBaselinePerformance()
-end)
-
-SecGPU:NewButton("Restore Default Rendering", "Return to original rendering settings", function()
-    restoreBaselinePerformance()
 end)
 
 -- ====== UI CONTROLS ======
@@ -2391,6 +1983,52 @@ task.spawn(function()
     end
 end)
 
+-- ====== MEGALODON WEBHOOK ======
+local sendMegalodonEventWebhook = function(status, data)
+    local title, description, color
+    local duration = (data and data.duration) or 0
+
+    if status == "ended" then
+        title = '[Megalodon] Event Finished'
+        description = 'Megalodon hunt despawned. Returned to saved position.'
+        color = 16776960 -- Yellow
+        if duration > 0 then
+            description = description .. string.format('\nDuration: %d seconds', duration)
+        end
+    elseif status == "missing" then
+        title = '[Megalodon] Event Missing'
+        description = 'No Megalodon Hunt props detected in this server.'
+        color = 16711680 -- Red
+    else
+        return
+    end
+
+    local embed = {
+        title = title,
+        description = description,
+        color = color,
+        fields = {
+            { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+            { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true }
+        },
+        footer = { text = 'Megalodon Watch - Auto Fish' }
+    }
+    local body = HttpService:JSONEncode({ embeds = {embed} })
+
+    pcall(function()
+        if syn and syn.request then
+            syn.request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+        elseif http_request then
+            http_request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+        elseif fluxus and fluxus.request then
+            fluxus.request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+        elseif request then
+            request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+        end
+        print('[Megalodon] Webhook sent (' .. status .. ')')
+    end)
+end
+
 -- Inventory Whitelist Notifier (mutations-aware, single message per loop)
 -- Counts by species (Tile.ItemName), shows pretty display (Variant + Base when available)
 
@@ -2427,96 +2065,34 @@ local WL = {}; for _, n in ipairs(WHITELIST) do WL[toKey(n)] = true end
 local function dprint(...) if DEBUG then print("[INV-DEBUG]", ...) end end
 
 -- ============ WEBHOOK ============
-
-local function dispatchWebhookEmbed(embed)
-    if not WEBHOOK_URL then return true end
-
+local function sendDiscordEmbed(description, totalWhitelistCount)
+    local embed = {
+        title = "🎣 SECRET Fish Found",
+        description = description,
+        color = 3066993,
+        fields = {
+            { name = "🕒 Waktu",  value = os.date("%H:%M:%S"), inline = true },
+            { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+            { name = "📦 Total (whitelist)", value = tostring(totalWhitelistCount) .. " fish", inline = true },
+        },
+        footer = { text = "Inventory Notifier • loop" }
+    }
     local body = HttpService:JSONEncode({ embeds = {embed} })
 
     local ok, err = pcall(function()
         if syn and syn.request then
-            syn.request({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body })
+            syn.request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
         elseif http_request then
-            http_request({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body })
+            http_request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
         elseif fluxus and fluxus.request then
-            fluxus.request({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body })
+            fluxus.request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
         elseif request then
-            request({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body })
+            request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
         else
             error("Executor tidak support HTTP requests")
         end
     end)
-
-    if not ok then
-        warn('[Webhook] Failed to send: ' .. tostring(err))
-    end
-
-    return ok
-end
-
-local function sendDiscordEmbed(description, totalWhitelistCount)
-    local embed = {
-        title = 'SECRET Fish Found',
-        description = description,
-        color = 3066993,
-        fields = {
-            { name = 'Time', value = os.date('%H:%M:%S'), inline = true },
-            { name = 'Player', value = (player.DisplayName or player.Name or 'Unknown'), inline = true },
-            { name = 'Total (whitelist)', value = tostring(totalWhitelistCount) .. ' fish', inline = true },
-        },
-        footer = { text = 'Inventory Notifier - loop' }
-    }
-
-    if dispatchWebhookEmbed(embed) then
-        dprint('[INV] Webhook sent')
-    end
-end
-
-sendMegalodonEventWebhook = function(status, data)
-    if not WEBHOOK_URL then return end
-
-    local durationText = nil
-    if status == 'ended' and type(data) == 'table' then
-        local duration = tonumber(data.duration)
-        if duration and duration > 0 then
-            durationText = FormatTime(duration)
-        end
-    end
-
-    local title
-    local description
-    local color
-
-    if status == 'ended' then
-        title = '[Megalodon] Event Finished'
-        description = 'Megalodon hunt despawned. Returned to saved position.'
-        color = 15158332
-    else
-        title = '[Megalodon] Event Missing'
-        description = 'No Megalodon Hunt props detected in this server.'
-        color = 16098851
-    end
-
-    local fields = {
-        { name = 'Time', value = os.date('%H:%M:%S'), inline = true },
-        { name = 'Player', value = (player.DisplayName or player.Name or 'Unknown'), inline = true }
-    }
-
-    if durationText then
-        table.insert(fields, { name = 'Duration', value = durationText, inline = true })
-    end
-
-    local embed = {
-        title = title,
-        description = description,
-        color = color,
-        fields = fields,
-        footer = { text = 'Megalodon Watch - Auto Fish' }
-    }
-
-    if dispatchWebhookEmbed(embed) then
-        print('[Megalodon] Webhook sent (' .. status .. ')')
-    end
+    if not ok then warn("❌ Gagal kirim webhook:", err) else dprint("✅ Webhook terkirim") end
 end
 
 -- ============ INVENTORY CONTROL ============
@@ -2824,6 +2400,13 @@ setupDisconnectNotifier()
 
 -- ============ LOOP ============
 print("🚀 Inventory Whitelist Notifier (mutation-aware) start...")
+
+-- Optimize graphics automatically when script starts
+task.spawn(function()
+    task.wait(2) -- Wait 2 seconds before optimizing to allow game to load
+    optimizeGraphics()
+end)
+
 baselineNow()
 
 while true do
