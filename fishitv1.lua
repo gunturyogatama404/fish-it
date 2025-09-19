@@ -1074,8 +1074,14 @@ local function buyRod(rodDatabase)
         end)
     else
         pcall(function()
-            local directEvent = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseFishingRod"]
-            directEvent:InvokeServer(rodDatabase)
+            local replicatedStorage = game:GetService("ReplicatedStorage")
+            if replicatedStorage then
+                local directEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseFishingRod"]
+                if directEvent then
+                    task.wait(0.5) -- Add delay to prevent rate limiting
+                    directEvent:InvokeServer(rodDatabase)
+                end
+            end
         end)
     end
 end
@@ -1088,8 +1094,14 @@ local function buyBait(BaitDatabase)
         end)
     else
         pcall(function()
-            local directEvent = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseBait"]
-            directEvent:InvokeServer(BaitDatabase)
+            local replicatedStorage = game:GetService("ReplicatedStorage")
+            if replicatedStorage then
+                local directEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseBait"]
+                if directEvent then
+                    task.wait(0.5) -- Add delay to prevent rate limiting
+                    directEvent:InvokeServer(BaitDatabase)
+                end
+            end
         end)
     end
 end
@@ -2049,7 +2061,9 @@ end)
 
 -- ====== MEGALODON WEBHOOK ======
 local lastWebhookTime = 0
-local WEBHOOK_COOLDOWN = 5 -- 5 seconds cooldown between webhooks
+local WEBHOOK_COOLDOWN = 15 -- 15 seconds cooldown between webhooks to prevent rate limiting
+local webhookRetryDelay = 5 -- Base retry delay in seconds
+local maxRetryAttempts = 3
 
 local sendMegalodonEventWebhook = function(status, data)
     -- Rate limiting check
@@ -2093,31 +2107,54 @@ local sendMegalodonEventWebhook = function(status, data)
     }
     local body = HttpService:JSONEncode({ embeds = {embed} })
 
-    -- Send webhook with retry logic
+    -- Send webhook with exponential backoff retry logic
     task.spawn(function()
-        local success, err = pcall(function()
-            if syn and syn.request then
-                syn.request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-            elseif http_request then
-                http_request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-            elseif fluxus and fluxus.request then
-                fluxus.request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-            elseif request then
-                request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-            end
-        end)
+        local attempt = 1
+        local success = false
 
-        if success then
-            lastWebhookTime = currentTime
-            print('[Megalodon] Webhook sent successfully (' .. status .. ')')
-        else
-            warn('[Megalodon] Webhook failed: ' .. tostring(err))
-            -- Retry after longer delay if failed
-            if string.find(tostring(err):lower(), "429") or string.find(tostring(err):lower(), "rate") then
-                print('[Megalodon] Rate limited, will retry later...')
-                task.wait(30) -- Wait 30 seconds before allowing next attempt
-                lastWebhookTime = currentTime + 25 -- Extra cooldown for rate limits
+        while attempt <= maxRetryAttempts and not success do
+            local currentRetryDelay = webhookRetryDelay * (2 ^ (attempt - 1)) -- Exponential backoff
+
+            if attempt > 1 then
+                print('[Megalodon] Retry attempt ' .. attempt .. ' after ' .. currentRetryDelay .. ' seconds...')
+                task.wait(currentRetryDelay)
             end
+
+            success, err = pcall(function()
+                if syn and syn.request then
+                    syn.request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif http_request then
+                    http_request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif fluxus and fluxus.request then
+                    fluxus.request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif request then
+                    request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                end
+            end)
+
+            if success then
+                lastWebhookTime = tick()
+                print('[Megalodon] Webhook sent successfully (' .. status .. ') on attempt ' .. attempt)
+                break
+            else
+                warn('[Megalodon] Webhook attempt ' .. attempt .. ' failed: ' .. tostring(err))
+
+                -- Handle specific rate limiting errors
+                if string.find(tostring(err):lower(), "429") or string.find(tostring(err):lower(), "rate") then
+                    print('[Megalodon] Rate limited detected, extending cooldown...')
+                    lastWebhookTime = tick() + 60 -- Block webhooks for 60 seconds on rate limit
+                    task.wait(60) -- Wait longer for rate limit recovery
+                    break -- Don't retry immediately on rate limit
+                elseif string.find(tostring(err):lower(), "network") or string.find(tostring(err):lower(), "timeout") then
+                    print('[Megalodon] Network error detected, will retry...')
+                end
+
+                attempt = attempt + 1
+            end
+        end
+
+        if not success then
+            warn('[Megalodon] All webhook attempts failed for status: ' .. status)
         end
     end)
 end
@@ -2204,19 +2241,41 @@ end
 local function openInventory()
     local inv = getInventoryGui()
 
-    -- Kick controller agar tile di-render (aman dipanggil berulang)
+    -- Kick controller agar tile di-render (aman dipanggil berulang) dengan network error protection
     pcall(function()
         local controllers = ReplicatedStorage:FindFirstChild("Controllers")
         if controllers then
             local invModule = controllers:FindFirstChild("InventoryController")
             if invModule then
-                local ctrl = require(invModule)
-                if ctrl.SetPage          then pcall(ctrl.SetPage, "Fish") end
-                if ctrl.SetCategory      then pcall(ctrl.SetCategory, "Fish") end
-                if ctrl._bindFishes      then pcall(ctrl._bindFishes) end
-                if ctrl.RefreshInventory then pcall(ctrl.RefreshInventory) end
-                if ctrl.UpdateInventory  then pcall(ctrl.UpdateInventory) end
-                if ctrl.LoadInventory    then pcall(ctrl.LoadInventory) end
+                local success, ctrl = pcall(require, invModule)
+                if success and ctrl then
+                    -- Add delays between calls to prevent rate limiting cascade failures
+                    if ctrl.SetPage then
+                        pcall(ctrl.SetPage, "Fish")
+                        task.wait(0.1) -- Small delay to prevent overwhelming requests
+                    end
+                    if ctrl.SetCategory then
+                        pcall(ctrl.SetCategory, "Fish")
+                        task.wait(0.1)
+                    end
+                    if ctrl._bindFishes then
+                        pcall(ctrl._bindFishes)
+                        task.wait(0.1)
+                    end
+                    if ctrl.RefreshInventory then
+                        pcall(ctrl.RefreshInventory)
+                        task.wait(0.1)
+                    end
+                    if ctrl.UpdateInventory then
+                        pcall(ctrl.UpdateInventory)
+                        task.wait(0.1)
+                    end
+                    if ctrl.LoadInventory then
+                        pcall(ctrl.LoadInventory)
+                    end
+                else
+                    warn("[Auto Fish] Failed to require InventoryController - network issues may be present")
+                end
             end
         end
     end)
