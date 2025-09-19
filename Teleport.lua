@@ -1284,7 +1284,7 @@ autoCatchToggle = SecMain:NewToggle("Auto Catch", "Auto catch fish", function(st
     setAutoCatch(state) 
 end)
 
-autoPreset1Toggle = SecMain:NewToggle("Auto 1", "Enable core auto features with 0.5s stagger then teleport to Crater Island", function(state)
+autoPreset1Toggle = SecMain:NewToggle("Auto 1 (Auto Crater)", "Enable core auto features with 0.5s stagger then teleport to Crater Island", function(state)
     if state then
         enablePreset("auto1", "Crater Island")
     else
@@ -1292,7 +1292,7 @@ autoPreset1Toggle = SecMain:NewToggle("Auto 1", "Enable core auto features with 
     end
 end)
 
-autoPreset2Toggle = SecMain:NewToggle("Auto 2", "Enable core auto features with 0.5s stagger then teleport to Sisyphus State", function(state)
+autoPreset2Toggle = SecMain:NewToggle("Auto 2 (Auto Sisyphus)", "Enable core auto features with 0.5s stagger then teleport to Sisyphus State", function(state)
     if state then
         enablePreset("auto2", "Sisyphus State")
     else
