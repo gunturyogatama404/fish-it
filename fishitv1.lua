@@ -1,10 +1,24 @@
 --[[
-    AUTO FISH V5.1.1 STABLE
+    AUTO FISH V5.7 STABLE WITH ENHANCED PERFORMANCE OPTIMIZATION
+
+    🚀 NEW FEATURES:
+    - Automatic graphics optimization for maximum FPS on script start
+    - Integrated Low Graphic.lua optimizations
+    - Real-time FPS monitoring every 5 seconds
+    - Enhanced error suppression for asset loading issues
+
+    📋 OPTIMIZATIONS INCLUDED:
+    ✅ Removes clouds and water effects
+    ✅ Disables shadows and lighting effects
+    ✅ Optimizes all materials to Plastic
+    ✅ Disables particle effects and sounds
+    ✅ Sets graphics quality to Level 1
+    ✅ Optimizes character accessories and textures
 
     IMPORTANT: SETUP WEBHOOK URLs BEFORE RUNNING!
 
-    1. For Megalodon notifications: Edit line ~1234 and set MEGALODON_WEBHOOK_URL
-    2. For fish catch notifications: Edit line ~2200 and set WEBHOOK_URL
+    1. For Megalodon notifications: Edit line ~1375 and set MEGALODON_WEBHOOK_URL
+    2. For fish catch notifications: Edit line ~2340 and set WEBHOOK_URL
 
     Example webhook URL: "https://discord.com/api/webhooks/1234567890/abcdefghijklmnop"
 
@@ -48,6 +62,225 @@ end
 
 -- Enable error suppression
 suppressAssetErrors()
+
+-- ====== AUTOMATIC PERFORMANCE OPTIMIZATION ======
+-- Integrated from Low Graphic.lua for maximum FPS
+local function ultimatePerformance()
+    local workspace = game:GetService("Workspace")
+    local lighting = game:GetService("Lighting")
+    local runService = game:GetService("RunService")
+    local players = game:GetService("Players")
+
+    print("🚀 STARTING GRAPHICS OPTIMIZATION...")
+    print("⚡ Applying Low Graphic settings for maximum FPS...")
+
+    local objectsOptimized = 0
+    local effectsDisabled = 0
+
+    -- TERRAIN & CLOUDS REMOVAL
+    pcall(function()
+        local terrain = workspace:FindFirstChild("Terrain")
+        if terrain then
+            -- Remove clouds completely
+            if terrain:FindFirstChild("Clouds") then
+                terrain.Clouds:Destroy()
+                print("✅ Removed clouds")
+            end
+
+            -- Water optimization
+            terrain.WaterWaveSize = 0
+            terrain.WaterWaveSpeed = 0
+            terrain.WaterReflectance = 0
+            terrain.WaterTransparency = 0
+        end
+    end)
+
+    -- LIGHTING OPTIMIZATION (Maximum Performance)
+    pcall(function()
+        lighting.GlobalShadows = false
+        lighting.FogEnd = 9e9
+        lighting.FogStart = 9e9
+        lighting.Brightness = 0
+        lighting.Technology = Enum.Technology.Compatibility
+        lighting.Ambient = Color3.new(1, 1, 1)
+        lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+        lighting.ShadowSoftness = 0
+        lighting.ExposureCompensation = 0
+
+        -- Remove all lighting effects
+        for _, effect in pairs(lighting:GetChildren()) do
+            if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or
+               effect:IsA("Sky") or effect:IsA("Clouds") then
+                pcall(function()
+                    effect:Destroy()
+                    effectsDisabled = effectsDisabled + 1
+                end)
+            end
+        end
+        print("✅ Lighting optimized - shadows disabled, fog removed")
+    end)
+
+    -- WORKSPACE OPTIMIZATION
+    local function optimizeObject(obj)
+        if obj:IsA("BasePart") then
+            obj.CastShadow = false
+            obj.Material = Enum.Material.Plastic
+            obj.Reflectance = 0
+            objectsOptimized = objectsOptimized + 1
+
+            -- Water parts specific
+            if obj.Material == Enum.Material.Water or obj.Name:lower():find("water") then
+                obj.Color = Color3.new(0, 0.8, 1)
+                obj.Material = Enum.Material.Plastic
+                obj.Transparency = 0.2
+                obj.Anchored = true
+            end
+
+        elseif obj:IsA("ParticleEmitter") or obj:IsA("Fire") or obj:IsA("Smoke") or
+               obj:IsA("Sparkles") or obj:IsA("PointLight") or obj:IsA("SpotLight") or
+               obj:IsA("SurfaceLight") or obj:IsA("Beam") then
+            obj.Enabled = false
+            effectsDisabled = effectsDisabled + 1
+
+        elseif obj:IsA("Decal") or obj:IsA("Texture") then
+            if obj.Name ~= "face" then
+                obj.Transparency = 1
+                objectsOptimized = objectsOptimized + 1
+            end
+
+        elseif obj:IsA("Sound") then
+            obj.Volume = 0
+            obj:Stop()
+            effectsDisabled = effectsDisabled + 1
+
+        elseif obj:IsA("Script") or obj:IsA("LocalScript") then
+            local name = obj.Name:lower()
+            if name:find("water") or name:find("wave") or name:find("cloud") or
+               name:find("particle") or name:find("effect") then
+                obj.Disabled = true
+                effectsDisabled = effectsDisabled + 1
+            end
+        end
+    end
+
+    -- Apply to existing objects
+    print("⚙️ Scanning workspace for optimization...")
+    for _, obj in pairs(workspace:GetDescendants()) do
+        optimizeObject(obj)
+    end
+    print("✅ Workspace scan complete - " .. objectsOptimized .. " objects optimized")
+
+    -- Apply to new objects
+    workspace.DescendantAdded:Connect(optimizeObject)
+
+    -- CHARACTER OPTIMIZATION
+    local function optimizeCharacter(character)
+        if not character then return end
+
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CastShadow = false
+                part.Material = Enum.Material.Plastic
+                part.Reflectance = 0
+
+            elseif part:IsA("Accessory") then
+                local handle = part:FindFirstChild("Handle")
+                if handle then
+                    handle.CastShadow = false
+                    handle.Material = Enum.Material.Plastic
+                    local mesh = handle:FindFirstChildOfClass("SpecialMesh")
+                    if mesh then mesh.TextureId = "" end
+                end
+
+            elseif part:IsA("ParticleEmitter") or part:IsA("Fire") or
+                   part:IsA("Smoke") or part:IsA("Sparkles") then
+                part.Enabled = false
+            end
+        end
+    end
+
+    -- Apply to all players
+    for _, player in pairs(players:GetPlayers()) do
+        if player.Character then optimizeCharacter(player.Character) end
+        player.CharacterAdded:Connect(optimizeCharacter)
+    end
+    players.PlayerAdded:Connect(function(player)
+        player.CharacterAdded:Connect(optimizeCharacter)
+    end)
+
+    -- RENDERING OPTIMIZATION
+    pcall(function()
+        local camera = workspace.CurrentCamera
+        if camera then
+            for _, effect in pairs(camera:GetChildren()) do
+                if effect:IsA("PostEffect") then effect.Enabled = false end
+            end
+        end
+    end)
+
+    -- GAME SETTINGS (Aggressive optimization)
+    pcall(function()
+        local gameSettings = UserSettings().GameSettings
+        gameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
+
+        -- Additional performance settings
+        local renderSettings = settings():GetService("RenderSettings")
+        renderSettings.QualityLevel = Enum.QualityLevel.Level01
+        renderSettings.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level04
+        renderSettings.EditQualityLevel = Enum.QualityLevel.Level01
+
+        print("✅ Graphics quality forced to minimum")
+    end)
+
+    -- ANIMATION CONNECTION CLEANUP
+    pcall(function()
+        for _, connection in pairs(getconnections(runService.Heartbeat)) do
+            pcall(function()
+                local func = connection.Function
+                local env = getfenv(func)
+                if env.script then
+                    local name = env.script.Name:lower()
+                    if name:find("water") or name:find("wave") or name:find("cloud") or
+                       name:find("particle") or name:find("effect") then
+                        connection:Disable()
+                    end
+                end
+            end)
+        end
+    end)
+
+    print("🚀 ULTIMATE PERFORMANCE ACTIVATED!")
+    print("📊 OPTIMIZATION SUMMARY:")
+    print("  ✅ Objects optimized: " .. objectsOptimized)
+    print("  ✅ Effects disabled: " .. effectsDisabled)
+    print("  ✅ Clouds removed")
+    print("  ✅ Water optimized")
+    print("  ✅ Shadows disabled")
+    print("  ✅ Graphics quality set to Level 1")
+    print("  ✅ All particle effects disabled")
+    print("🎣 Auto Fish ready with maximum FPS!")
+
+    -- Force immediate rendering update
+    pcall(function()
+        local camera = workspace.CurrentCamera
+        if camera then
+            camera.FieldOfView = camera.FieldOfView
+        end
+    end)
+end
+
+-- Auto-execute performance optimization on script start
+ultimatePerformance()
+
+-- Optional FPS monitor
+task.spawn(function()
+    while task.wait(5) do
+        local fps = workspace:GetRealPhysicsFPS()
+        if fps then
+            print("📊 Current FPS: " .. math.floor(fps))
+        end
+    end
+end)
 
 local player = game.Players.LocalPlayer
 local replicatedStorage = game:GetService("ReplicatedStorage")
@@ -1230,8 +1463,9 @@ local maxRetryAttempts = 3
 
 -- ====== WEBHOOK CONFIGURATION ======
 -- Set your Discord webhook URL here for megalodon notifications
+-- NOTE: Webhook will ONLY be sent when NO megalodon event is detected
 -- Example: "https://discord.com/api/webhooks/1234567890/abcdefghijklmnop"
-local MEGALODON_WEBHOOK_URL = "https://discord.com/api/webhooks/1378767185643831326/b0mB-z4r5YTQGeQnX7EwyvXoo1yiO7UcZzeOKeS9JKcKn-6AWVnicplzs6duT6Jt80kK"  -- PASTE YOUR DISCORD WEBHOOK URL HERE
+local MEGALODON_WEBHOOK_URL = webhookmega  -- PASTE YOUR DISCORD WEBHOOK URL HERE
 
 local sendMegalodonEventWebhook = function(status, data)
     -- Check if webhook URL is configured
@@ -1248,24 +1482,13 @@ local sendMegalodonEventWebhook = function(status, data)
     end
 
     local title, description, color
-    local duration = (data and data.duration) or 0
 
-    if status == "started" then
-        title = '[Megalodon] Event Started'
-        description = 'Megalodon hunt detected! Teleporting to event location.'
-        color = 65280 -- Green
-    elseif status == "ended" then
-        title = '[Megalodon] Event Finished'
-        description = 'Megalodon hunt despawned. Returned to saved position.'
-        color = 16776960 -- Yellow
-        if duration > 0 then
-            description = description .. string.format('\nDuration: %d seconds', duration)
-        end
-    elseif status == "missing" then
+    if status == "missing" then
         title = '[Megalodon] Event Missing'
         description = 'No Megalodon Hunt props detected in this server.'
         color = 16711680 -- Red
     else
+        -- Only send webhook for missing events
         return
     end
 
@@ -1393,8 +1616,7 @@ local function autoDetectMegalodon()
             megalodonEventActive = true
             megalodonMissingAlertSent = false
             megalodonEventStartedAt = os.time()
-            -- Send webhook notification that event has started
-            sendMegalodonEventWebhook("started")
+            -- Event found - no webhook needed, just track it silently
         end
 
         if not hasTeleportedToMegalodon then
@@ -1415,14 +1637,9 @@ local function autoDetectMegalodon()
             megalodonSavedPosition = nil
             hasTeleportedToMegalodon = false
 
-            -- Send webhook about event ending if it was active
+            -- Event ended - no webhook needed, just reset state silently
             if wasActive and not megalodonMissingAlertSent then
                 megalodonMissingAlertSent = true
-                local duration = 0
-                if megalodonEventStartedAt and megalodonEventStartedAt > 0 then
-                    duration = math.max(0, os.time() - megalodonEventStartedAt)
-                end
-                sendMegalodonEventWebhook("ended", { duration = duration })
                 megalodonEventStartedAt = 0
             end
         elseif not megalodonMissingAlertSent then
@@ -2310,7 +2527,7 @@ end)
 -- Counts by species (Tile.ItemName), shows pretty display (Variant + Base when available)
 
 -- ============ CONFIG ============
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1378767185643831326/b0mB-z4r5YTQGeQnX7EwyvXoo1yiO7UcZzeOKeS9JKcKn-6AWVnicplzs6duT6Jt80kK"  -- Set your Discord webhook URL here for fish notifications
+local WEBHOOK_URL = webhook2  -- Set your Discord webhook URL here for fish notifications
 
 -- Whitelist pakai NAMA SPECIES (tanpa prefix varian)
 local WHITELIST = {"Robot Kraken", "Giant Squid", "Thin Armor Shark", "Frostborn Shark", "Plasma Shark", "Eerie Shark", "Scare", "Ghost Shark", "Blob Shark", "Megalodon", "Lochness Monster"}
