@@ -1143,8 +1143,8 @@ local function autoDetectMegalodon()
 
     -- Search for Megalodon event in Workspace
     for _, child in ipairs(workspace:GetChildren()) do
-        if child.Name == "Props" and child:FindFirstChild("Megalodon Hunt") and child["Megalodon Hunt"]:FindFirstChild("Color") then
-            eventPosition = child["Megalodon Hunt"].Color.Position
+        if child.Name == "props" and child:FindFirstChild("megalodon hunt") and child["megalodon hunt"]:FindFirstChild("Color") then
+            eventPosition = child["megalodon hunt"].Color.Position
             eventFound = true
             break
         end
@@ -1156,6 +1156,8 @@ local function autoDetectMegalodon()
             megalodonEventActive = true
             megalodonMissingAlertSent = false
             megalodonEventStartedAt = os.time()
+            -- Send webhook notification that event has started
+            sendMegalodonEventWebhook("started")
         end
 
         if not hasTeleportedToMegalodon then
@@ -2041,7 +2043,7 @@ task.spawn(function()
                 autoDetectMegalodon()
             end)
         end
-        task.wait(5) -- Check every 5 seconds
+        task.wait(8) -- Check every 8 seconds
     end
 end)
 
@@ -2060,7 +2062,11 @@ local sendMegalodonEventWebhook = function(status, data)
     local title, description, color
     local duration = (data and data.duration) or 0
 
-    if status == "ended" then
+    if status == "started" then
+        title = '[Megalodon] Event Started'
+        description = 'Megalodon hunt detected! Teleporting to event location.'
+        color = 65280 -- Green
+    elseif status == "ended" then
         title = '[Megalodon] Event Finished'
         description = 'Megalodon hunt despawned. Returned to saved position.'
         color = 16776960 -- Yellow
