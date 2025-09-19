@@ -943,35 +943,80 @@ local enchantDatabase = {["Cursed I"] = 12,["Leprechaun I"] = 5,["Leprechaun II"
 
 -- ====== GRAPHICS OPTIMIZATION ======
 local function optimizeGraphics()
-    if renderingOptimized then return end
-    renderingOptimized = true
+    if renderingOptimized then
+        print("🎨 Graphics already optimized, skipping...")
+        return
+    end
 
-    print("🎨 Optimizing graphics for better performance...")
+    print("🎨 Starting graphics optimization...")
 
-    pcall(function()
+    local success = pcall(function()
+        -- Wait for services to be ready
+        local RunService = game:GetService("RunService")
+        local UserSettings = UserSettings()
+
         -- Set quality level to 1 (lowest)
-        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        local renderSettings = settings().Rendering
+        renderSettings.QualityLevel = Enum.QualityLevel.Level01
+        print("  📊 Quality Level set to 1")
 
         -- Disable global shadows
         Lighting.GlobalShadows = false
+        print("  🌑 Global Shadows disabled")
 
-        -- Additional optimizations
+        -- Additional lighting optimizations
         Lighting.FogEnd = 9e9
         Lighting.FogStart = 9e9
         Lighting.Brightness = 0
         Lighting.Technology = Enum.Technology.Compatibility
         Lighting.ShadowSoftness = 0
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+        print("  💡 Lighting optimized")
 
-        -- Remove lighting effects
+        -- Remove/disable lighting effects
+        local effectsRemoved = 0
         for _, effect in pairs(Lighting:GetChildren()) do
             if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or
                effect:IsA("Sky") or effect:IsA("Clouds") then
-                pcall(function() effect.Enabled = false end)
+                pcall(function()
+                    effect.Enabled = false
+                    effectsRemoved = effectsRemoved + 1
+                end)
             end
         end
+        print("  🎭 " .. effectsRemoved .. " lighting effects disabled")
 
-        print("✅ Graphics optimized - Quality Level 1 & Global Shadows disabled")
+        -- Optimize terrain if available
+        pcall(function()
+            local terrain = workspace:FindFirstChild("Terrain")
+            if terrain then
+                terrain.WaterWaveSize = 0
+                terrain.WaterWaveSpeed = 0
+                terrain.WaterReflectance = 0
+                terrain.WaterTransparency = 0
+                print("  🌊 Water effects optimized")
+            end
+        end)
+
+        -- Try to set FPS cap higher for better performance feedback
+        pcall(function()
+            if setfpscap then
+                setfpscap(0) -- Unlimited FPS for better performance
+                print("  ⚡ FPS cap removed")
+            end
+        end)
+
+        renderingOptimized = true
+        print("✅ Graphics optimization completed successfully!")
+
+        return true
     end)
+
+    if not success then
+        warn("❌ Graphics optimization failed")
+        renderingOptimized = false
+    end
 end
 
 -- ====== CORE FUNCTIONS ======
@@ -1623,6 +1668,23 @@ SecGPU:NewButton("Force Remove White Screen", "Emergency remove if stuck", funct
     gpuSaverEnabled = false
 end)
 
+-- Add graphics optimization controls
+SecGPU:NewButton("Optimize Graphics Now", "Manually trigger graphics optimization", function()
+    renderingOptimized = false -- Reset flag to allow re-optimization
+    optimizeGraphics()
+end)
+
+SecGPU:NewButton("Check Graphics Status", "Show current graphics optimization status", function()
+    if renderingOptimized then
+        print("✅ Graphics are optimized")
+        print("📊 Current Quality Level: " .. tostring(settings().Rendering.QualityLevel))
+        print("🌑 Global Shadows: " .. tostring(Lighting.GlobalShadows))
+    else
+        print("❌ Graphics are not optimized")
+        print("💡 Click 'Optimize Graphics Now' to optimize")
+    end
+end)
+
 -- ====== UI CONTROLS ======
 local TabUI = Window:NewTab("UI Controls")
 local SecUI = TabUI:NewSection("Interface Controls")
@@ -1984,7 +2046,17 @@ task.spawn(function()
 end)
 
 -- ====== MEGALODON WEBHOOK ======
+local lastWebhookTime = 0
+local WEBHOOK_COOLDOWN = 5 -- 5 seconds cooldown between webhooks
+
 local sendMegalodonEventWebhook = function(status, data)
+    -- Rate limiting check
+    local currentTime = tick()
+    if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then
+        print('[Megalodon] Webhook cooldown active, skipping...')
+        return
+    end
+
     local title, description, color
     local duration = (data and data.duration) or 0
 
@@ -2015,17 +2087,32 @@ local sendMegalodonEventWebhook = function(status, data)
     }
     local body = HttpService:JSONEncode({ embeds = {embed} })
 
-    pcall(function()
-        if syn and syn.request then
-            syn.request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif http_request then
-            http_request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif fluxus and fluxus.request then
-            fluxus.request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif request then
-            request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+    -- Send webhook with retry logic
+    task.spawn(function()
+        local success, err = pcall(function()
+            if syn and syn.request then
+                syn.request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+            elseif http_request then
+                http_request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+            elseif fluxus and fluxus.request then
+                fluxus.request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+            elseif request then
+                request({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+            end
+        end)
+
+        if success then
+            lastWebhookTime = currentTime
+            print('[Megalodon] Webhook sent successfully (' .. status .. ')')
+        else
+            warn('[Megalodon] Webhook failed: ' .. tostring(err))
+            -- Retry after longer delay if failed
+            if string.find(tostring(err):lower(), "429") or string.find(tostring(err):lower(), "rate") then
+                print('[Megalodon] Rate limited, will retry later...')
+                task.wait(30) -- Wait 30 seconds before allowing next attempt
+                lastWebhookTime = currentTime + 25 -- Extra cooldown for rate limits
+            end
         end
-        print('[Megalodon] Webhook sent (' .. status .. ')')
     end)
 end
 
@@ -2398,15 +2485,30 @@ end
 -- Panggil setup
 setupDisconnectNotifier()
 
--- ============ LOOP ============
-print("🚀 Inventory Whitelist Notifier (mutation-aware) start...")
+-- ============ SCRIPT INITIALIZATION ============
+print("🚀 Auto Fish v5.1.1 - Enhanced Edition Starting...")
 
--- Optimize graphics automatically when script starts
+-- Optimize graphics immediately when script starts
+print("🎨 Initializing graphics optimization...")
 task.spawn(function()
-    task.wait(2) -- Wait 2 seconds before optimizing to allow game to load
+    -- Wait for game to fully load
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Wait for character to spawn
+    if LocalPlayer.Character then
+        task.wait(1)
+    else
+        LocalPlayer.CharacterAdded:Wait()
+        task.wait(2)
+    end
+
+    -- Now optimize graphics
     optimizeGraphics()
 end)
 
+-- ============ LOOP ============
+print("🚀 Inventory Whitelist Notifier (mutation-aware) start...")
 baselineNow()
 
 while true do
