@@ -1461,47 +1461,69 @@ local WEBHOOK_COOLDOWN = 15 -- 15 seconds cooldown between webhooks to prevent r
 local webhookRetryDelay = 5 -- Base retry delay in seconds
 local maxRetryAttempts = 3
 
--- ====== WEBHOOK CONFIGURATION ======
--- Set your Discord webhook URL here for megalodon notifications
--- NOTE: Webhook will ONLY be sent when NO megalodon event is detected
+-- ====== UNIFIED WEBHOOK CONFIGURATION ======
+-- Set your Discord webhook URL here for all notifications (fish, megalodon, disconnect)
 -- Example: "https://discord.com/api/webhooks/1234567890/abcdefghijklmnop"
-local MEGALODON_WEBHOOK_URL = webhookmega  -- PASTE YOUR DISCORD WEBHOOK URL HERE
+local UNIFIED_WEBHOOK_URL = webhook2  -- PASTE YOUR DISCORD WEBHOOK URL HERE
 
-local sendMegalodonEventWebhook = function(status, data)
+-- ====== UNIFIED WEBHOOK FUNCTION ======
+local function sendUnifiedWebhook(webhookType, data)
     -- Check if webhook URL is configured
-    if not MEGALODON_WEBHOOK_URL or MEGALODON_WEBHOOK_URL == "" then
-        warn('[Megalodon] Webhook URL not configured! Please set MEGALODON_WEBHOOK_URL variable.')
+    if not UNIFIED_WEBHOOK_URL or UNIFIED_WEBHOOK_URL == "" then
+        warn('[Webhook] URL not configured! Please set UNIFIED_WEBHOOK_URL variable.')
         return
     end
 
     -- Rate limiting check
     local currentTime = tick()
     if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then
-        print('[Megalodon] Webhook cooldown active, skipping...')
+        print('[Webhook] Cooldown active, skipping...')
         return
     end
 
-    local title, description, color
+    local embed = {}
 
-    if status == "missing" then
-        title = '[Megalodon] Event Missing'
-        description = 'No Megalodon Hunt props detected in this server.'
-        color = 16711680 -- Red
+    -- Configure embed based on webhook type
+    if webhookType == "megalodon_missing" then
+        embed = {
+            title = '[Megalodon] Event Missing',
+            description = 'No Megalodon Hunt props detected in this server.',
+            color = 16711680, -- Red
+            fields = {
+                { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true }
+            },
+            footer = { text = 'Megalodon Watch - Auto Fish' }
+        }
+    elseif webhookType == "fish_found" then
+        embed = {
+            title = "🎣 SECRET Fish Found",
+            description = data.description or "Fish detected in inventory",
+            color = 3066993, -- Blue-green
+            fields = {
+                { name = "🕒 Waktu",  value = os.date("%H:%M:%S"), inline = true },
+                { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+                { name = "📦 Total (whitelist)", value = tostring(data.totalWhitelistCount or 0) .. " fish", inline = true },
+            },
+            footer = { text = "Inventory Notifier • Auto Fish" }
+        }
+    elseif webhookType == "disconnect" then
+        embed = {
+            title = "⚠️ Player Disconnected",
+            description = data.reason or "Player has disconnected from the server",
+            color = 16776960, -- Yellow
+            fields = {
+                { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
+                { name = "🔌 Reason", value = data.reason or "Unknown", inline = false }
+            },
+            footer = { text = "Disconnect Notifier • Auto Fish Script" }
+        }
     else
-        -- Only send webhook for missing events
+        warn('[Webhook] Unknown webhook type: ' .. tostring(webhookType))
         return
     end
 
-    local embed = {
-        title = title,
-        description = description,
-        color = color,
-        fields = {
-            { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
-            { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true }
-        },
-        footer = { text = 'Megalodon Watch - Auto Fish' }
-    }
     local body = HttpService:JSONEncode({ embeds = {embed} })
 
     -- Send webhook with exponential backoff retry logic
@@ -1513,19 +1535,19 @@ local sendMegalodonEventWebhook = function(status, data)
             local currentRetryDelay = webhookRetryDelay * (2 ^ (attempt - 1)) -- Exponential backoff
 
             if attempt > 1 then
-                print('[Megalodon] Retry attempt ' .. attempt .. ' after ' .. currentRetryDelay .. ' seconds...')
+                print('[Webhook] Retry attempt ' .. attempt .. ' after ' .. currentRetryDelay .. ' seconds...')
                 task.wait(currentRetryDelay)
             end
 
             success, err = pcall(function()
                 if syn and syn.request then
-                    syn.request({ Url=MEGALODON_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    syn.request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
                 elseif http_request then
-                    http_request({ Url=MEGALODON_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    http_request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
                 elseif fluxus and fluxus.request then
-                    fluxus.request({ Url=MEGALODON_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    fluxus.request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
                 elseif request then
-                    request({ Url=MEGALODON_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
                 else
                     error("Executor tidak support HTTP requests")
                 end
@@ -1533,19 +1555,19 @@ local sendMegalodonEventWebhook = function(status, data)
 
             if success then
                 lastWebhookTime = tick()
-                print('[Megalodon] Webhook sent successfully (' .. status .. ') on attempt ' .. attempt)
+                print('[Webhook] ' .. webhookType .. ' sent successfully on attempt ' .. attempt)
                 break
             else
-                warn('[Megalodon] Webhook attempt ' .. attempt .. ' failed: ' .. tostring(err))
+                warn('[Webhook] ' .. webhookType .. ' attempt ' .. attempt .. ' failed: ' .. tostring(err))
 
                 -- Handle specific rate limiting errors
                 if string.find(tostring(err):lower(), "429") or string.find(tostring(err):lower(), "rate") then
-                    print('[Megalodon] Rate limited detected, extending cooldown...')
+                    print('[Webhook] Rate limited detected, extending cooldown...')
                     lastWebhookTime = tick() + 60 -- Block webhooks for 60 seconds on rate limit
                     task.wait(60) -- Wait longer for rate limit recovery
                     break -- Don't retry immediately on rate limit
                 elseif string.find(tostring(err):lower(), "network") or string.find(tostring(err):lower(), "timeout") then
-                    print('[Megalodon] Network error detected, will retry...')
+                    print('[Webhook] Network error detected, will retry...')
                 end
 
                 attempt = attempt + 1
@@ -1553,9 +1575,16 @@ local sendMegalodonEventWebhook = function(status, data)
         end
 
         if not success then
-            warn('[Megalodon] All webhook attempts failed for status: ' .. status)
+            warn('[Webhook] All ' .. webhookType .. ' attempts failed')
         end
     end)
+end
+
+-- Legacy function for compatibility
+local sendMegalodonEventWebhook = function(status, data)
+    if status == "missing" then
+        sendUnifiedWebhook("megalodon_missing", data)
+    end
 end
 
 local function autoDetectMegalodon()
@@ -2527,7 +2556,7 @@ end)
 -- Counts by species (Tile.ItemName), shows pretty display (Variant + Base when available)
 
 -- ============ CONFIG ============
-local WEBHOOK_URL = webhook2  -- Set your Discord webhook URL here for fish notifications
+-- Note: Now using unified webhook system - no separate URL needed
 
 -- Whitelist pakai NAMA SPECIES (tanpa prefix varian)
 local WHITELIST = {"Robot Kraken", "Giant Squid", "Thin Armor Shark", "Frostborn Shark", "Plasma Shark", "Eerie Shark", "Scare", "Ghost Shark", "Blob Shark", "Megalodon", "Lochness Monster"}
@@ -2560,33 +2589,10 @@ local function dprint(...) if DEBUG then print("[INV-DEBUG]", ...) end end
 
 -- ============ WEBHOOK ============
 local function sendDiscordEmbed(description, totalWhitelistCount)
-    local embed = {
-        title = "🎣 SECRET Fish Found",
+    sendUnifiedWebhook("fish_found", {
         description = description,
-        color = 3066993,
-        fields = {
-            { name = "🕒 Waktu",  value = os.date("%H:%M:%S"), inline = true },
-            { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
-            { name = "📦 Total (whitelist)", value = tostring(totalWhitelistCount) .. " fish", inline = true },
-        },
-        footer = { text = "Inventory Notifier • loop" }
-    }
-    local body = HttpService:JSONEncode({ embeds = {embed} })
-
-    local ok, err = pcall(function()
-        if syn and syn.request then
-            syn.request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif http_request then
-            http_request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif fluxus and fluxus.request then
-            fluxus.request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif request then
-            request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        else
-            error("Executor tidak support HTTP requests")
-        end
-    end)
-    if not ok then warn("❌ Gagal kirim webhook:", err) else dprint("✅ Webhook terkirim") end
+        totalWhitelistCount = totalWhitelistCount
+    })
 end
 
 -- ============ INVENTORY CONTROL ============
@@ -2827,34 +2833,10 @@ end
 local function sendDisconnectWebhook(username, reason)
     if hasSentDisconnectWebhook then return end
     hasSentDisconnectWebhook = true
-    
-    local embed = {
-        title = "⚠️ Roblox Account Disconnected",
-        description = "Akun Roblox telah disconnect dari game.",
-        color = 16711680,
-        fields = {
-            { name = "👤 Username", value = username or "Unknown", inline = true },
-            { name = "❓ Reason", value = reason or "Unknown", inline = true },
-            { name = "🕒 Waktu", value = os.date("%H:%M:%S"), inline = true },
-        },
-        footer = { text = "Disconnect Notifier • Auto Fish Script" }
-    }
-    local body = HttpService:JSONEncode({ embeds = {embed} })
 
-    local ok, err = pcall(function()
-        if syn and syn.request then
-            syn.request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif http_request then
-            http_request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif fluxus and fluxus.request then
-            fluxus.request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        elseif request then
-            request({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-        else
-            error("Executor tidak support HTTP requests")
-        end
-    end)
-    if not ok then warn("❌ Gagal kirim webhook disconnect:", err) else print("✅ Webhook disconnect terkirim") end
+    sendUnifiedWebhook("disconnect", {
+        reason = reason or "Unknown"
+    })
 end
 
 local function setupDisconnectNotifier()
