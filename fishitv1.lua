@@ -523,17 +523,66 @@ local autoCatchDelay = 0.2
 local weatherIdDelay = 3
 local weatherCycleDelay = 100
 
--- ====== AUTO ENCHANT VARIABLES ======
-local isAutoEnchantOn = false
-local targetEnchantID = 12 -- Default target enchant ID
-local enchantFound = false
-local enchantAttempts = 0
 local HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool
+
+-- ====== FISH NOTIFICATION CONTROL ======
+local isFishNotificationDisabled = false
+local destroyedNotifications = {}
+
+-- Function to disable fish notifications
+local function disableFishNotifications()
+    if isFishNotificationDisabled then return end
+
+    pcall(function()
+        local replicatedStorage = game:GetService("ReplicatedStorage")
+        local packages = replicatedStorage:FindFirstChild("Packages")
+        if packages then
+            local index = packages:FindFirstChild("_Index")
+            if index then
+                local net = index:FindFirstChild("sleitnick_net@0.2.0")
+                if net then
+                    local netFolder = net:FindFirstChild("net")
+                    if netFolder then
+                        local notificationEvents = {
+                            "RE/ObtainedNewFishNotification",
+                            "RE/ShowNotification",
+                            "RE/PlaySound"
+                        }
+
+                        for _, eventName in pairs(notificationEvents) do
+                            local event = netFolder:FindFirstChild(eventName)
+                            if event then
+                                -- Store reference before destroying
+                                destroyedNotifications[eventName] = {
+                                    parent = netFolder,
+                                    className = event.ClassName
+                                }
+                                event:Destroy()
+                                print("🔇 Disabled " .. eventName .. " notification")
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    isFishNotificationDisabled = true
+    print("🔇 Fish notifications: DISABLED")
+end
+
+-- Function to restore fish notifications (if needed)
+local function enableFishNotifications()
+    if not isFishNotificationDisabled then return end
+
+    -- Note: Once destroyed, remote events cannot be restored easily
+    -- This function exists for UI consistency but notifications will remain disabled until script restart
+    isFishNotificationDisabled = false
+    print("🔊 Fish notifications: ENABLED (requires script restart to fully restore)")
+end
 
 -- Improved WaitForChild chain with error handling
 local EquipItemEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/EquipItem")
-local ActivateEnchantEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/ActivateEnchantingAltar")
-local RollEnchantRemote = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/RollEnchant")
 
 local function getNetworkEvents()
     local success, result = pcall(function()
@@ -1020,7 +1069,6 @@ local teleportLocations = {
     { Name = "Sisyphus Statue",  CFrame = CFrame.new(-3728.21606, -135.074417, -1012.12744, -0.977224171, 7.74980258e-09, -0.212209702, 1.566994e-08, 1, -3.5640408e-08, 0.212209702, -3.81539813e-08, -0.977224171) },
     { Name = "Coral Reefs",  CFrame = CFrame.new(-3114.78198, 1.32066584, 2237.52295, -0.304758579, 1.6556676e-08, -0.952429652, -8.50574935e-08, 1, 4.46003305e-08, 0.952429652, 9.46036067e-08, -0.304758579) },
     { Name = "Esoteric Depths",  CFrame = CFrame.new(3248.37109, -1301.53027, 1403.82727, -0.920208454, 7.76270355e-08, 0.391428679, 4.56261056e-08, 1, -9.10549289e-08, -0.391428679, -6.5930152e-08, -0.920208454) },
-    { Name = "Enchant Island",  CFrame = CFrame.new(3232.24927, -1302.85486, 1401.76367, 0.383588433, -6.71329943e-08, -0.923504174, 9.6923408e-08, 1, -3.2435473e-08, 0.923504174, -7.70672983e-08, 0.383588433) },
     { Name = "Crater Island",  CFrame = CFrame.new(1016.49072, 20.0919304, 5069.27295, 0.838976264, 3.30379857e-09, -0.544168055, 2.63538391e-09, 1, 1.01344115e-08, 0.544168055, -9.93662219e-09, 0.838976264) },
     { Name = "Spawn",  CFrame = CFrame.new(45.2788086, 252.562927, 2987.10913, 1, 0, 0, 0, 1, 0, 0, 0, 1) },
     { Name = "Lost Isle",  CFrame = CFrame.new(-3618.15698, 240.836655, -1317.45801, 1, 0, 0, 0, 1, 0, 0, 0, 1) },
@@ -1222,8 +1270,6 @@ local baitIDs = {10, 2, 3, 6, 8, 15, 16}
 local WeatherIDs = {"Cloudy", "Storm","Wind"}
 local rodDatabase = {luck = 79,carbon = 76,grass = 85,demascus = 76,ice = 78,lucky = 4,midnight = 80,steampunk = 6,chrome = 7,astral = 5}
 local BaitDatabase = {topwaterbait = 10,luckbait = 2,midnightbait = 3,chromabait = 6,darkmatterbait = 8,corruptbait = 15,aetherbait = 16}
--- Database ID Enchant
-local enchantDatabase = {["Cursed I"] = 12,["Leprechaun I"] = 5,["Leprechaun II"] = 6}
 
 -- ====== GRAPHICS OPTIMIZATION ======
 local function optimizeGraphics()
@@ -1695,130 +1741,6 @@ local function setAutoMegalodon(state)
     print("🦈 Auto Megalodon Hunt: " .. (state and "ENABLED" or "DISABLED"))
 end
 
--- ====== AUTO ENCHANT FUNCTIONS ======
--- Function untuk mendapatkan UUID enchant stone
-local function getEnchantStoneUUID()
-    local player = Players.LocalPlayer
-    local backpack = player:WaitForChild("Backpack")
-    
-    for _, item in pairs(backpack:GetChildren()) do
-        if item.Name == "EnchantStones" or string.find(item.Name:lower(), "enchant") then
-            if item:GetAttribute("UUID") then
-                return item:GetAttribute("UUID")
-            end
-        end
-    end
-    
-    return nil
-end
-
--- Function untuk equip enchant stone
-local function equipEnchantStone()
-    local uuid = getEnchantStoneUUID()
-    if uuid then
-        print("Equipping enchant stone with UUID:", uuid)
-        pcall(function()
-            EquipItemEvent:FireServer(uuid, "EnchantStones")
-        end)
-        task.wait(1)
-    else
-        print("Enchant stone tidak ditemukan di backpack!")
-    end
-end
-
--- Function untuk equip tool dari hotbar
-local function equipToolFromHotbar()
-    print("Equipping tool from hotbar slot:", HOTBAR_SLOT)
-    pcall(function()
-        if equipEvent then
-            equipEvent:FireServer(HOTBAR_SLOT)
-        end
-    end)
-    task.wait(1)
-end
-
--- Function untuk aktivasi enchanting altar
-local function activateEnchantingAltar()
-    print("Activating enchanting altar...")
-    pcall(function()
-        ActivateEnchantEvent:FireServer()
-    end)
-    task.wait(2)
-end
-
--- Function untuk handle incoming enchant result
-local function onEnchantRoll(...)
-    local args = {...}
-    local enchantId = args[2]
-    
-    enchantAttempts = enchantAttempts + 1
-    print(string.format("Enchant attempt #%d - Received enchant ID: %d", enchantAttempts, enchantId))
-    
-    if enchantId == targetEnchantID then
-        print(string.format("SUCCESS! Found target enchant ID %d after %d attempts!", targetEnchantID, enchantAttempts))
-        enchantFound = true
-        isAutoEnchantOn = false -- Stop auto enchant
-    else
-        print(string.format("Not the target enchant (wanted: %d, got: %d). Continuing...", targetEnchantID, enchantId))
-    end
-end
-
--- Connection untuk enchant result
-local enchantConnection = nil
-
--- Function utama untuk auto enchant
-local function startAutoEnchant()
-    if not isAutoEnchantOn then return end
-    
-    print(string.format("Starting auto enchant for ID: %d", targetEnchantID))
-    enchantFound = false
-    enchantAttempts = 0
-    
-    -- Connect ke enchant result event
-    if RollEnchantRemote and not enchantConnection then
-        enchantConnection = RollEnchantRemote.OnClientEvent:Connect(onEnchantRoll)
-    end
-    
-    -- Main enchant loop
-    task.spawn(function()
-        while isAutoEnchantOn and not enchantFound do
-            print(string.format("\n--- Starting enchant attempt #%d ---", enchantAttempts + 1))
-            
-            equipEnchantStone()
-            equipToolFromHotbar()
-            activateEnchantingAltar()
-            
-            if not enchantFound and isAutoEnchantOn then
-                print("Waiting before next attempt...")
-                task.wait(3)
-            end
-        end
-        
-        if enchantConnection then
-            enchantConnection:Disconnect()
-            enchantConnection = nil
-        end
-        
-        if enchantFound then
-            print("Auto enchant completed successfully!")
-        else
-            print("Auto enchant stopped!")
-        end
-    end)
-end
-
--- Function untuk stop auto enchant
-local function stopAutoEnchant()
-    isAutoEnchantOn = false
-    enchantFound = true
-    
-    if enchantConnection then
-        enchantConnection:Disconnect()
-        enchantConnection = nil
-    end
-    
-    print("Auto enchant stopped!")
-end
 
 -- ====== ENHANCED TOGGLE FUNCTIONS ======
 local function setAutoFarm(state)
@@ -2063,74 +1985,11 @@ end
 
 task.defer(applyLoadedConfig)
 
--- ====== ENCHANT TAB UI ======
-local TabEnchant = Window:NewTab("Enchant")
-local SecEnchant = TabEnchant:NewSection("Auto Enchant")
-
--- Main auto enchant toggle
-SecEnchant:NewToggle("Auto Enchant", "Otomatis enchant hingga mendapat target enchant", function(state)
-    isAutoEnchantOn = state
-    if state then
-        startAutoEnchant()
-    else
-        stopAutoEnchant()
-    end
-end)
-
--- Quick select enchants - ini yang akan set target ID otomatis
-local enchantNames = {}
-for name, _ in pairs(enchantDatabase) do
-    table.insert(enchantNames, name)
-end
-table.sort(enchantNames)
-
-SecEnchant:NewDropdown("Target Enchant", "Pilih enchant yang ingin didapat", enchantNames, function(chosen)
-    local enchantId = enchantDatabase[chosen]
-    if enchantId then
-        targetEnchantID = enchantId
-        enchantFound = false
-        enchantAttempts = 0
-        print("Target enchant: " .. chosen .. " (ID: " .. enchantId .. ")")
-    end
-end)
-
--- Hotbar slot setting untuk tool
-SecEnchant:NewSlider("Tool Hotbar Slot", "Slot hotbar dimana fishing rod berada", 9, 1, function(s)
-    HOTBAR_SLOT = s
-    print("Tool hotbar slot changed to:", s)
-end)
-
--- Manual enchant controls
-SecEnchant:NewButton("Manual Enchant Once", "Lakukan enchant sekali saja", function()
-    task.spawn(function()
-        print("Manual enchant started...")
-        equipEnchantStone()
-        equipToolFromHotbar() 
-        activateEnchantingAltar()
-    end)
-end)
-
--- Test enchant stone detection
-SecEnchant:NewButton("Test Enchant Stone", "Cek apakah enchant stone terdeteksi", function()
-    local uuid = getEnchantStoneUUID()
-    if uuid then
-        print("Enchant stone found with UUID:", uuid)
-    else
-        print("Enchant stone tidak ditemukan di backpack!")
-        print("Pastikan ada enchant stone di backpack Anda")
-    end
-end)
-
--- Reset enchant attempts counter
-SecEnchant:NewButton("Reset Attempt Counter", "Reset counter percobaan enchant", function()
-    enchantAttempts = 0
-    enchantFound = false
-    print("Enchant attempts counter reset!")
-end)
 
 -- ====== PERFORMANCE TAB ======
 local TabPerformance = Window:NewTab("Performance")
 local SecGPU = TabPerformance:NewSection("GPU Saver Mode")
+local SecNotif = TabPerformance:NewSection("Notification Control")
 
 SecGPU:NewToggle("GPU Saver Mode", "Enable white screen to save GPU/battery", function(state)
     if state then
@@ -2167,6 +2026,25 @@ SecGPU:NewButton("Check Graphics Status", "Show current graphics optimization st
     else
         print("❌ Graphics are not optimized")
         print("💡 Click 'Optimize Graphics Now' to optimize")
+    end
+end)
+
+-- Fish notification controls
+SecNotif:NewToggle("Disable Fish Notifications", "Remove new fish notification popups", function(state)
+    if state then
+        disableFishNotifications()
+    else
+        enableFishNotifications()
+    end
+end)
+
+SecNotif:NewButton("Check Notification Status", "Show current notification status", function()
+    if isFishNotificationDisabled then
+        print("🔇 Fish notifications are DISABLED")
+        print("📋 Destroyed events: " .. table.concat({"RE/ObtainedNewFishNotification", "RE/ShowNotification", "RE/PlaySound"}, ", "))
+    else
+        print("🔊 Fish notifications are ENABLED")
+        print("💡 Toggle 'Disable Fish Notifications' to remove popups")
     end
 end)
 
