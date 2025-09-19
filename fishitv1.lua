@@ -1,35 +1,3 @@
---[[
-    AUTO FISH V5.7 STABLE WITH ENHANCED PERFORMANCE OPTIMIZATION
-
-    🚀 NEW FEATURES:
-    - Automatic graphics optimization for maximum FPS on script start
-    - Integrated Low Graphic.lua optimizations
-    - Real-time FPS monitoring every 5 seconds
-    - Enhanced error suppression for asset loading issues
-
-    📋 OPTIMIZATIONS INCLUDED:
-    ✅ Removes clouds and water effects
-    ✅ Disables shadows and lighting effects
-    ✅ Optimizes all materials to Plastic
-    ✅ Disables particle effects and sounds
-    ✅ Sets graphics quality to Level 1
-    ✅ Optimizes character accessories and textures
-
-    IMPORTANT: SETUP WEBHOOK URLs BEFORE RUNNING!
-
-    1. For Megalodon notifications: Edit line ~1375 and set MEGALODON_WEBHOOK_URL
-    2. For fish catch notifications: Edit line ~2340 and set WEBHOOK_URL
-
-    Example webhook URL: "https://discord.com/api/webhooks/1234567890/abcdefghijklmnop"
-
-    To get Discord webhook URL:
-    1. Go to your Discord server
-    2. Right click on channel → Settings → Integrations → Webhooks
-    3. Create New Webhook
-    4. Copy webhook URL
-    5. Paste it in the webhook variables below
---]]
-
 -- ====== ERROR HANDLING SETUP ======
 -- Suppress asset loading errors (like sound approval issues)
 local function suppressAssetErrors()
@@ -315,7 +283,6 @@ local isUpgradeOn = false
 local isUpgradeBaitOn = false
 local isAutoWeatherOn = false
 local gpuSaverEnabled = false
-local renderingOptimized = false
 local isAutoMegalodonOn = false
 local megalodonSavedPosition = nil
 local hasTeleportedToMegalodon = false
@@ -525,156 +492,6 @@ local weatherCycleDelay = 100
 
 local HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool
 
--- ====== FISH NOTIFICATION REMOVAL SYSTEM ======
-local isFishNotificationDisabled = false
-local notificationConnections = {}
-local removedEvents = {}
-
--- Advanced notification blocking system
-local function blockFishNotifications()
-    print("🔇 Initializing fish notification blocker...")
-
-    -- Method 1: Destroy notification remote events
-    task.spawn(function()
-        local success = false
-        local attempts = 0
-        local maxAttempts = 30 -- 30 seconds timeout
-
-        while not success and attempts < maxAttempts do
-            attempts = attempts + 1
-
-            success = pcall(function()
-                local replicatedStorage = game:GetService("ReplicatedStorage")
-                local packages = replicatedStorage:WaitForChild("Packages", 1)
-                local index = packages:WaitForChild("_Index", 1)
-                local netPackage = index:WaitForChild("sleitnick_net@0.2.0", 1)
-                local netFolder = netPackage:WaitForChild("net", 1)
-
-                local targetEvents = {
-                    "RE/ObtainedNewFishNotification",
-                    "RE/ShowNotification",
-                    "RE/PlaySound"
-                }
-
-                for _, eventName in pairs(targetEvents) do
-                    local event = netFolder:FindFirstChild(eventName)
-                    if event then
-                        removedEvents[eventName] = true
-                        event:Destroy()
-                        print("🗑️ Destroyed: " .. eventName)
-                    end
-                end
-
-                return true
-            end)
-
-            if not success then
-                task.wait(1)
-            end
-        end
-
-        if success then
-            isFishNotificationDisabled = true
-            print("✅ Fish notification events destroyed successfully!")
-        else
-            warn("❌ Failed to destroy notification events after " .. attempts .. " attempts")
-        end
-    end)
-
-    -- Method 2: Hook and block notification functions (backup method)
-    task.spawn(function()
-        task.wait(2) -- Wait a bit for game to initialize
-
-        -- Block StarterGui notifications
-        pcall(function()
-            local starterGui = game:GetService("StarterGui")
-
-            -- Hook SetCore to block notifications
-            local oldSetCore = starterGui.SetCore
-            starterGui.SetCore = function(self, key, ...)
-                local args = {...}
-                if key == "SendNotification" then
-                    local notification = args[1]
-                    if notification and notification.Title then
-                        local title = tostring(notification.Title):lower()
-                        if title:find("fish") or title:find("caught") or title:find("new") then
-                            print("🚫 Blocked notification: " .. notification.Title)
-                            return -- Block the notification
-                        end
-                    end
-                end
-                return oldSetCore(self, key, ...)
-            end
-
-            print("🛡️ StarterGui notification blocker installed")
-        end)
-
-        -- Block ScreenGui notifications in PlayerGui
-        pcall(function()
-            local player = game:GetService("Players").LocalPlayer
-            local playerGui = player:WaitForChild("PlayerGui", 10)
-
-            -- Monitor for notification GUIs and remove them
-            local function removeNotificationGuis(parent)
-                for _, child in pairs(parent:GetChildren()) do
-                    if child:IsA("ScreenGui") then
-                        local name = child.Name:lower()
-                        if name:find("notification") or name:find("popup") or name:find("alert") then
-                            -- Check if it's a fish notification
-                            local hasTextLabels = false
-                            for _, desc in pairs(child:GetDescendants()) do
-                                if desc:IsA("TextLabel") then
-                                    local text = desc.Text:lower()
-                                    if text:find("fish") or text:find("caught") or text:find("new") then
-                                        child:Destroy()
-                                        print("🗑️ Removed fish notification GUI: " .. child.Name)
-                                        return
-                                    end
-                                    hasTextLabels = true
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-
-            -- Initial scan
-            removeNotificationGuis(playerGui)
-
-            -- Monitor new GUIs
-            local connection = playerGui.ChildAdded:Connect(function(child)
-                if child:IsA("ScreenGui") then
-                    task.wait(0.1) -- Wait for GUI to populate
-                    removeNotificationGuis(playerGui)
-                end
-            end)
-
-            notificationConnections["playerGuiMonitor"] = connection
-            print("🔍 PlayerGui notification monitor installed")
-        end)
-    end)
-end
-
--- Function to disable fish notifications (UI control)
-local function disableFishNotifications()
-    if not isFishNotificationDisabled then
-        blockFishNotifications()
-    end
-end
-
--- Function to check if notifications are disabled
-local function enableFishNotifications()
-    -- Can't really re-enable destroyed events, but we can clean up connections
-    for name, connection in pairs(notificationConnections) do
-        if connection and connection.Connected then
-            connection:Disconnect()
-        end
-        notificationConnections[name] = nil
-    end
-
-    isFishNotificationDisabled = false
-    print("🔊 Fish notification hooks removed (events remain destroyed)")
-end
 
 -- Improved WaitForChild chain with error handling
 local EquipItemEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/EquipItem")
@@ -1366,83 +1183,6 @@ local WeatherIDs = {"Cloudy", "Storm","Wind"}
 local rodDatabase = {luck = 79,carbon = 76,grass = 85,demascus = 76,ice = 78,lucky = 4,midnight = 80,steampunk = 6,chrome = 7,astral = 5}
 local BaitDatabase = {topwaterbait = 10,luckbait = 2,midnightbait = 3,chromabait = 6,darkmatterbait = 8,corruptbait = 15,aetherbait = 16}
 
--- ====== GRAPHICS OPTIMIZATION ======
-local function optimizeGraphics()
-    if renderingOptimized then
-        print("🎨 Graphics already optimized, skipping...")
-        return
-    end
-
-    print("🎨 Starting graphics optimization...")
-
-    local success = pcall(function()
-        -- Wait for services to be ready
-        local RunService = game:GetService("RunService")
-        local UserSettings = UserSettings()
-
-        -- Set quality level to 1 (lowest)
-        local renderSettings = settings().Rendering
-        renderSettings.QualityLevel = Enum.QualityLevel.Level01
-        print("  📊 Quality Level set to 1")
-
-        -- Disable global shadows
-        Lighting.GlobalShadows = false
-        print("  🌑 Global Shadows disabled")
-
-        -- Additional lighting optimizations
-        Lighting.FogEnd = 9e9
-        Lighting.FogStart = 9e9
-        Lighting.Brightness = 0
-        Lighting.Technology = Enum.Technology.Compatibility
-        Lighting.ShadowSoftness = 0
-        Lighting.EnvironmentDiffuseScale = 0
-        Lighting.EnvironmentSpecularScale = 0
-        print("  💡 Lighting optimized")
-
-        -- Remove/disable lighting effects
-        local effectsRemoved = 0
-        for _, effect in pairs(Lighting:GetChildren()) do
-            if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or
-               effect:IsA("Sky") or effect:IsA("Clouds") then
-                pcall(function()
-                    effect.Enabled = false
-                    effectsRemoved = effectsRemoved + 1
-                end)
-            end
-        end
-        print("  🎭 " .. effectsRemoved .. " lighting effects disabled")
-
-        -- Optimize terrain if available
-        pcall(function()
-            local terrain = workspace:FindFirstChild("Terrain")
-            if terrain then
-                terrain.WaterWaveSize = 0
-                terrain.WaterWaveSpeed = 0
-                terrain.WaterReflectance = 0
-                terrain.WaterTransparency = 0
-                print("  🌊 Water effects optimized")
-            end
-        end)
-
-        -- Try to set FPS cap higher for better performance feedback
-        pcall(function()
-            if setfpscap then
-                setfpscap(0) -- Unlimited FPS for better performance
-                print("  ⚡ FPS cap removed")
-            end
-        end)
-
-        renderingOptimized = true
-        print("✅ Graphics optimization completed successfully!")
-
-        return true
-    end)
-
-    if not success then
-        warn("❌ Graphics optimization failed")
-        renderingOptimized = false
-    end
-end
 
 -- ====== CORE FUNCTIONS ======
 local function chargeFishingRod()
@@ -2084,7 +1824,6 @@ task.defer(applyLoadedConfig)
 -- ====== PERFORMANCE TAB ======
 local TabPerformance = Window:NewTab("Performance")
 local SecGPU = TabPerformance:NewSection("GPU Saver Mode")
-local SecNotif = TabPerformance:NewSection("Notification Control")
 
 SecGPU:NewToggle("GPU Saver Mode", "Enable white screen to save GPU/battery", function(state)
     if state then
@@ -2107,56 +1846,7 @@ SecGPU:NewButton("Force Remove White Screen", "Emergency remove if stuck", funct
     gpuSaverEnabled = false
 end)
 
--- Add graphics optimization controls
-SecGPU:NewButton("Optimize Graphics Now", "Manually trigger graphics optimization", function()
-    renderingOptimized = false -- Reset flag to allow re-optimization
-    optimizeGraphics()
-end)
 
-SecGPU:NewButton("Check Graphics Status", "Show current graphics optimization status", function()
-    if renderingOptimized then
-        print("✅ Graphics are optimized")
-        print("📊 Current Quality Level: " .. tostring(settings().Rendering.QualityLevel))
-        print("🌑 Global Shadows: " .. tostring(Lighting.GlobalShadows))
-    else
-        print("❌ Graphics are not optimized")
-        print("💡 Click 'Optimize Graphics Now' to optimize")
-    end
-end)
-
--- Fish notification controls
-SecNotif:NewToggle("Disable Fish Notifications", "Remove new fish notification popups (auto-enabled at start)", function(state)
-    if state then
-        if not isFishNotificationDisabled then
-            disableFishNotifications()
-        end
-    else
-        enableFishNotifications()
-    end
-end)
-
-SecNotif:NewButton("Check Notification Status", "Show current notification status", function()
-    print("=== FISH NOTIFICATION STATUS ===")
-    if isFishNotificationDisabled then
-        print("🔇 Fish notifications are DISABLED")
-        print("📋 Removed events:")
-        for eventName, removed in pairs(removedEvents) do
-            if removed then
-                print("  ✅ " .. eventName)
-            end
-        end
-        print("🔗 Active connections: " .. tostring(#notificationConnections))
-    else
-        print("🔊 Fish notifications are ENABLED")
-        print("💡 Toggle 'Disable Fish Notifications' to remove popups")
-    end
-    print("================================")
-end)
-
-SecNotif:NewButton("Force Re-Block Notifications", "Manually trigger notification blocking", function()
-    print("🔄 Force re-blocking notifications...")
-    blockFishNotifications()
-end)
 
 -- ====== UI CONTROLS ======
 local TabUI = Window:NewTab("UI Controls")
@@ -2887,28 +2577,7 @@ setupDisconnectNotifier()
 -- ============ SCRIPT INITIALIZATION ============
 print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
 
--- Initialize fish notification blocker immediately (FIRST PRIORITY)
-print("🔇 Starting fish notification blocker...")
-blockFishNotifications()
 
--- Optimize graphics immediately when script starts
-print("🎨 Initializing graphics optimization...")
-task.spawn(function()
-    -- Wait for game to fully load
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
-
-    -- Wait for character to spawn
-    if LocalPlayer.Character then
-        task.wait(1)
-    else
-        LocalPlayer.CharacterAdded:Wait()
-        task.wait(2)
-    end
-
-    -- Now optimize graphics
-    optimizeGraphics()
-end)
 
 -- ============ LOOP ============
 print("🚀 Inventory Whitelist Notifier (mutation-aware) start...")
