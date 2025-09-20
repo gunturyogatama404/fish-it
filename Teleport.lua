@@ -2937,7 +2937,7 @@ do
 
     -- Performance settings
     local MAIN_LOOP_INTERVAL = 15
-    local PROXY_UPDATE_INTERVAL = 10
+    local PROXY_UPDATE_INTERVAL = 20
     local INIT_DELAY = 3
 
     -- Manage user-controlled GUI visibility
@@ -3260,7 +3260,7 @@ do
 
     -- Configuration
     local SERVER_URL = "https://fc740edc3efe.ngrok-free.app"
-    local UPDATE_INTERVAL = 30
+    local UPDATE_INTERVAL = 60
 
     local function safeRequest(url, method, data)
         local success, result = pcall(function()
