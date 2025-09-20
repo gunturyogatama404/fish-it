@@ -2994,7 +2994,7 @@ do
     local function isInventoryUnderUserControl()
         if not inventoryGUI then return false end
         local main = inventoryGUI:FindFirstChild("Main")
-        if not main then return false
+        if not main then return false end
 
         if main.Visible and inventoryGUI.Enabled then
             if userControlledState.visible == true and userControlledState.enabled == true then
