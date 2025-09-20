@@ -599,6 +599,29 @@ local function getCurrentLevel()
     return success and result or "Lvl 0"
 end
 
+-- ====== HELPER FUNCTIONS FOR WEB MONITOR ======
+local function getFishCaught()
+    local success, fishCaught = pcall(function()
+        if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then
+            return LocalPlayer.leaderstats.Caught.Value
+        end
+        return 0
+    end)
+
+    return success and fishCaught or 0
+end
+
+local function getBestFish()
+    local success, bestFish = pcall(function()
+        if LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] then
+            return LocalPlayer.leaderstats["Rarest Fish"].Value
+        end
+        return "None"
+    end)
+
+    return success and bestFish or "None"
+end
+
 -- fungsi quest
 
 local function getQuestText(labelName)
@@ -2094,6 +2117,71 @@ end)
 
 
 
+-- ====== ADVANCED MODULES TAB ======
+local TabModules = Window:NewTab("Advanced Modules")
+local SecInventoryMgr = TabModules:NewSection("Background Inventory Manager")
+local SecWebMonitor = TabModules:NewSection("Web Monitor")
+
+-- Background Inventory Controls
+SecInventoryMgr:NewButton("Start Background Inventory", "Keep inventory tiles loaded in background", function()
+    backgroundInventoryModule.startBackgroundInventory()
+end)
+
+SecInventoryMgr:NewButton("Stop Background Inventory", "Stop background inventory system", function()
+    backgroundInventoryModule.stopBackgroundInventory()
+end)
+
+SecInventoryMgr:NewButton("Check Tiles Status", "Check if inventory tiles are accessible", function()
+    if _G.checkTilesAccessible then
+        local accessible, status = _G.checkTilesAccessible()
+        print("🔍 Tiles Status:", accessible and "✅ ACCESSIBLE" or "❌ NOT ACCESSIBLE")
+        print("📊 Details:", status)
+    else
+        print("❌ Background inventory not loaded")
+    end
+end)
+
+-- Web Monitor Controls
+SecWebMonitor:NewButton("Start Web Monitor", "Begin sending data to web dashboard", function()
+    if _G.WebMonitor then
+        local instance = _G.WebMonitor.startMonitoring()
+        _G.WebMonitorInstance = instance
+        print("✅ Web Monitor started!")
+    else
+        print("❌ Web Monitor not loaded")
+    end
+end)
+
+SecWebMonitor:NewButton("Stop Web Monitor", "Stop web monitoring", function()
+    if _G.WebMonitorInstance and _G.WebMonitorInstance.stop then
+        _G.WebMonitorInstance.stop()
+        print("🛑 Web Monitor stopped!")
+    else
+        print("❌ Web Monitor not running")
+    end
+end)
+
+SecWebMonitor:NewButton("Send Update Now", "Force send data to web dashboard", function()
+    if _G.WebMonitorInstance and _G.WebMonitorInstance.sendUpdate then
+        local success = _G.WebMonitorInstance.sendUpdate()
+        print(success and "✅ Data sent successfully!" or "❌ Failed to send data")
+    else
+        print("❌ Web Monitor not running")
+    end
+end)
+
+SecWebMonitor:NewButton("Check Web Monitor Status", "Show web monitor status", function()
+    if _G.WebMonitorInstance and _G.WebMonitorInstance.getStatus then
+        local status = _G.WebMonitorInstance.getStatus()
+        print("🌐 Web Monitor Status:")
+        print("  Running:", status.running and "✅ YES" or "❌ NO")
+        print("  Server URL:", status.serverUrl)
+        print("  Last Update:", os.date("%H:%M:%S", status.lastUpdate))
+    else
+        print("❌ Web Monitor not running")
+    end
+end)
+
 -- ====== UI CONTROLS ======
 local TabUI = Window:NewTab("UI Controls")
 local SecUI = TabUI:NewSection("Interface Controls")
@@ -2825,11 +2913,559 @@ print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
 
 
 
--- ============ LOOP ============
+-- ========== INTEGRATED MODULES ==========
+
+-- ====== ENHANCED BACKGROUND INVENTORY KEEPER ======
+-- Integrated from inventory.lua for better inventory access
+local backgroundInventoryModule = {}
+
+do
+    local LocalPlayer = Players.LocalPlayer
+    local isBackgroundInventoryActive = false
+    local inventoryController = nil
+    local backgroundConnection = nil
+    local originalInventoryState = {}
+    local inventoryGUI = nil
+    local userControlledState = { enabled = nil, visible = nil }
+    local suppressStateSync = false
+    local visibilityConnection = nil
+    local enabledConnection = nil
+    local originalControllerMethods = {}
+    local isReloadingTiles = false
+    local lastUserAction = 0
+    local userActionCooldown = 1
+
+    -- Performance settings
+    local MAIN_LOOP_INTERVAL = 15
+    local PROXY_UPDATE_INTERVAL = 10
+    local INIT_DELAY = 3
+
+    -- Manage user-controlled GUI visibility
+    local function disconnectStateTracking()
+        if visibilityConnection then
+            visibilityConnection:Disconnect()
+            visibilityConnection = nil
+        end
+        if enabledConnection then
+            enabledConnection:Disconnect()
+            enabledConnection = nil
+        end
+    end
+
+    local function startUserStateTracking()
+        if not inventoryGUI then return end
+        local main = inventoryGUI:FindFirstChild("Main")
+        if not main then return end
+
+        disconnectStateTracking()
+        userControlledState.enabled = inventoryGUI.Enabled
+        userControlledState.visible = main.Visible
+
+        visibilityConnection = main:GetPropertyChangedSignal("Visible"):Connect(function()
+            if suppressStateSync then return end
+            lastUserAction = tick()
+            userControlledState.visible = main.Visible
+        end)
+
+        enabledConnection = inventoryGUI:GetPropertyChangedSignal("Enabled"):Connect(function()
+            if suppressStateSync then return end
+            lastUserAction = tick()
+            userControlledState.enabled = inventoryGUI.Enabled
+        end)
+    end
+
+    local function applyUserState()
+        if not inventoryGUI then return end
+        local main = inventoryGUI:FindFirstChild("Main")
+        if not main then return end
+
+        if tick() - lastUserAction < userActionCooldown then return end
+
+        suppressStateSync = true
+        if userControlledState.enabled ~= nil then
+            inventoryGUI.Enabled = userControlledState.enabled
+        end
+        if userControlledState.visible ~= nil then
+            main.Visible = userControlledState.visible
+        end
+        suppressStateSync = false
+    end
+
+    local function isInventoryUnderUserControl()
+        if not inventoryGUI then return false end
+        local main = inventoryGUI:FindFirstChild("Main")
+        if not main then return false
+        end
+
+        if main.Visible and inventoryGUI.Enabled then
+            if userControlledState.visible == true and userControlledState.enabled == true then
+                return true
+            end
+            if tick() - lastUserAction < MAIN_LOOP_INTERVAL + 5 then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function withTemporaryInventoryOpen(callback)
+        if not inventoryGUI then return false, "No inventory GUI" end
+        local main = inventoryGUI:FindFirstChild("Main")
+        if not main then return false, "Inventory main frame missing" end
+
+        if isInventoryUnderUserControl() then
+            return false, "User has control of inventory"
+        end
+
+        if tick() - lastUserAction < userActionCooldown then
+            return false, "User action in progress"
+        end
+
+        suppressStateSync = true
+        local previousEnabled = inventoryGUI.Enabled
+        local previousVisible = main.Visible
+        local previousPosition
+
+        if main:IsA("GuiObject") then
+            previousPosition = main.Position
+            main.Position = UDim2.new(-5, 0, -5, 0)
+        end
+
+        inventoryGUI.Enabled = true
+        main.Visible = true
+
+        local ok, result = pcall(callback)
+
+        task.wait(0.1)
+        main.Visible = previousVisible
+        inventoryGUI.Enabled = previousEnabled
+
+        if previousPosition then
+            main.Position = previousPosition
+        end
+
+        suppressStateSync = false
+        task.wait(0.1)
+        if tick() - lastUserAction >= userActionCooldown then
+            applyUserState()
+        end
+
+        return ok, result
+    end
+
+    local function saveOriginalState()
+        local playerGui = LocalPlayer.PlayerGui
+        inventoryGUI = playerGui:FindFirstChild("Inventory")
+
+        if inventoryGUI then
+            originalInventoryState.enabled = inventoryGUI.Enabled
+            local main = inventoryGUI:FindFirstChild("Main")
+            if main then
+                originalInventoryState.visible = main.Visible
+            end
+            startUserStateTracking()
+            print("💾 Background Inventory: Original state saved")
+        end
+    end
+
+    local function getInventoryController()
+        if inventoryController then return inventoryController end
+
+        local success, result = pcall(function()
+            local controllers = ReplicatedStorage:WaitForChild("Controllers", 5)
+            local invModule = controllers:WaitForChild("InventoryController", 5)
+            return require(invModule)
+        end)
+
+        if success then
+            inventoryController = result
+            print("✅ Background Inventory: Controller loaded")
+            return inventoryController
+        else
+            warn("❌ Background Inventory: Failed to load controller:", result)
+            return nil
+        end
+    end
+
+    local function loadTilesInBackground()
+        if isReloadingTiles then return true end
+        local ctrl = getInventoryController()
+        if not ctrl then return false end
+
+        isReloadingTiles = true
+
+        local success, result = withTemporaryInventoryOpen(function()
+            if ctrl.SetPage then ctrl.SetPage(ctrl, "Items") end
+            if ctrl.SetCategory then ctrl.SetCategory(ctrl, "Fishes") end
+            if ctrl._bindFishes then ctrl._bindFishes(ctrl) end
+            if ctrl.DrawTiles then ctrl.DrawTiles() end
+            if ctrl.InventoryStateChanged then
+                ctrl.InventoryStateChanged:Fire("Fish")
+            end
+        end)
+
+        isReloadingTiles = false
+
+        if not success then
+            warn("Background Inventory: Failed to load tiles:", result)
+            return false
+        end
+
+        return true
+    end
+
+    local function hookInventoryController()
+        local ctrl = getInventoryController()
+        if not ctrl then return false end
+
+        local success, result = pcall(function()
+            if originalControllerMethods.controller ~= ctrl then
+                originalControllerMethods = {
+                    controller = ctrl,
+                    DestroyTiles = ctrl.DestroyTiles,
+                }
+            elseif not originalControllerMethods.DestroyTiles then
+                originalControllerMethods.DestroyTiles = ctrl.DestroyTiles
+            end
+
+            if originalControllerMethods.DestroyTiles and not originalControllerMethods.hooked then
+                ctrl.DestroyTiles = function(...)
+                    if isBackgroundInventoryActive then
+                        return
+                    end
+                    return originalControllerMethods.DestroyTiles(...)
+                end
+                originalControllerMethods.hooked = true
+            end
+        end)
+
+        if not success then
+            warn("Background Inventory: Failed to hook controller:", result)
+        else
+            print("✅ Background Inventory: Controller hooked")
+        end
+
+        return success
+    end
+
+    local function checkTilesAccessible()
+        if not inventoryGUI then return false, "No inventory GUI" end
+
+        local success, result = pcall(function()
+            local container = inventoryGUI.Main.Content.Pages.Inventory
+            local children = container:GetChildren()
+            local tileCount = 0
+
+            for _, child in pairs(children) do
+                if child.Name == "Tile" and child:IsA("GuiObject") then
+                    tileCount = tileCount + 1
+                end
+            end
+
+            return tileCount
+        end)
+
+        if success then
+            return result > 0, "Found " .. result .. " tiles"
+        else
+            return false, "Error accessing tiles: " .. tostring(result)
+        end
+    end
+
+    function backgroundInventoryModule.startBackgroundInventory()
+        if isBackgroundInventoryActive then
+            print("⚠️ Background inventory already active")
+            return
+        end
+
+        print("🚀 Starting background inventory system...")
+
+        task.wait(INIT_DELAY)
+        saveOriginalState()
+
+        isBackgroundInventoryActive = true
+
+        loadTilesInBackground()
+        task.wait(1)
+
+        hookInventoryController()
+
+        backgroundConnection = task.spawn(function()
+            while isBackgroundInventoryActive do
+                local tilesAccessible, status = checkTilesAccessible()
+                local userInControl = isInventoryUnderUserControl()
+
+                if userInControl then
+                    -- print("👤 User controlling inventory, standing by...")
+                elseif not tilesAccessible and tick() - lastUserAction > userActionCooldown * 2 then
+                    print("🔄 Background Inventory: Refreshing tiles... (" .. status .. ")")
+                    loadTilesInBackground()
+                else
+                    -- print("✅ Background Inventory: Tiles maintained (" .. status .. ")")
+                end
+
+                task.wait(MAIN_LOOP_INTERVAL)
+            end
+        end)
+
+        print("✅ Background inventory system started")
+    end
+
+    function backgroundInventoryModule.stopBackgroundInventory()
+        if not isBackgroundInventoryActive then return end
+
+        isBackgroundInventoryActive = false
+
+        if backgroundConnection then
+            task.cancel(backgroundConnection)
+            backgroundConnection = nil
+        end
+
+        applyUserState()
+        disconnectStateTracking()
+
+        pcall(function()
+            if inventoryGUI then
+                local pages = inventoryGUI.Main.Content.Pages
+                local proxy = pages:FindFirstChild("InventoryProxy")
+                if proxy then
+                    proxy:Destroy()
+                end
+            end
+        end)
+
+        if originalControllerMethods.controller then
+            local ctrl = originalControllerMethods.controller
+            if originalControllerMethods.hooked and originalControllerMethods.DestroyTiles then
+                ctrl.DestroyTiles = originalControllerMethods.DestroyTiles
+            end
+            originalControllerMethods = {}
+        end
+
+        print("✅ Background inventory system stopped")
+    end
+
+    -- Export functions
+    _G.startBackgroundInventory = backgroundInventoryModule.startBackgroundInventory
+    _G.stopBackgroundInventory = backgroundInventoryModule.stopBackgroundInventory
+end
+
+-- ====== WEB MONITOR CLIENT ======
+-- Integrated from roblox-client.lua for web dashboard integration
+local webMonitorModule = {}
+
+do
+    local HttpService = game:GetService("HttpService")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Configuration
+    local SERVER_URL = "http://localhost:3000"
+    local UPDATE_INTERVAL = 30
+
+    local function safeRequest(url, method, data)
+        local success, result = pcall(function()
+            local requestData = {
+                Url = url,
+                Method = method or "GET",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                }
+            }
+
+            if data then
+                requestData.Body = HttpService:JSONEncode(data)
+            end
+
+            -- Try different HTTP request methods based on executor
+            if syn and syn.request then
+                return syn.request(requestData)
+            elseif http_request then
+                return http_request(requestData)
+            elseif fluxus and fluxus.request then
+                return fluxus.request(requestData)
+            elseif request then
+                return request(requestData)
+            else
+                error("No HTTP request method available")
+            end
+        end)
+
+        if success then
+            return result
+        else
+            warn("[Web Monitor] HTTP Request failed: " .. tostring(result))
+            return nil
+        end
+    end
+
+    -- Get inventory items from the game
+    local function getInventoryItems()
+        local success, inventory = pcall(function()
+            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+            if not playerGui then return {} end
+
+            local inventoryGui = playerGui:FindFirstChild("Inventory")
+            if not inventoryGui then return {} end
+
+            local main = inventoryGui:FindFirstChild("Main")
+            if not main then return {} end
+
+            local content = main:FindFirstChild("Content")
+            if not content then return {} end
+
+            local pages = content:FindFirstChild("Pages")
+            if not pages then return {} end
+
+            local inventoryPage = pages:FindFirstChild("Inventory")
+            if not inventoryPage then return {} end
+
+            local items = {}
+            for _, child in pairs(inventoryPage:GetChildren()) do
+                if child.Name == "Tile" then
+                    local itemName = child:FindFirstChild("ItemName")
+                    if itemName and itemName.Text and itemName.Text ~= "" then
+                        table.insert(items, itemName.Text)
+                    end
+                end
+            end
+
+            return items
+        end)
+
+        return success and inventory or {}
+    end
+
+    -- Use existing functions from main script
+    local function collectPlayerData()
+        return {
+            inventory = getInventoryItems(),
+            fishCaught = getFishCaught(),
+            coins = getCurrentCoins(),
+            level = getCurrentLevel(),
+            bestFish = getBestFish(),
+            timestamp = os.time()
+        }
+    end
+
+    local function sendDataToServer(data)
+        local username = LocalPlayer.Name
+        local url = SERVER_URL .. "/api/players/" .. username .. "/update"
+
+        local response = safeRequest(url, "POST", data)
+
+        if response and response.StatusCode == 200 then
+            print("[Web Monitor] Data sent successfully")
+            return true
+        else
+            warn("[Web Monitor] Failed to send data to server")
+            return false
+        end
+    end
+
+    local function sendPing()
+        local username = LocalPlayer.Name
+        local url = SERVER_URL .. "/api/players/" .. username .. "/ping"
+
+        local response = safeRequest(url, "POST", {})
+
+        if response and response.StatusCode == 200 then
+            return true
+        else
+            return false
+        end
+    end
+
+    function webMonitorModule.startMonitoring()
+        local lastUpdate = 0
+        local isRunning = true
+
+        print("[Web Monitor] Starting inventory monitoring...")
+        print("[Web Monitor] Server URL: " .. SERVER_URL)
+        print("[Web Monitor] Update interval: " .. UPDATE_INTERVAL .. " seconds")
+
+        -- Initial data send
+        task.spawn(function()
+            local data = collectPlayerData()
+            sendDataToServer(data)
+        end)
+
+        -- Main monitoring loop
+        task.spawn(function()
+            while isRunning do
+                local currentTime = tick()
+
+                -- Send data every UPDATE_INTERVAL seconds
+                if currentTime - lastUpdate >= UPDATE_INTERVAL then
+                    local data = collectPlayerData()
+                    local success = sendDataToServer(data)
+
+                    if success then
+                        lastUpdate = currentTime
+                    end
+                end
+
+                -- Send ping every 15 seconds
+                if math.fmod(math.floor(currentTime), 15) == 0 then
+                    sendPing()
+                end
+
+                task.wait(1)
+            end
+        end)
+
+        return {
+            stop = function()
+                isRunning = false
+                print("[Web Monitor] Monitoring stopped")
+            end,
+
+            sendUpdate = function()
+                local data = collectPlayerData()
+                return sendDataToServer(data)
+            end,
+
+            getStatus = function()
+                return {
+                    running = isRunning,
+                    lastUpdate = lastUpdate,
+                    serverUrl = SERVER_URL
+                }
+            end
+        }
+    end
+
+    -- Export to global scope
+    _G.WebMonitor = webMonitorModule
+end
+
+-- ====== INITIALIZATION OF INTEGRATED MODULES ======
+print("🔧 Initializing integrated modules...")
+
+-- Start background inventory system
+task.spawn(function()
+    task.wait(5) -- Wait for main script to stabilize
+    backgroundInventoryModule.startBackgroundInventory()
+end)
+
+-- Start web monitoring
+local webMonitorInstance
+task.spawn(function()
+    task.wait(8) -- Wait a bit longer for background inventory to be ready
+    webMonitorInstance = webMonitorModule.startMonitoring()
+    _G.WebMonitorInstance = webMonitorInstance
+end)
+
+print("✅ Integrated modules initialized!")
+print("📱 Web Monitor: http://localhost:3000")
+print("🎮 Background Inventory: Keeping tiles loaded")
+
+-- ============ ORIGINAL LOOP ============
 print("🚀 Inventory Whitelist Notifier (mutation-aware) start...")
 baselineNow()
 
-while true do
-    scanAndNotifySingle()
-    task.wait(COOLDOWN)
-end
+task.spawn(function()
+    while true do
+        scanAndNotifySingle()
+        task.wait(COOLDOWN)
+    end
+end)
