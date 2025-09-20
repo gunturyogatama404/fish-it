@@ -2559,7 +2559,7 @@ task.spawn(function()
                 end
             end
         end
-        task.wait(8) -- Check every 8 seconds
+        task.wait(12) -- Check every 12 seconds
     end
 end)
 
@@ -2574,7 +2574,7 @@ end)
 local WHITELIST = {"Robot Kraken", "Giant Squid", "Thin Armor Shark", "Frostborn Shark", "Plasma Shark", "Eerie Shark", "Scare", "Ghost Shark", "Blob Shark", "Megalodon", "Lochness Monster"}
 
 local SCAN_WAIT    = 3     -- detik tunggu setelah buka agar tile render
-local COOLDOWN     = 10    -- detik jeda antar loop
+local COOLDOWN     = 15    -- detik jeda antar loop
 local OPEN_TIMEOUT = 6     -- detik max tunggu container/tile
 local SEND_ONLY_ON_CHANGES = true -- true: kirim hanya jika ada kenaikan
 local DEBUG = false
@@ -2936,8 +2936,8 @@ do
     local userActionCooldown = 1
 
     -- Performance settings
-    local MAIN_LOOP_INTERVAL = 15
-    local PROXY_UPDATE_INTERVAL = 20
+    local MAIN_LOOP_INTERVAL = 20
+    local PROXY_UPDATE_INTERVAL = 10
     local INIT_DELAY = 3
 
     -- Manage user-controlled GUI visibility
@@ -2995,7 +2995,6 @@ do
         if not inventoryGUI then return false end
         local main = inventoryGUI:FindFirstChild("Main")
         if not main then return false
-        end
 
         if main.Visible and inventoryGUI.Enabled then
             if userControlledState.visible == true and userControlledState.enabled == true then
@@ -3259,8 +3258,8 @@ do
     local LocalPlayer = Players.LocalPlayer
 
     -- Configuration
-    local SERVER_URL = "https://www.faktacerdas.site/"
-    local UPDATE_INTERVAL = 60
+    local SERVER_URL = "https://faktacerdas.site"
+    local UPDATE_INTERVAL = 55
 
     local function safeRequest(url, method, data)
         local success, result = pcall(function()
@@ -3340,6 +3339,7 @@ do
         return {
             inventory = getInventoryItems(),
             fishCaught = getFishCaught(),
+            sessionFishCaught = sessionStats.totalFish,
             coins = getCurrentCoins(),
             level = getCurrentLevel(),
             bestFish = getBestFish(),
@@ -3404,8 +3404,8 @@ do
                     end
                 end
 
-                -- Send ping every 15 seconds
-                if math.fmod(math.floor(currentTime), 15) == 0 then
+                -- Send ping every 25 seconds
+                if math.fmod(math.floor(currentTime), 25) == 0 then
                     sendPing()
                 end
 
@@ -3456,7 +3456,7 @@ task.spawn(function()
 end)
 
 print("✅ Integrated modules initialized!")
-print("📱 Web Monitor: http://localhost:3000")
+print("📱 Web Monitor: https://faktacerdas.site")
 print("🎮 Background Inventory: Keeping tiles loaded")
 
 -- ============ ORIGINAL LOOP ============
