@@ -290,6 +290,7 @@ local currentBodyPosition = nil
 
 local isAutoPreset1On = false
 local isAutoPreset2On = false
+local isAutoPreset3On = false
 
 -- Megalodon event variables
 local megalodonEventActive = false
@@ -551,6 +552,7 @@ local autoWeatherToggle
 local autoMegalodonToggle
 local autoPreset1Toggle
 local autoPreset2Toggle
+local autoPreset3Toggle
 local gpuSaverToggle
 
 -- ====== FUNGSI UNTUK MENDAPATKAN COIN DAN LEVEL ======
@@ -1276,28 +1278,50 @@ local function enablePreset(presetKey, locationName)
                 autoCatchToggle:UpdateToggle(nil, true)
             end
         end)
-        table.insert(steps, function()
-            if autoWeatherToggle then
-                autoWeatherToggle:UpdateToggle(nil, true)
-            end
-        end)
-        table.insert(steps, function()
-            if autoMegalodonToggle then
-                autoMegalodonToggle:UpdateToggle(nil, true)
-            end
-        end)
+
+        -- Only enable weather and megalodon for auto1 and auto2, not auto3
+        if presetKey ~= "auto3" then
+            table.insert(steps, function()
+                if autoWeatherToggle then
+                    autoWeatherToggle:UpdateToggle(nil, true)
+                end
+            end)
+            table.insert(steps, function()
+                if autoMegalodonToggle then
+                    autoMegalodonToggle:UpdateToggle(nil, true)
+                end
+            end)
+        end
+
         table.insert(steps, function()
             enableGPUSaver()
         end)
+
+        -- Set custom delay for Kohana preset
+        if presetKey == "auto3" then
+            table.insert(steps, function()
+                setAutoFishDelayForKohana()
+            end)
+        end
 
         runPresetSequence(steps)
 
         if presetKey == "auto1" then
             isAutoPreset1On = true
             isAutoPreset2On = false
+            isAutoPreset3On = false
+        elseif presetKey == "auto2" then
+            isAutoPreset1On = false
+            isAutoPreset2On = true
+            isAutoPreset3On = false
+        elseif presetKey == "auto3" then
+            isAutoPreset1On = false
+            isAutoPreset2On = false
+            isAutoPreset3On = true
         else
             isAutoPreset1On = false
             isAutoPreset2On = true
+            isAutoPreset3On = false
         end
 
         config.activePreset = presetKey
@@ -1313,6 +1337,8 @@ local function disablePreset(presetKey)
                 isAutoPreset1On = false
             elseif presetKey == "auto2" then
                 isAutoPreset2On = false
+            elseif presetKey == "auto3" then
+                isAutoPreset3On = false
             end
             return
         end
@@ -1348,10 +1374,22 @@ local function disablePreset(presetKey)
             end,
         }
 
+        -- Reset delay for Kohana preset
+        if presetKey == "auto3" then
+            table.insert(steps, function()
+                autoFishMainDelay = 0.9  -- Reset to default
+                print("🎣 Auto Fish Delay reset to default (0.9s)")
+            end)
+        end
+
         runPresetSequence(steps)
 
         if presetKey == "auto1" then
             isAutoPreset1On = false
+        elseif presetKey == "auto2" then
+            isAutoPreset2On = false
+        elseif presetKey == "auto3" then
+            isAutoPreset3On = false
         else
             isAutoPreset2On = false
         end
@@ -1806,6 +1844,11 @@ local function setAutoWeather(state)
     print("🌤️ Auto Weather: " .. (state and "ENABLED" or "DISABLED"))
 end
 
+local function setAutoFishDelayForKohana()
+    autoFishMainDelay = 5  -- Set to 5 seconds for Kohana preset
+    print("🎣 Auto Fish Delay set to 5 seconds for Kohana")
+end
+
 -- ====== UI Kavo ======
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
 local Window  = Library.CreateLib("Auto Fish v4.5 - Simplified", "DarkTheme")
@@ -1842,6 +1885,14 @@ autoPreset2Toggle = SecMain:NewToggle("Auto 2 (Auto Sisyphus)", "Enable core aut
         enablePreset("auto2", "Sisyphus State")
     else
         disablePreset("auto2")
+    end
+end)
+
+autoPreset3Toggle = SecMain:NewToggle("Auto 3 (Auto Kohana)", "Enable core auto features with 5s delay then teleport to Kohana Volcano", function(state)
+    if state then
+        enablePreset("auto3", "Kohana Volcano")
+    else
+        disablePreset("auto3")
     end
 end)
 
@@ -2007,6 +2058,8 @@ local function applyLoadedConfig()
         autoPreset1Toggle:UpdateToggle(nil, true)
     elseif config.activePreset == "auto2" and autoPreset2Toggle then
         autoPreset2Toggle:UpdateToggle(nil, true)
+    elseif config.activePreset == "auto3" and autoPreset3Toggle then
+        autoPreset3Toggle:UpdateToggle(nil, true)
     end
 end
 
