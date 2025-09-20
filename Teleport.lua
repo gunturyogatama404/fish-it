@@ -3259,7 +3259,7 @@ do
     local LocalPlayer = Players.LocalPlayer
 
     -- Configuration
-    local SERVER_URL = "https://fc740edc3efe.ngrok-free.app"
+    local SERVER_URL = "localhost:3000"
     local UPDATE_INTERVAL = 60
 
     local function safeRequest(url, method, data)
