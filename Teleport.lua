@@ -298,14 +298,51 @@ local megalodonEventStartedAt = 0
 
 local HttpService = game:GetService("HttpService")
 
-local CONFIG_FILE = "auto_fish_v51_disconnect_config.json"
+-- Config folder constant
+local CONFIG_FOLDER = "ConfigFishIt"
+
+-- Function to ensure config folder exists
+local function ensureConfigFolder()
+    if not isfolder then
+        warn("[Config] Folder functions not available")
+        return false
+    end
+
+    if not isfolder(CONFIG_FOLDER) then
+        local success = pcall(function()
+            makefolder(CONFIG_FOLDER)
+        end)
+
+        if success then
+            print("[Config] Created config folder: " .. CONFIG_FOLDER)
+            return true
+        else
+            warn("[Config] Failed to create config folder")
+            return false
+        end
+    end
+
+    return true
+end
+
+-- Dynamic config file based on player username
+local function getConfigFileName()
+    local playerName = LocalPlayer.Name or "Unknown"
+    local userId = LocalPlayer.UserId or 0
+    -- Sanitize filename by removing invalid characters
+    playerName = playerName:gsub("[<>:\"/\\|?*]", "_")
+    -- Use both username and userId for unique identification
+    local fileName = "auto_fish_v58_config_" .. playerName .. "_" .. userId .. ".json"
+    return CONFIG_FOLDER .. "/" .. fileName
+end
 local defaultConfig = {
     autoFarm = false,
     autoSell = false,
     autoCatch = false,
     autoWeather = false,
     autoMegalodon = false,
-    activePreset = "none"
+    activePreset = "none",
+    gpuSaver = false
 }
 local config = {}
 for key, value in pairs(defaultConfig) do
@@ -314,28 +351,80 @@ end
 
 local isApplyingConfig = false
 
+local function validateConfigStructure(loadedConfig)
+    -- Ensure all required fields exist with proper defaults
+    local validatedConfig = {}
+
+    for key, defaultValue in pairs(defaultConfig) do
+        if loadedConfig[key] ~= nil then
+            -- Validate data type matches default
+            if type(loadedConfig[key]) == type(defaultValue) then
+                validatedConfig[key] = loadedConfig[key]
+            else
+                print("Warning: Config field '" .. key .. "' has wrong type, using default")
+                validatedConfig[key] = defaultValue
+            end
+        else
+            validatedConfig[key] = defaultValue
+        end
+    end
+
+    return validatedConfig
+end
+
 local function saveConfig()
-    if not writefile then return end
+    if not writefile then
+        print("[Config] Write function not available")
+        return
+    end
+
+    -- Ensure config folder exists
+    if not ensureConfigFolder() then
+        warn("[Config] Cannot create config folder, save aborted")
+        return
+    end
 
     local success, encoded = pcall(function()
         return HttpService:JSONEncode(config)
     end)
 
     if success then
-        pcall(writefile, CONFIG_FILE, encoded)
+        local configFile = getConfigFileName()
+        local writeSuccess = pcall(function()
+            writefile(configFile, encoded)
+        end)
+
+        if writeSuccess then
+            print("[Config] Successfully saved config for player: " .. LocalPlayer.Name)
+            print("[Config] Saved to: " .. configFile)
+        else
+            warn("[Config] Failed to write config file")
+        end
+    else
+        warn("[Config] Failed to encode config to JSON")
     end
 end
 
 local function loadConfig()
     if not readfile or not isfile then
+        print("[Config] File system not available, using defaults")
+        config = {}
+        for key, value in pairs(defaultConfig) do
+            config[key] = value
+        end
         return
     end
 
-    local success, content = pcall(function()
-        if isfile(CONFIG_FILE) then
-            return readfile(CONFIG_FILE)
-        end
+    -- Ensure config folder exists
+    ensureConfigFolder()
 
+    local configFile = getConfigFileName()
+    print("[Config] Loading from: " .. configFile)
+
+    local success, content = pcall(function()
+        if isfile(configFile) then
+            return readfile(configFile)
+        end
         return nil
     end)
 
@@ -345,23 +434,93 @@ local function loadConfig()
         end)
 
         if ok and type(decoded) == "table" then
+            print("[Config] Successfully loaded config for player: " .. LocalPlayer.Name)
+            config = validateConfigStructure(decoded)
+        else
+            print("[Config] Failed to decode JSON, using defaults")
+            config = {}
             for key, value in pairs(defaultConfig) do
-                if decoded[key] ~= nil then
-                    config[key] = decoded[key]
-                else
-                    config[key] = value
+                config[key] = value
+            end
+        end
+    else
+        print("[Config] No existing config found for player: " .. LocalPlayer.Name .. ", creating new one")
+        config = {}
+        for key, value in pairs(defaultConfig) do
+            config[key] = value
+        end
+    end
+
+    -- Always save after loading to ensure file exists and is up to date
+    saveConfig()
+end
+
+local function migrateOldConfig()
+    -- Check for old config file format and migrate if found
+    if not readfile or not isfile then return end
+
+    -- Check for old format files (both with and without UserID)
+    local playerName = (LocalPlayer.Name or "Unknown"):gsub("[<>:\"/\\|?*]", "_")
+    local userId = LocalPlayer.UserId or 0
+
+    local oldConfigFiles = {
+        "auto_fish_v58_config_" .. playerName .. ".json", -- Very old format
+        "auto_fish_v58_config_" .. playerName .. "_" .. userId .. ".json" -- Previous format (without folder)
+    }
+
+    for _, oldConfigFile in ipairs(oldConfigFiles) do
+        if isfile(oldConfigFile) then
+            print("[Config] Found old config format, migrating: " .. oldConfigFile)
+
+            local success, content = pcall(function()
+                return readfile(oldConfigFile)
+            end)
+
+            if success and content and content ~= "" then
+                local ok, decoded = pcall(function()
+                    return HttpService:JSONDecode(content)
+                end)
+
+                if ok and type(decoded) == "table" then
+                    -- Migrate to new format (with folder)
+                    config = validateConfigStructure(decoded)
+                    saveConfig()
+
+                    -- Optionally delete old file
+                    pcall(function()
+                        if delfile then
+                            delfile(oldConfigFile)
+                            print("[Config] Old config file deleted after migration: " .. oldConfigFile)
+                        end
+                    end)
+
+                    print("[Config] Migration completed successfully")
+                    return true
                 end
             end
         end
     end
 
-    saveConfig()
+    return false
 end
 
 local function updateConfigField(key, value)
+    if defaultConfig[key] == nil then
+        warn("[Config] Attempted to set unknown config field: " .. tostring(key))
+        return
+    end
+
+    if type(value) ~= type(defaultConfig[key]) then
+        warn("[Config] Type mismatch for field '" .. tostring(key) .. "'. Expected " .. type(defaultConfig[key]) .. ", got " .. type(value))
+        return
+    end
+
     config[key] = value
     if not isApplyingConfig then
-        saveConfig()
+        local success = pcall(saveConfig)
+        if not success then
+            warn("[Config] Failed to save config after updating field: " .. tostring(key))
+        end
     end
 end
 
@@ -371,9 +530,19 @@ local function syncConfigFromStates()
     config.autoCatch = isAutoCatchOn
     config.autoWeather = isAutoWeatherOn
     config.autoMegalodon = isAutoMegalodonOn
+    config.gpuSaver = gpuSaverEnabled
 end
 
-loadConfig()
+-- Try to migrate old config first, then load current config
+if not migrateOldConfig() then
+    loadConfig()
+end
+
+-- Player identification info
+print("[Config] Player identification:")
+print("  Username: " .. (LocalPlayer.Name or "Unknown"))
+print("  UserID: " .. (LocalPlayer.UserId or 0))
+print("  Config file: " .. getConfigFileName())
 
 local autoFarmToggle
 local autoSellToggle
@@ -382,6 +551,7 @@ local autoWeatherToggle
 local autoMegalodonToggle
 local autoPreset1Toggle
 local autoPreset2Toggle
+local gpuSaverToggle
 
 -- ====== FUNGSI UNTUK MENDAPATKAN COIN DAN LEVEL ======
 local function getCurrentCoins()
@@ -922,6 +1092,11 @@ function enableGPUSaver()
     
     createWhiteScreen()
     print("⚡ GPU Saver Mode: ENABLED")
+
+    -- Update toggle if available
+    if gpuSaverToggle and not isApplyingConfig then
+        gpuSaverToggle:UpdateToggle(nil, true)
+    end
 end
 
 function disableGPUSaver()
@@ -951,6 +1126,11 @@ function disableGPUSaver()
     
     removeWhiteScreen()
     print("⚡ GPU Saver Mode: DISABLED")
+
+    -- Update toggle if available
+    if gpuSaverToggle and not isApplyingConfig then
+        gpuSaverToggle:UpdateToggle(nil, false)
+    end
 end
 
 -- ====== FISH CAUGHT EVENT HANDLER ======
@@ -1106,6 +1286,9 @@ local function enablePreset(presetKey, locationName)
                 autoMegalodonToggle:UpdateToggle(nil, true)
             end
         end)
+        table.insert(steps, function()
+            enableGPUSaver()
+        end)
 
         runPresetSequence(steps)
 
@@ -1159,6 +1342,9 @@ local function disablePreset(presetKey)
                 if autoFarmToggle then
                     autoFarmToggle:UpdateToggle(nil, false)
                 end
+            end,
+            function()
+                disableGPUSaver()
             end,
         }
 
@@ -1805,6 +1991,12 @@ local function applyLoadedConfig()
         if config.autoMegalodon and autoMegalodonToggle then
             autoMegalodonToggle:UpdateToggle(nil, true)
         end
+        if config.gpuSaver then
+            enableGPUSaver()
+        end
+        if config.gpuSaver and gpuSaverToggle then
+            gpuSaverToggle:UpdateToggle(nil, true)
+        end
 
         isApplyingConfig = false
         syncConfigFromStates()
@@ -1825,12 +2017,13 @@ task.defer(applyLoadedConfig)
 local TabPerformance = Window:NewTab("Performance")
 local SecGPU = TabPerformance:NewSection("GPU Saver Mode")
 
-SecGPU:NewToggle("GPU Saver Mode", "Enable white screen to save GPU/battery", function(state)
+gpuSaverToggle = SecGPU:NewToggle("GPU Saver Mode", "Enable white screen to save GPU/battery", function(state)
     if state then
         enableGPUSaver()
     else
         disableGPUSaver()
     end
+    updateConfigField("gpuSaver", state)
 end)
 
 SecGPU:NewKeybind("GPU Saver Hotkey", "Quick toggle GPU saver", Enum.KeyCode.RightControl, function()
