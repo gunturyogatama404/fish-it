@@ -1110,7 +1110,7 @@ function enableGPUSaver()
             end
         end
         
-        setfpscap(6)
+        setfpscap(7)
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
