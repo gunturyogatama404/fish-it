@@ -343,7 +343,13 @@ local defaultConfig = {
     autoWeather = false,
     autoMegalodon = false,
     activePreset = "none",
-    gpuSaver = false
+    gpuSaver = false,
+    chargeFishingDelay = 0.01,
+    autoFishMainDelay = 0.9,
+    autoSellDelay = 5,
+    autoCatchDelay = 0.2,
+    weatherIdDelay = 3,
+    weatherCycleDelay = 100
 }
 local config = {}
 for key, value in pairs(defaultConfig) do
@@ -532,12 +538,134 @@ local function syncConfigFromStates()
     config.autoWeather = isAutoWeatherOn
     config.autoMegalodon = isAutoMegalodonOn
     config.gpuSaver = gpuSaverEnabled
+    config.chargeFishingDelay = chargeFishingDelay
+    config.autoFishMainDelay = autoFishMainDelay
+    config.autoSellDelay = autoSellDelay
+    config.autoCatchDelay = autoCatchDelay
+    config.weatherIdDelay = weatherIdDelay
+    config.weatherCycleDelay = weatherCycleDelay
+end
+
+local function applyDelayConfig()
+    if not config then
+        return
+    end
+
+    local previousState = isApplyingConfig
+    local updated = false
+    isApplyingConfig = true
+
+    local function applyField(field, minValue, defaultValue)
+        local value = tonumber(config[field])
+        if value == nil then
+            value = defaultValue
+            updated = true
+        end
+        local clamped = math.max(minValue, value)
+        if clamped ~= value then
+            updated = true
+        end
+        config[field] = clamped
+        return clamped
+    end
+
+    chargeFishingDelay = applyField("chargeFishingDelay", 0.01, defaultConfig.chargeFishingDelay)
+    autoFishMainDelay = applyField("autoFishMainDelay", 0.1, defaultConfig.autoFishMainDelay)
+    autoSellDelay = applyField("autoSellDelay", 1, defaultConfig.autoSellDelay)
+    autoCatchDelay = applyField("autoCatchDelay", 0.1, defaultConfig.autoCatchDelay)
+    weatherIdDelay = applyField("weatherIdDelay", 1, defaultConfig.weatherIdDelay)
+    weatherCycleDelay = applyField("weatherCycleDelay", 10, defaultConfig.weatherCycleDelay)
+
+    if updated then
+        pcall(saveConfig)
+    end
+
+    isApplyingConfig = previousState
+    print("[Config] Delay settings applied from config")
+end
+
+local function roundDelay(value)
+    return math.floor(value * 100 + 0.5) / 100
+end
+
+local function setChargeFishingDelay(value)
+    local numeric = tonumber(value) or chargeFishingDelay
+    local clamped = math.max(0.01, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - chargeFishingDelay) < 0.001 then
+        return
+    end
+    chargeFishingDelay = clamped
+    updateConfigField("chargeFishingDelay", clamped)
+    print(string.format("[Delays] Charge Fishing Delay: %.2fs", clamped))
+end
+
+local function setAutoFishMainDelay(value)
+    local numeric = tonumber(value) or autoFishMainDelay
+    local clamped = math.max(0.1, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - autoFishMainDelay) < 0.001 then
+        return
+    end
+    autoFishMainDelay = clamped
+    updateConfigField("autoFishMainDelay", clamped)
+    print(string.format("[Delays] Auto Fish Main Delay: %.2fs", clamped))
+end
+
+local function setAutoSellDelay(value)
+    local numeric = tonumber(value) or autoSellDelay
+    local clamped = math.max(1, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - autoSellDelay) < 0.001 then
+        return
+    end
+    autoSellDelay = clamped
+    updateConfigField("autoSellDelay", clamped)
+    print(string.format("[Delays] Auto Sell Delay: %.2fs", clamped))
+end
+
+local function setAutoCatchDelay(value)
+    local numeric = tonumber(value) or autoCatchDelay
+    local clamped = math.max(0.1, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - autoCatchDelay) < 0.001 then
+        return
+    end
+    autoCatchDelay = clamped
+    updateConfigField("autoCatchDelay", clamped)
+    print(string.format("[Delays] Auto Catch Delay: %.2fs", clamped))
+end
+
+local function setWeatherIdDelay(value)
+    local numeric = tonumber(value) or weatherIdDelay
+    local clamped = math.max(1, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - weatherIdDelay) < 0.001 then
+        return
+    end
+    weatherIdDelay = clamped
+    updateConfigField("weatherIdDelay", clamped)
+    print(string.format("[Delays] Weather ID Delay: %.2fs", clamped))
+end
+
+local function setWeatherCycleDelay(value)
+    local numeric = tonumber(value) or weatherCycleDelay
+    local clamped = math.max(10, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - weatherCycleDelay) < 0.001 then
+        return
+    end
+    weatherCycleDelay = clamped
+    updateConfigField("weatherCycleDelay", clamped)
+    print(string.format("[Delays] Weather Cycle Delay: %.2fs", clamped))
 end
 
 -- Try to migrate old config first, then load current config
 if not migrateOldConfig() then
     loadConfig()
 end
+
+applyDelayConfig()
 
 -- Player identification info
 print("[Config] Player identification:")
@@ -554,6 +682,12 @@ local autoPreset1Toggle
 local autoPreset2Toggle
 local autoPreset3Toggle
 local gpuSaverToggle
+local chargeFishingSlider
+local autoFishMainSlider
+local autoSellSlider
+local autoCatchSlider
+local weatherIdSlider
+local weatherCycleSlider
 
 -- ====== FUNGSI UNTUK MENDAPATKAN COIN DAN LEVEL ======
 local function getCurrentCoins()
@@ -1110,7 +1244,7 @@ function enableGPUSaver()
             end
         end
         
-        setfpscap(7)
+        setfpscap(5)
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
@@ -1400,8 +1534,12 @@ local function disablePreset(presetKey)
         -- Reset delay for Kohana preset
         if presetKey == "auto3" then
             table.insert(steps, function()
-                autoFishMainDelay = 0.9  -- Reset to default
-                print("🎣 Auto Fish Delay reset to default (0.9s)")
+                if autoFishMainSlider then
+                    autoFishMainSlider:Set(0.9)
+                else
+                    setAutoFishMainDelay(0.9)
+                end
+                print("[Preset] Auto Fish Delay reset to default (0.9s)")
             end)
         end
 
@@ -1868,13 +2006,951 @@ local function setAutoWeather(state)
 end
 
 local function setAutoFishDelayForKohana()
-    autoFishMainDelay = 5  -- Set to 5 seconds for Kohana preset
-    print("🎣 Auto Fish Delay set to 5 seconds for Kohana")
+    if autoFishMainSlider then
+        autoFishMainSlider:Set(5)
+    else
+        setAutoFishMainDelay(5)
+    end
+    print("[Preset] Auto Fish Delay set to 5 seconds for Kohana")
 end
 
--- ====== UI Kavo ======
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
-local Window  = Library.CreateLib("Auto Fish v4.5 - Simplified", "DarkTheme")
+
+-- ====== ENHANCED MOBILE UI LIBRARY ======
+local Library = {}
+do
+    -- Get screen size for responsive design
+    local function getScreenSize()
+        local viewport = workspace.CurrentCamera.ViewportSize
+        return viewport.X, viewport.Y
+    end
+
+    -- Responsive sizing based on screen
+    local function getResponsiveSize()
+        local screenX, screenY = getScreenSize()
+        local isMobile = screenX < 800 or screenY < 600
+
+        if isMobile then
+            return {
+                windowWidth = math.min(screenX * 0.95, 400),
+                windowHeight = math.min(screenY * 0.85, 500),
+                titleSize = 16,
+                textSize = 13,
+                buttonHeight = 35,
+                padding = 8
+            }
+        else
+            return {
+                windowWidth = 480,
+                windowHeight = 580,
+                titleSize = 18,
+                textSize = 14,
+                buttonHeight = 38,
+                padding = 12
+            }
+        end
+    end
+
+    local function createRow(sectionFrame, titleText, descriptionText)
+        local responsive = getResponsiveSize()
+
+        local row = Instance.new("Frame")
+        row.Name = ("Row_%s"):format(titleText:gsub("%s", ""))
+        row.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+        row.BackgroundTransparency = 0
+        row.AutomaticSize = Enum.AutomaticSize.Y
+        row.Size = UDim2.new(1, 0, 0, math.max(50, responsive.buttonHeight + 20))
+        row.Parent = sectionFrame
+        row.ClipsDescendants = false
+
+        local rowCorner = Instance.new("UICorner")
+        rowCorner.CornerRadius = UDim.new(0, 8)
+        rowCorner.Parent = row
+
+        local rowStroke = Instance.new("UIStroke")
+        rowStroke.Color = Color3.fromRGB(45, 45, 45)
+        rowStroke.Thickness = 1
+        rowStroke.Parent = row
+
+        local padding = Instance.new("UIPadding")
+        padding.PaddingLeft = UDim.new(0, responsive.padding)
+        padding.PaddingRight = UDim.new(0, responsive.padding)
+        padding.PaddingTop = UDim.new(0, responsive.padding)
+        padding.PaddingBottom = UDim.new(0, responsive.padding)
+        padding.Parent = row
+
+        local infoFrame = Instance.new("Frame")
+        infoFrame.Name = "Info"
+        infoFrame.BackgroundTransparency = 1
+        infoFrame.Size = UDim2.new(1, -120, 1, 0)
+        infoFrame.Position = UDim2.new(0, 0, 0, 0)
+        infoFrame.Parent = row
+
+        local infoLayout = Instance.new("UIListLayout")
+        infoLayout.FillDirection = Enum.FillDirection.Vertical
+        infoLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        infoLayout.Padding = UDim.new(0, 2)
+        infoLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        infoLayout.Parent = infoFrame
+
+        local title = Instance.new("TextLabel")
+        title.Name = "Title"
+        title.BackgroundTransparency = 1
+        title.AutomaticSize = Enum.AutomaticSize.Y
+        title.Size = UDim2.new(1, 0, 0, 0)
+        title.Font = Enum.Font.GothamSemibold
+        title.Text = titleText
+        title.TextColor3 = Color3.fromRGB(255, 255, 255)
+        title.TextSize = responsive.textSize + 1
+        title.TextWrapped = true
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.TextYAlignment = Enum.TextYAlignment.Top
+        title.Parent = infoFrame
+
+        if descriptionText and descriptionText ~= "" then
+            local description = Instance.new("TextLabel")
+            description.Name = "Description"
+            description.BackgroundTransparency = 1
+            description.AutomaticSize = Enum.AutomaticSize.Y
+            description.Size = UDim2.new(1, 0, 0, 0)
+            description.Font = Enum.Font.Gotham
+            description.Text = descriptionText
+            description.TextColor3 = Color3.fromRGB(180, 180, 180)
+            description.TextSize = responsive.textSize - 1
+            description.TextWrapped = true
+            description.TextXAlignment = Enum.TextXAlignment.Left
+            description.TextYAlignment = Enum.TextYAlignment.Top
+            description.Parent = infoFrame
+        end
+
+        local actionContainer = Instance.new("Frame")
+        actionContainer.Name = "Action"
+        actionContainer.BackgroundTransparency = 1
+        actionContainer.Size = UDim2.new(0, 110, 0, responsive.buttonHeight)
+        actionContainer.AnchorPoint = Vector2.new(1, 0.5)
+        actionContainer.Position = UDim2.new(1, 0, 0.5, 0)
+        actionContainer.Parent = row
+
+        return row, actionContainer
+    end
+
+    local function createWindow(titleText)
+        local coreGui = game:GetService("CoreGui")
+        local userInputService = game:GetService("UserInputService")
+        local responsive = getResponsiveSize()
+
+        -- Clean up any existing UI
+        local existingGui = coreGui:FindFirstChild("AF_MobileUI")
+        if existingGui then
+            existingGui:Destroy()
+        end
+
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "AF_MobileUI"
+        screenGui.ResetOnSpawn = false
+        screenGui.IgnoreGuiInset = true
+        screenGui.DisplayOrder = 1000
+        screenGui.Parent = coreGui
+
+        local mainFrame = Instance.new("Frame")
+        mainFrame.Name = "MainFrame"
+        mainFrame.Size = UDim2.new(0, responsive.windowWidth, 0, responsive.windowHeight)
+        mainFrame.Position = UDim2.new(0.5, -responsive.windowWidth/2, 0.5, -responsive.windowHeight/2)
+        mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        mainFrame.Parent = screenGui
+        mainFrame.Active = true
+        mainFrame.ClipsDescendants = true
+
+        local mainCorner = Instance.new("UICorner")
+        mainCorner.CornerRadius = UDim.new(0, 12)
+        mainCorner.Parent = mainFrame
+
+        local mainStroke = Instance.new("UIStroke")
+        mainStroke.Color = Color3.fromRGB(50, 50, 50)
+        mainStroke.Thickness = 2
+        mainStroke.Parent = mainFrame
+
+        local topBar = Instance.new("Frame")
+        topBar.Name = "TopBar"
+        topBar.Size = UDim2.new(1, 0, 0, 45)
+        topBar.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+        topBar.Parent = mainFrame
+        topBar.Active = true
+
+        local topCorner = Instance.new("UICorner")
+        topCorner.CornerRadius = UDim.new(0, 12)
+        topCorner.Parent = topBar
+
+        local topStroke = Instance.new("UIStroke")
+        topStroke.Color = Color3.fromRGB(60, 60, 60)
+        topStroke.Thickness = 1
+        topStroke.Parent = topBar
+
+        local topPadding = Instance.new("UIPadding")
+        topPadding.PaddingLeft = UDim.new(0, 15)
+        topPadding.PaddingRight = UDim.new(0, 15)
+        topPadding.PaddingTop = UDim.new(0, 8)
+        topPadding.PaddingBottom = UDim.new(0, 8)
+        topPadding.Parent = topBar
+
+        local titleLabel = Instance.new("TextLabel")
+        titleLabel.Name = "Title"
+        titleLabel.BackgroundTransparency = 1
+        titleLabel.Size = UDim2.new(1, -60, 1, 0)
+        titleLabel.Position = UDim2.new(0, 0, 0, 0)
+        titleLabel.Font = Enum.Font.GothamBold
+        titleLabel.Text = titleText or "Auto Fish v6.2"
+        titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        titleLabel.TextSize = responsive.titleSize
+        titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+        titleLabel.TextYAlignment = Enum.TextYAlignment.Center
+        titleLabel.Parent = topBar
+
+        -- Close button
+        local closeButton = Instance.new("TextButton")
+        closeButton.Name = "CloseButton"
+        closeButton.Size = UDim2.new(0, 30, 0, 30)
+        closeButton.Position = UDim2.new(1, -35, 0.5, -15)
+        closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        closeButton.Text = "×"
+        closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        closeButton.TextSize = 18
+        closeButton.Font = Enum.Font.GothamBold
+        closeButton.Parent = topBar
+
+        local closeCorner = Instance.new("UICorner")
+        closeCorner.CornerRadius = UDim.new(0, 6)
+        closeCorner.Parent = closeButton
+
+        local tabContainer = Instance.new("Frame")
+        tabContainer.Name = "TabContainer"
+        tabContainer.BackgroundTransparency = 1
+        tabContainer.Size = UDim2.new(1, 0, 0, 40)
+        tabContainer.Position = UDim2.new(0, 0, 0, 45)
+        tabContainer.Parent = mainFrame
+
+        local tabBar = Instance.new("Frame")
+        tabBar.Name = "TabBar"
+        tabBar.BackgroundTransparency = 1
+        tabBar.Size = UDim2.new(1, -20, 1, 0)
+        tabBar.Position = UDim2.new(0, 10, 0, 0)
+        tabBar.Parent = tabContainer
+
+        local tabScrollFrame = Instance.new("ScrollingFrame")
+        tabScrollFrame.Name = "TabScroll"
+        tabScrollFrame.BackgroundTransparency = 1
+        tabScrollFrame.Size = UDim2.new(1, 0, 1, 0)
+        tabScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+        tabScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.X
+        tabScrollFrame.ScrollingDirection = Enum.ScrollingDirection.X
+        tabScrollFrame.ScrollBarThickness = 0
+        tabScrollFrame.Parent = tabBar
+
+        local tabLayout = Instance.new("UIListLayout")
+        tabLayout.FillDirection = Enum.FillDirection.Horizontal
+        tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        tabLayout.Padding = UDim.new(0, 5)
+        tabLayout.Parent = tabScrollFrame
+
+        local contentFrame = Instance.new("Frame")
+        contentFrame.Name = "Content"
+        contentFrame.BackgroundTransparency = 1
+        contentFrame.Size = UDim2.new(1, -20, 1, -95)
+        contentFrame.Position = UDim2.new(0, 10, 0, 85)
+        contentFrame.Parent = mainFrame
+
+        local pageLayout = Instance.new("UIPageLayout")
+        pageLayout.FillDirection = Enum.FillDirection.Horizontal
+        pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        pageLayout.TweenTime = 0.15
+        pageLayout.EasingStyle = Enum.EasingStyle.Quad
+        pageLayout.EasingDirection = Enum.EasingDirection.Out
+        pageLayout.Parent = contentFrame
+
+        local window = {
+            _screenGui = screenGui,
+            _mainFrame = mainFrame,
+            _pageLayout = pageLayout,
+            _tabButtons = {},
+            _tabPages = {},
+            _currentTab = nil,
+            _tabScrollFrame = tabScrollFrame,
+            _closeButton = closeButton,
+        }
+
+        -- Enhanced drag system
+        local dragging = false
+        local dragStart, startPos
+
+        local function beginDrag(input)
+            if input.Position.X > closeButton.AbsolutePosition.X then
+                return -- Don't drag if clicking close button
+            end
+
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+
+            local changeConn
+            changeConn = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    if changeConn then
+                        changeConn:Disconnect()
+                    end
+                end
+            end)
+        end
+
+        topBar.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                beginDrag(input)
+            end
+        end)
+
+        userInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - dragStart
+                local newPosX = math.clamp(startPos.X.Offset + delta.X, 0, getScreenSize() - responsive.windowWidth)
+                local newPosY = math.clamp(startPos.Y.Offset + delta.Y, 0, getScreenSize() - responsive.windowHeight)
+
+                mainFrame.Position = UDim2.new(0, newPosX, 0, newPosY)
+            end
+        end)
+
+        -- Close button functionality
+        closeButton.MouseButton1Click:Connect(function()
+            window:ToggleUI(false)
+        end)
+
+        closeButton.MouseEnter:Connect(function()
+            closeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        end)
+
+        closeButton.MouseLeave:Connect(function()
+            closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        end)
+
+        local function highlightTab(tabName)
+            for name, button in pairs(window._tabButtons) do
+                if name == tabName then
+                    button.BackgroundColor3 = Color3.fromRGB(50, 130, 245)
+                    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    -- Add selection indicator
+                    if not button:FindFirstChild("SelectionIndicator") then
+                        local indicator = Instance.new("Frame")
+                        indicator.Name = "SelectionIndicator"
+                        indicator.Size = UDim2.new(1, 0, 0, 2)
+                        indicator.Position = UDim2.new(0, 0, 1, -2)
+                        indicator.BackgroundColor3 = Color3.fromRGB(70, 150, 255)
+                        indicator.BorderSizePixel = 0
+                        indicator.Parent = button
+                    end
+                else
+                    button.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+                    button.TextColor3 = Color3.fromRGB(180, 180, 180)
+                    -- Remove selection indicator
+                    local indicator = button:FindFirstChild("SelectionIndicator")
+                    if indicator then
+                        indicator:Destroy()
+                    end
+                end
+            end
+        end
+
+        function window:ShowTab(tabName)
+            local targetPage = self._tabPages[tabName]
+            if not targetPage then return end
+            self._pageLayout:JumpTo(targetPage)
+            highlightTab(tabName)
+            self._currentTab = tabName
+        end
+
+        function window:ToggleUI(force)
+            if typeof(force) == "boolean" then
+                self._screenGui.Enabled = force
+            else
+                self._screenGui.Enabled = not self._screenGui.Enabled
+            end
+            return self._screenGui.Enabled
+        end
+
+        function window:NewTab(tabName)
+            local responsive = getResponsiveSize()
+
+            local tabButton = Instance.new("TextButton")
+            tabButton.Name = ("Tab_%s"):format(tabName)
+            tabButton.Size = UDim2.new(0, math.max(100, #tabName * 8 + 20), 0, 32)
+            tabButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+            tabButton.TextColor3 = Color3.fromRGB(180, 180, 180)
+            tabButton.Font = Enum.Font.GothamSemibold
+            tabButton.TextSize = responsive.textSize
+            tabButton.AutoButtonColor = false
+            tabButton.Text = tabName
+            tabButton.Parent = tabScrollFrame
+
+            local tabCorner = Instance.new("UICorner")
+            tabCorner.CornerRadius = UDim.new(0, 6)
+            tabCorner.Parent = tabButton
+
+            local tabStroke = Instance.new("UIStroke")
+            tabStroke.Color = Color3.fromRGB(55, 55, 55)
+            tabStroke.Thickness = 1
+            tabStroke.Parent = tabButton
+
+            -- Tab hover effects
+            tabButton.MouseEnter:Connect(function()
+                if window._currentTab ~= tabName then
+                    tabButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+                end
+            end)
+
+            tabButton.MouseLeave:Connect(function()
+                if window._currentTab ~= tabName then
+                    tabButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+                end
+            end)
+
+            local page = Instance.new("ScrollingFrame")
+            page.Name = ("Page_%s"):format(tabName)
+            page.Active = true
+            page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+            page.CanvasSize = UDim2.new(0, 0, 0, 0)
+            page.ScrollBarThickness = responsive.padding / 2
+            page.ScrollingDirection = Enum.ScrollingDirection.Y
+            page.BackgroundTransparency = 1
+            page.BorderSizePixel = 0
+            page.TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
+            page.BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
+            page.MidImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
+            page.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
+            page.Size = UDim2.new(1, 0, 1, 0)
+            page.Parent = contentFrame
+
+            local pagePadding = Instance.new("UIPadding")
+            pagePadding.PaddingLeft = UDim.new(0, responsive.padding)
+            pagePadding.PaddingRight = UDim.new(0, responsive.padding)
+            pagePadding.PaddingTop = UDim.new(0, responsive.padding)
+            pagePadding.PaddingBottom = UDim.new(0, responsive.padding * 2)
+            pagePadding.Parent = page
+
+            local pageLayoutList = Instance.new("UIListLayout")
+            pageLayoutList.FillDirection = Enum.FillDirection.Vertical
+            pageLayoutList.SortOrder = Enum.SortOrder.LayoutOrder
+            pageLayoutList.Padding = UDim.new(0, responsive.padding)
+            pageLayoutList.Parent = page
+
+            self._tabButtons[tabName] = tabButton
+            self._tabPages[tabName] = page
+
+            tabButton.MouseButton1Click:Connect(function()
+                self:ShowTab(tabName)
+            end)
+
+            local tab = {}
+
+            function tab:NewSection(sectionName)
+                local responsive = getResponsiveSize()
+
+                local sectionFrame = Instance.new("Frame")
+                sectionFrame.Name = ("Section_%s"):format(sectionName:gsub("%s", ""))
+                sectionFrame.AutomaticSize = Enum.AutomaticSize.Y
+                sectionFrame.Size = UDim2.new(1, 0, 0, 0)
+                sectionFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+                sectionFrame.Parent = page
+
+                local sectionCorner = Instance.new("UICorner")
+                sectionCorner.CornerRadius = UDim.new(0, 8)
+                sectionCorner.Parent = sectionFrame
+
+                local sectionStroke = Instance.new("UIStroke")
+                sectionStroke.Color = Color3.fromRGB(40, 40, 40)
+                sectionStroke.Thickness = 1
+                sectionStroke.Parent = sectionFrame
+
+                local sectionPadding = Instance.new("UIPadding")
+                sectionPadding.PaddingLeft = UDim.new(0, responsive.padding)
+                sectionPadding.PaddingRight = UDim.new(0, responsive.padding)
+                sectionPadding.PaddingTop = UDim.new(0, responsive.padding)
+                sectionPadding.PaddingBottom = UDim.new(0, responsive.padding)
+                sectionPadding.Parent = sectionFrame
+
+                local sectionLayout = Instance.new("UIListLayout")
+                sectionLayout.FillDirection = Enum.FillDirection.Vertical
+                sectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+                sectionLayout.Padding = UDim.new(0, responsive.padding / 2)
+                sectionLayout.Parent = sectionFrame
+
+                local header = Instance.new("TextLabel")
+                header.Name = "Header"
+                header.BackgroundTransparency = 1
+                header.AutomaticSize = Enum.AutomaticSize.Y
+                header.Size = UDim2.new(1, 0, 0, 0)
+                header.Font = Enum.Font.GothamBold
+                header.Text = sectionName
+                header.TextColor3 = Color3.fromRGB(255, 255, 255)
+                header.TextSize = responsive.titleSize - 1
+                header.TextXAlignment = Enum.TextXAlignment.Left
+                header.TextYAlignment = Enum.TextYAlignment.Top
+                header.TextWrapped = true
+                header.Parent = sectionFrame
+
+                local section = {}
+                function section:NewToggle(title, description, callback)
+                    local responsive = getResponsiveSize()
+                    local _, actionContainer = createRow(sectionFrame, title, description)
+
+                    local toggleButton = Instance.new("TextButton")
+                    toggleButton.Name = "ToggleButton"
+                    toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+                    toggleButton.TextColor3 = Color3.fromRGB(220, 220, 220)
+                    toggleButton.Font = Enum.Font.GothamSemibold
+                    toggleButton.TextSize = responsive.textSize
+                    toggleButton.Text = "OFF"
+                    toggleButton.Size = UDim2.new(1, 0, 1, 0)
+                    toggleButton.AutoButtonColor = false
+                    toggleButton.Parent = actionContainer
+
+                    local corner = Instance.new("UICorner")
+                    corner.CornerRadius = UDim.new(0, 6)
+                    corner.Parent = toggleButton
+
+                    local stroke = Instance.new("UIStroke")
+                    stroke.Color = Color3.fromRGB(65, 65, 65)
+                    stroke.Thickness = 1
+                    stroke.Parent = toggleButton
+
+                    local toggler = { state = false }
+
+                    local function updateVisual(state)
+                        toggleButton.Text = state and "ON" or "OFF"
+                        if state then
+                            toggleButton.BackgroundColor3 = Color3.fromRGB(50, 130, 245)
+                            stroke.Color = Color3.fromRGB(70, 150, 255)
+                        else
+                            toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+                            stroke.Color = Color3.fromRGB(65, 65, 65)
+                        end
+                    end
+
+                    -- Add hover effects
+                    toggleButton.MouseEnter:Connect(function()
+                        if toggler.state then
+                            toggleButton.BackgroundColor3 = Color3.fromRGB(60, 140, 255)
+                        else
+                            toggleButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+                        end
+                    end)
+
+                    toggleButton.MouseLeave:Connect(function()
+                        updateVisual(toggler.state)
+                    end)
+
+                    function toggler:SetState(state, skipCallback)
+                        state = not not state
+                        if self.state == state then return end
+                        self.state = state
+                        updateVisual(state)
+                        if not skipCallback and callback then
+                            local ok, err = pcall(callback, state)
+                            if not ok then
+                                warn("[Auto Fish UI] Toggle callback error: " .. tostring(err))
+                            end
+                        end
+                    end
+
+                    toggleButton.MouseButton1Click:Connect(function()
+                        toggler:SetState(not toggler.state)
+                    end)
+
+                    function toggler:UpdateToggle(_, state)
+                        self:SetState(state)
+                    end
+
+                    updateVisual(false)
+                    return toggler
+                end
+
+                function section:NewButton(title, description, callback)
+                    local responsive = getResponsiveSize()
+                    local _, actionContainer = createRow(sectionFrame, title, description)
+
+                    local button = Instance.new("TextButton")
+                    button.Name = "ActionButton"
+                    button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    button.Font = Enum.Font.GothamSemibold
+                    button.Text = "RUN"
+                    button.TextSize = responsive.textSize
+                    button.AutoButtonColor = false
+                    button.Size = UDim2.new(1, 0, 1, 0)
+                    button.Parent = actionContainer
+
+                    local corner = Instance.new("UICorner")
+                    corner.CornerRadius = UDim.new(0, 6)
+                    corner.Parent = button
+
+                    local stroke = Instance.new("UIStroke")
+                    stroke.Color = Color3.fromRGB(80, 80, 80)
+                    stroke.Thickness = 1
+                    stroke.Parent = button
+
+                    -- Button hover effects
+                    button.MouseEnter:Connect(function()
+                        button.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+                    end)
+
+                    button.MouseLeave:Connect(function()
+                        button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                    end)
+
+                    button.MouseButton1Click:Connect(function()
+                        if not callback then return end
+                        local ok, err = pcall(callback)
+                        if not ok then
+                            warn("[Auto Fish UI] Button callback error: " .. tostring(err))
+                        end
+                    end)
+
+                    return button
+                end
+
+                function section:NewDropdown(title, description, options, callback)
+                    local responsive = getResponsiveSize()
+                    local row, actionContainer = createRow(sectionFrame, title, description)
+
+                    local dropdownButton = Instance.new("TextButton")
+                    dropdownButton.Name = "DropdownButton"
+                    dropdownButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+                    dropdownButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    dropdownButton.Font = Enum.Font.GothamSemibold
+                    dropdownButton.TextSize = responsive.textSize
+                    dropdownButton.Text = (options and options[1]) or "Select"
+                    dropdownButton.AutoButtonColor = false
+                    dropdownButton.Size = UDim2.new(1, 0, 1, 0)
+                    dropdownButton.Parent = actionContainer
+
+                    local corner = Instance.new("UICorner")
+                    corner.CornerRadius = UDim.new(0, 6)
+                    corner.Parent = dropdownButton
+
+                    local stroke = Instance.new("UIStroke")
+                    stroke.Color = Color3.fromRGB(70, 70, 70)
+                    stroke.Thickness = 1
+                    stroke.Parent = dropdownButton
+
+                    -- Dropdown arrow indicator
+                    local arrow = Instance.new("TextLabel")
+                    arrow.Name = "Arrow"
+                    arrow.BackgroundTransparency = 1
+                    arrow.Size = UDim2.new(0, 20, 1, 0)
+                    arrow.Position = UDim2.new(1, -20, 0, 0)
+                    arrow.Text = "▼"
+                    arrow.TextColor3 = Color3.fromRGB(180, 180, 180)
+                    arrow.TextSize = responsive.textSize - 2
+                    arrow.Font = Enum.Font.Gotham
+                    arrow.TextXAlignment = Enum.TextXAlignment.Center
+                    arrow.Parent = dropdownButton
+
+                    local optionsFrame = Instance.new("Frame")
+                    optionsFrame.Name = "Options"
+                    optionsFrame.Visible = false
+                    optionsFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+                    optionsFrame.Position = UDim2.new(1, -5, 1, 5)
+                    optionsFrame.AnchorPoint = Vector2.new(1, 0)
+                    optionsFrame.AutomaticSize = Enum.AutomaticSize.Y
+                    optionsFrame.Size = UDim2.new(0, 150, 0, 0)
+                    optionsFrame.Parent = row
+                    optionsFrame.ZIndex = 10
+
+                    local optionsCorner = Instance.new("UICorner")
+                    optionsCorner.CornerRadius = UDim.new(0, 6)
+                    optionsCorner.Parent = optionsFrame
+
+                    local optionsStroke = Instance.new("UIStroke")
+                    optionsStroke.Color = Color3.fromRGB(60, 60, 60)
+                    optionsStroke.Thickness = 1
+                    optionsStroke.Parent = optionsFrame
+
+                    local optionsLayout = Instance.new("UIListLayout")
+                    optionsLayout.FillDirection = Enum.FillDirection.Vertical
+                    optionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+                    optionsLayout.Padding = UDim.new(0, 2)
+                    optionsLayout.Parent = optionsFrame
+
+                    local optionsPadding = Instance.new("UIPadding")
+                    optionsPadding.PaddingLeft = UDim.new(0, 6)
+                    optionsPadding.PaddingRight = UDim.new(0, 6)
+                    optionsPadding.PaddingTop = UDim.new(0, 6)
+                    optionsPadding.PaddingBottom = UDim.new(0, 6)
+                    optionsPadding.Parent = optionsFrame
+
+                    -- Hover effects for dropdown button
+                    dropdownButton.MouseEnter:Connect(function()
+                        dropdownButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                    end)
+
+                    dropdownButton.MouseLeave:Connect(function()
+                        dropdownButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+                    end)
+
+                    local function setSelection(value, skipCallback)
+                        dropdownButton.Text = value
+                        optionsFrame.Visible = false
+                        arrow.Text = "▼"
+                        if not skipCallback and callback then
+                            local ok, err = pcall(callback, value)
+                            if not ok then
+                                warn("[Auto Fish UI] Dropdown callback error: " .. tostring(err))
+                            end
+                        end
+                    end
+
+                    dropdownButton.MouseButton1Click:Connect(function()
+                        optionsFrame.Visible = not optionsFrame.Visible
+                        arrow.Text = optionsFrame.Visible and "▲" or "▼"
+                    end)
+
+                    if options then
+                        for _, option in ipairs(options) do
+                            local optionButton = Instance.new("TextButton")
+                            optionButton.Name = "Option"
+                            optionButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+                            optionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            optionButton.TextSize = responsive.textSize
+                            optionButton.AutoButtonColor = false
+                            optionButton.Font = Enum.Font.Gotham
+                            optionButton.Text = option
+                            optionButton.Size = UDim2.new(1, 0, 0, 28)
+                            optionButton.Parent = optionsFrame
+
+                            local optionCorner = Instance.new("UICorner")
+                            optionCorner.CornerRadius = UDim.new(0, 4)
+                            optionCorner.Parent = optionButton
+
+                            optionButton.MouseEnter:Connect(function()
+                                optionButton.BackgroundColor3 = Color3.fromRGB(50, 130, 245)
+                            end)
+
+                            optionButton.MouseLeave:Connect(function()
+                                optionButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+                            end)
+
+                            optionButton.MouseButton1Click:Connect(function()
+                                setSelection(option)
+                            end)
+                        end
+                    end
+
+                    if options and options[1] and callback then
+                        local ok, err = pcall(callback, options[1])
+                        if not ok then
+                            warn("[Auto Fish UI] Dropdown callback error: " .. tostring(err))
+                        end
+                    end
+
+                    return {
+                        Set = function(_, value)
+                            setSelection(value, true)
+                        end
+                    }
+                end
+
+                function section:NewSlider(title, description, maxValue, minValue, callback)
+                    local responsive = getResponsiveSize()
+                    local _, actionContainer = createRow(sectionFrame, title, description)
+
+                    local textBox = Instance.new("TextBox")
+                    textBox.Name = "SliderBox"
+                    textBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+                    textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    textBox.Font = Enum.Font.GothamSemibold
+                    textBox.TextSize = responsive.textSize
+                    textBox.ClearTextOnFocus = false
+                    textBox.Size = UDim2.new(1, 0, 1, 0)
+                    textBox.Text = tostring(minValue)
+                    textBox.PlaceholderText = string.format("%s - %s", tostring(minValue), tostring(maxValue))
+                    textBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
+                    textBox.TextXAlignment = Enum.TextXAlignment.Center
+                    textBox.Parent = actionContainer
+
+                    local corner = Instance.new("UICorner")
+                    corner.CornerRadius = UDim.new(0, 6)
+                    corner.Parent = textBox
+
+                    local stroke = Instance.new("UIStroke")
+                    stroke.Color = Color3.fromRGB(65, 65, 65)
+                    stroke.Thickness = 1
+                    stroke.Parent = textBox
+
+                    -- Focus effects
+                    textBox.Focused:Connect(function()
+                        stroke.Color = Color3.fromRGB(50, 130, 245)
+                    end)
+
+                    textBox.FocusLost:Connect(function()
+                        stroke.Color = Color3.fromRGB(65, 65, 65)
+                    end)
+
+                    local currentValue = tonumber(minValue) or 0
+                    if callback then
+                        local ok, err = pcall(callback, currentValue)
+                        if not ok then
+                            warn("[Auto Fish UI] Slider callback error: " .. tostring(err))
+                        end
+                    end
+
+                    local function commitValue(raw)
+                        local value = tonumber(raw)
+                        if not value then
+                            textBox.Text = tostring(currentValue)
+                            return
+                        end
+                        local minClamp = tonumber(minValue)
+                        local maxClamp = tonumber(maxValue)
+                        if minClamp and maxClamp then
+                            value = math.clamp(value, minClamp, maxClamp)
+                        end
+                        if value ~= currentValue then
+                            currentValue = value
+                            if callback then
+                                local ok, err = pcall(callback, value)
+                                if not ok then
+                                    warn("[Auto Fish UI] Slider callback error: " .. tostring(err))
+                                end
+                            end
+                        end
+                        textBox.Text = tostring(value)
+                    end
+
+                    textBox.FocusLost:Connect(function()
+                        commitValue(textBox.Text)
+                    end)
+
+                    textBox.InputEnded:Connect(function(input)
+                        if input.UserInputType == Enum.UserInputType.Touch then
+                            commitValue(textBox.Text)
+                        end
+                    end)
+
+                    return {
+                        Set = function(_, value)
+                            commitValue(value)
+                        end
+                    }
+                end
+
+                function section:NewKeybind(title, description, defaultKey, callback)
+                    local responsive = getResponsiveSize()
+                    local _, actionContainer = createRow(sectionFrame, title, description)
+
+                    local keyButton = Instance.new("TextButton")
+                    keyButton.Name = "KeybindButton"
+                    keyButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+                    keyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    keyButton.Font = Enum.Font.GothamSemibold
+                    keyButton.TextSize = responsive.textSize
+                    keyButton.AutoButtonColor = false
+                    keyButton.Size = UDim2.new(1, 0, 1, 0)
+                    keyButton.Parent = actionContainer
+
+                    local corner = Instance.new("UICorner")
+                    corner.CornerRadius = UDim.new(0, 6)
+                    corner.Parent = keyButton
+
+                    local stroke = Instance.new("UIStroke")
+                    stroke.Color = Color3.fromRGB(65, 65, 65)
+                    stroke.Thickness = 1
+                    stroke.Parent = keyButton
+
+                    -- Hover effects
+                    keyButton.MouseEnter:Connect(function()
+                        keyButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+                    end)
+
+                    keyButton.MouseLeave:Connect(function()
+                        keyButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+                    end)
+
+                    local userInput = game:GetService("UserInputService")
+                    local listening = false
+                    local currentKey = defaultKey or Enum.KeyCode.RightShift
+                    keyButton.Text = currentKey.Name
+
+                    local activationConn
+                    local function bindKeybind(keyCode)
+                        currentKey = keyCode
+                        keyButton.Text = currentKey.Name
+                        if activationConn then
+                            activationConn:Disconnect()
+                        end
+                        activationConn = userInput.InputBegan:Connect(function(input, gpe)
+                            if gpe then return end
+                            if input.KeyCode == currentKey then
+                                if callback then
+                                    local ok, err = pcall(callback)
+                                    if not ok then
+                                        warn("[Auto Fish UI] Keybind callback error: " .. tostring(err))
+                                    end
+                                end
+                            end
+                        end)
+                    end
+
+                    bindKeybind(currentKey)
+
+                    keyButton.MouseButton1Click:Connect(function()
+                        if listening then return end
+                        listening = true
+                        keyButton.Text = "Press key"
+
+                        local connection
+                        connection = userInput.InputBegan:Connect(function(input, gpe)
+                            if gpe then return end
+                            if input.UserInputType == Enum.UserInputType.Keyboard then
+                                listening = false
+                                if connection then
+                                    connection:Disconnect()
+                                end
+                                bindKeybind(input.KeyCode)
+                            end
+                        end)
+                    end)
+
+                    return {
+                        Set = function(_, keyCode)
+                            bindKeybind(keyCode)
+                        end
+                    }
+                end
+
+                return section
+            end
+
+            if not window._currentTab then
+                window:ShowTab(tabName)
+            end
+
+            return tab
+        end
+
+        return window
+    end
+
+    function Library.CreateLib(titleText)
+        local window = createWindow(titleText)
+        Library._lastWindow = window
+        return window
+    end
+
+    function Library:ToggleUI(force)
+        if self._lastWindow then
+            return self._lastWindow:ToggleUI(force)
+        end
+    end
+
+end
+
+local Window  = Library.CreateLib("🎣 Auto Fish v6.2 Enhanced")
 
 -- TAB: Auto
 local TabAuto      = Window:NewTab("Auto Features")
@@ -1882,17 +2958,16 @@ local SecMain      = TabAuto:NewSection("Main Features")
 local SecOther     = TabAuto:NewSection("Other Features")
 local SecDelays    = TabAuto:NewSection("Delay Settings")
 
--- Main toggles with new Auto Farm feature
-autoFarmToggle = SecMain:NewToggle("Auto Farm", "Auto equip rod + fishing (kombinasi)", function(state) 
-    setAutoFarm(state) 
+autoFarmToggle = SecMain:NewToggle("Auto Farm", "Auto equip rod + fishing (kombinasi)", function(state)
+    setAutoFarm(state)
 end)
 
-autoSellToggle = SecMain:NewToggle("Auto Sell", "Auto jual hasil", function(state) 
-    setSell(state) 
+autoSellToggle = SecMain:NewToggle("Auto Sell", "Auto jual hasil", function(state)
+    setSell(state)
 end)
 
-autoCatchToggle = SecMain:NewToggle("Auto Catch", "Auto catch fish", function(state) 
-    setAutoCatch(state) 
+autoCatchToggle = SecMain:NewToggle("Auto Catch", "Auto catch fish", function(state)
+    setAutoCatch(state)
 end)
 
 autoPreset1Toggle = SecMain:NewToggle("Auto 1 (Auto Crater)", "Enable core auto features with 0.5s stagger then teleport to Crater Island", function(state)
@@ -1919,53 +2994,83 @@ autoPreset3Toggle = SecMain:NewToggle("Auto 3 (Auto Kohana)", "Enable core auto 
     end
 end)
 
--- Other features
-SecOther:NewToggle("Auto Upgrade Rod", "Auto upgrade rod", function(state) 
-    setUpgrade(state) 
+SecOther:NewToggle("Auto Upgrade Rod", "Auto upgrade rod", function(state)
+    setUpgrade(state)
 end)
 
-SecOther:NewToggle("Auto Upgrade Bait", "Auto upgrade bait", function(state) 
-    setUpgradeBait(state) 
+SecOther:NewToggle("Auto Upgrade Bait", "Auto upgrade bait", function(state)
+    setUpgradeBait(state)
 end)
 
-autoWeatherToggle = SecOther:NewToggle("Auto Weather", "Auto weather events", function(state) 
-    setAutoWeather(state) 
+autoWeatherToggle = SecOther:NewToggle("Auto Weather", "Auto weather events", function(state)
+    setAutoWeather(state)
 end)
 
--- ====== DELAY SETTINGS ======
-SecDelays:NewSlider("Charge Rod Delay", "Delay setelah charge fishing rod (detik)", 10, 0.01, function(s)
-    chargeFishingDelay = s
+chargeFishingSlider = SecDelays:NewSlider("Charge Rod Delay", "Delay setelah charge fishing rod (detik, min: 0.01)", 10, 0.01, function(value)
+    setChargeFishingDelay(value)
 end)
 
-SecDelays:NewSlider("Auto Fish Delay", "Delay loop utama auto fish (detik)", 20, 1, function(s)
-    autoFishMainDelay = s
+autoFishMainSlider = SecDelays:NewSlider("Auto Fish Delay", "Delay loop utama auto fish (detik, min: 0.1)", 20, 0.1, function(value)
+    setAutoFishMainDelay(value)
 end)
 
-SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik)", 30, 1, function(s)
-    autoSellDelay = s
+autoSellSlider = SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik, min: 1)", 30, 1, function(value)
+    setAutoSellDelay(value)
 end)
 
-SecDelays:NewSlider("Auto Catch Delay", "Delay auto catch (detik)", 10, 0.1, function(s)
-    autoCatchDelay = s
+autoCatchSlider = SecDelays:NewSlider("Auto Catch Delay", "Delay auto catch (detik, min: 0.1)", 10, 0.1, function(value)
+    setAutoCatchDelay(value)
 end)
 
--- Quick teleport locations
+weatherIdSlider = SecDelays:NewSlider("Weather ID Delay", "Delay antar weather ID (detik, min: 1)", 60, 1, function(value)
+    setWeatherIdDelay(value)
+end)
+
+weatherCycleSlider = SecDelays:NewSlider("Weather Cycle Delay", "Delay siklus weather (detik, min: 10)", 600, 10, function(value)
+    setWeatherCycleDelay(value)
+end)
+
+task.defer(function()
+    task.wait(1)
+    if chargeFishingSlider then
+        chargeFishingSlider:Set(config.chargeFishingDelay or chargeFishingDelay)
+    end
+    if autoFishMainSlider then
+        autoFishMainSlider:Set(config.autoFishMainDelay or autoFishMainDelay)
+    end
+    if autoSellSlider then
+        autoSellSlider:Set(config.autoSellDelay or autoSellDelay)
+    end
+    if autoCatchSlider then
+        autoCatchSlider:Set(config.autoCatchDelay or autoCatchDelay)
+    end
+    if weatherIdSlider then
+        weatherIdSlider:Set(config.weatherIdDelay or weatherIdDelay)
+    end
+    if weatherCycleSlider then
+        weatherCycleSlider:Set(config.weatherCycleDelay or weatherCycleDelay)
+    end
+    print("[UI] Delay sliders initialized from config")
+end)
+
 local TabTeleport = Window:NewTab("Teleport")
 local SecTP = TabTeleport:NewSection("Quick Teleport")
 
 local tpNames = {}
-for _, loc in ipairs(teleportLocations) do table.insert(tpNames, loc.Name) end
+for _, loc in ipairs(teleportLocations) do
+    table.insert(tpNames, loc.Name)
+end
 
 SecTP:NewDropdown("Pilih Lokasi", "Teleport instan ke lokasi", tpNames, function(chosen)
     for _, location in ipairs(teleportLocations) do
         if location.Name == chosen then
             pcall(function()
                 local rootPart = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if rootPart then 
-                    rootPart.CFrame = location.CFrame 
-                    print("🚀 Teleported to: " .. chosen)
+                if rootPart then
+                    rootPart.CFrame = location.CFrame
+                    print("[Auto Fish] Teleported to: " .. chosen)
                 else
-                    warn("⚠ Character or HumanoidRootPart not found")
+                    warn("[Auto Fish] Character or HumanoidRootPart not found")
                 end
             end)
             break
@@ -1973,7 +3078,6 @@ SecTP:NewDropdown("Pilih Lokasi", "Teleport instan ke lokasi", tpNames, function
     end
 end)
 
--- ====== Shop TAB ======
 local TabShop = Window:NewTab("Shop")
 local SecShop = TabShop:NewSection("Fishing Rods")
 local SecBait = TabShop:NewSection("Bait")
@@ -2018,7 +3122,6 @@ SecShop:NewButton("Astral Rod - 1m", "Purchase Astral Rod", function()
     buyRod(rodDatabase.astral)
 end)
 
---------- BAIT SHOP
 SecBait:NewButton("TopWater Bait", "Buy Bait", function()
     buyBait(BaitDatabase.topwaterbait)
 end)
@@ -2041,10 +3144,10 @@ SecBait:NewButton("Aether Bait 3.7m", "Buy Bait", function()
     buyBait(BaitDatabase.aetherbait)
 end)
 
--- Add this in SecOther section after Auto Weather toggle
-autoMegalodonToggle = SecOther:NewToggle("Auto Megalodon Hunt", "Auto teleport to Megalodon events", function(state) 
-    setAutoMegalodon(state) 
+autoMegalodonToggle = SecOther:NewToggle("Auto Megalodon Hunt", "Auto teleport to Megalodon events", function(state)
+    setAutoMegalodon(state)
 end)
+
 
 local function applyLoadedConfig()
     if config.activePreset == "none" then
@@ -2254,7 +3357,7 @@ do
     local dragging = false
     local dragStart, startPos
     MiniBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             startPos = MiniBtn.Position
@@ -2264,7 +3367,7 @@ do
         end
     end)
     UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
             MiniBtn.Position = UDim2.new(
                 startPos.X.Scale, startPos.X.Offset + delta.X,
@@ -2607,7 +3710,23 @@ local function sendDiscordEmbed(description, totalWhitelistCount)
     })
 end
 
--- ============ INVENTORY CONTROL ============
+-- ============ BACKGROUND INVENTORY REFERENCES ============
+-- Background inventory functionality is implemented in backgroundInventoryModule (later in script)
+-- This avoids duplicate variable declarations that cause Lua register limit errors
+
+-- Reference variables that will be set by backgroundInventoryModule
+local function isBackgroundInventoryActive()
+    return _G.isBackgroundInventoryActive and _G.isBackgroundInventoryActive() or false
+end
+
+local function checkInventoryTilesStatus()
+    if _G.checkInventoryTilesStatus then
+        return _G.checkInventoryTilesStatus()
+    else
+        return false, "Module not loaded yet"
+    end
+end
+
 local function getInventoryGui()
     return Players.LocalPlayer.PlayerGui:FindFirstChild("Inventory")
 end
@@ -2620,69 +3739,14 @@ local function getInventoryContainer()
     return pages and pages:FindFirstChild("Inventory") or nil
 end
 
+-- Legacy functions for compatibility - now use background system
 local function openInventory()
-    local inv = getInventoryGui()
-
-    -- Kick controller agar tile di-render (aman dipanggil berulang) dengan network error protection
-    pcall(function()
-        local controllers = ReplicatedStorage:FindFirstChild("Controllers")
-        if controllers then
-            local invModule = controllers:FindFirstChild("InventoryController")
-            if invModule then
-                local success, ctrl = pcall(require, invModule)
-                if success and ctrl then
-                    -- Add delays between calls to prevent rate limiting cascade failures
-                    if ctrl.SetPage then
-                        pcall(ctrl.SetPage, "Fish")
-                        task.wait(0.1) -- Small delay to prevent overwhelming requests
-                    end
-                    if ctrl.SetCategory then
-                        pcall(ctrl.SetCategory, "Fish")
-                        task.wait(0.1)
-                    end
-                    if ctrl._bindFishes then
-                        pcall(ctrl._bindFishes)
-                        task.wait(0.1)
-                    end
-                    if ctrl.RefreshInventory then
-                        pcall(ctrl.RefreshInventory)
-                        task.wait(0.1)
-                    end
-                    if ctrl.UpdateInventory then
-                        pcall(ctrl.UpdateInventory)
-                        task.wait(0.1)
-                    end
-                    if ctrl.LoadInventory then
-                        pcall(ctrl.LoadInventory)
-                    end
-                else
-                    warn("[Auto Fish] Failed to require InventoryController - network issues may be present")
-                end
-            end
-        end
-    end)
-
-    -- Fallback tampilkan GUI
-    if inv then
-        if inv:IsA("ScreenGui") then inv.Enabled = true end
-        local main = inv:FindFirstChild("Main")
-        if main then
-            main.Visible = true
-            local content = main:FindFirstChild("Content")
-            if content then content.Visible = true end
-        end
-        dprint("Inventory opened")
-        return true
-    end
-    return false
+    dprint("Using background inventory system")
+    return true
 end
 
 local function closeInventory()
-    local inv = getInventoryGui()
-    if inv then
-        local main = inv:FindFirstChild("Main"); if main then main.Visible = false end
-        if inv:IsA("ScreenGui") then inv.Enabled = false end
-    end
+    -- Background system handles this automatically
 end
 
 -- ============ SCAN (VARIANT-AWARE) ============
@@ -2804,18 +3868,44 @@ end
 
 -- ============ BASELINE ============
 local function baselineNow()
-    if not openInventory() then warn("❌ Gagal buka Inventory (baseline)"); return end
-    local t0 = os.clock(); while os.clock() - t0 < SCAN_WAIT do RunService.Heartbeat:Wait() end
+    -- Check if background inventory is available
+    local success, status = checkInventoryTilesStatus()
+    if not success then
+        warn("❌ Background inventory not ready for baseline: " .. tostring(status))
+        -- Fallback: try to use background system
+        if isBackgroundInventoryActive then
+            print("⚠️ Using fallback baseline with background system")
+        else
+            warn("❌ Background inventory not active, baseline may fail")
+        end
+    end
+
+    -- Use background inventory - no need to open/close
+    dprint("🎯 Enhanced baseline using background inventory")
+
+    -- Reduced wait time since inventory is already open in background
+    local t0 = os.clock(); while os.clock() - t0 < (SCAN_WAIT * 0.3) do RunService.Heartbeat:Wait() end
     local counts, pretty = countTilesBySpecies(OPEN_TIMEOUT)
     seenCounts = counts
     for k,v in pairs(pretty) do prettyCache[k] = v end
-    closeInventory()
+    -- No need to close inventory - background system handles it
+    print("✅ Enhanced baseline completed using background inventory")
 end
 
--- ============ SCAN & SEND (single webhook) ============
+-- ============ ENHANCED SCAN & SEND (background inventory optimized) ============
 local function scanAndNotifySingle()
-    if not openInventory() then warn("❌ Gagal buka Inventory (scan)"); return end
-    local t0 = os.clock(); while os.clock() - t0 < SCAN_WAIT do RunService.Heartbeat:Wait() end
+    -- Check if background inventory is available
+    local success, status = checkInventoryTilesStatus()
+    if not success then
+        warn("❌ Background inventory not ready for scan: " .. tostring(status))
+        return
+    end
+
+    -- Use background inventory - no need to open/close
+    dprint("🎯 Enhanced scan using background inventory")
+
+    -- Minimal wait since inventory is already open in background
+    local t0 = os.clock(); while os.clock() - t0 < (SCAN_WAIT * 0.3) do RunService.Heartbeat:Wait() end
 
     local counts, pretty, totalWL = countTilesBySpecies(OPEN_TIMEOUT)
     for k,v in pairs(pretty) do prettyCache[k] = v end
@@ -2826,7 +3916,7 @@ local function scanAndNotifySingle()
     if SEND_ONLY_ON_CHANGES and #diffLines == 0 then
         dprint("No whitelist changes; skip send")
         seenCounts = counts
-        closeInventory()
+        -- No need to close inventory - background system handles it
         return
     end
 
@@ -2837,7 +3927,7 @@ local function scanAndNotifySingle()
     sendDiscordEmbed(description, totalWL)
 
     seenCounts = counts
-    closeInventory()
+    -- No need to close inventory - background system handles it
 end
 
 -- ============ DISCONNECT NOTIFIER ============
@@ -2919,7 +4009,8 @@ print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
 -- Integrated from inventory.lua for better inventory access
 local backgroundInventoryModule = {}
 
-do
+-- Move all background inventory functionality to a separate function scope
+local function initializeBackgroundInventory()
     local LocalPlayer = Players.LocalPlayer
     local isBackgroundInventoryActive = false
     local inventoryController = nil
@@ -3247,7 +4338,28 @@ do
     -- Export functions
     _G.startBackgroundInventory = backgroundInventoryModule.startBackgroundInventory
     _G.stopBackgroundInventory = backgroundInventoryModule.stopBackgroundInventory
+
+    -- Set reference variables to avoid Lua register limit errors
+    -- Create a function to check if background inventory is active
+    function backgroundInventoryModule.isActive()
+        return isBackgroundInventoryActive
+    end
+
+    -- Export the tiles check function
+    function backgroundInventoryModule.checkTilesStatus()
+        return checkTilesAccessible()
+    end
+
+    -- Update global references to avoid duplicate declarations
+    _G.isBackgroundInventoryActive = backgroundInventoryModule.isActive
+    _G.checkInventoryTilesStatus = backgroundInventoryModule.checkTilesStatus
+
+    -- Return the module for proper scoping
+    return backgroundInventoryModule
 end
+
+-- Initialize the background inventory module
+backgroundInventoryModule = initializeBackgroundInventory()
 
 -- ====== WEB MONITOR CLIENT ======
 -- Integrated from roblox-client.lua for web dashboard integration
@@ -3441,16 +4553,51 @@ end
 -- ====== INITIALIZATION OF INTEGRATED MODULES ======
 print("🔧 Initializing integrated modules...")
 
--- Start background inventory system
+-- Enhanced Background Inventory Startup System
 task.spawn(function()
+    print("🚀 Initializing enhanced background inventory system...")
     task.wait(5) -- Wait for main script to stabilize
+
+    -- Start background inventory
     backgroundInventoryModule.startBackgroundInventory()
+
+    -- Wait for background inventory to stabilize
+    task.wait(3)
+
+    -- Verify background inventory is working
+    local function verifyBackgroundInventory()
+        local success, status = checkInventoryTilesStatus()
+        if success then
+            print("✅ Enhanced background inventory verified and ready")
+            return true
+        else
+            print("⚠️ Background inventory needs more time...")
+            return false
+        end
+    end
+
+    -- Try verification up to 3 times
+    local attempts = 0
+    local maxAttempts = 3
+    while attempts < maxAttempts do
+        if verifyBackgroundInventory() then
+            break
+        end
+        attempts = attempts + 1
+        task.wait(2)
+    end
+
+    if attempts >= maxAttempts then
+        warn("❌ Background inventory verification failed after " .. maxAttempts .. " attempts")
+    else
+        print("🎯 Enhanced background inventory system fully operational")
+    end
 end)
 
--- Start web monitoring
+-- Start web monitoring with background inventory integration
 local webMonitorInstance
 task.spawn(function()
-    task.wait(8) -- Wait a bit longer for background inventory to be ready
+    task.wait(8) -- Wait for background inventory to be ready
     webMonitorInstance = webMonitorModule.startMonitoring()
     _G.WebMonitorInstance = webMonitorInstance
 end)
@@ -3459,13 +4606,56 @@ print("✅ Integrated modules initialized!")
 print("📱 Web Monitor: https://faktacerdas.site")
 print("🎮 Background Inventory: Keeping tiles loaded")
 
--- ============ ORIGINAL LOOP ============
-print("🚀 Inventory Whitelist Notifier (mutation-aware) start...")
-baselineNow()
+-- ============ ENHANCED MAIN LOOP WITH BACKGROUND INVENTORY ============
+print("🚀 Enhanced Inventory Whitelist Notifier (background-optimized) start...")
 
+-- Enhanced baseline function that uses background inventory
+local function enhancedBaselineNow()
+    if not isBackgroundInventoryActive then
+        warn("⚠️ Background inventory not active, using fallback baseline")
+        baselineNow()
+        return
+    end
+
+    -- Use background inventory for baseline
+    local success, status = checkInventoryTilesStatus()
+    if success then
+        print("🎯 Enhanced baseline using background inventory")
+        baselineNow() -- This now uses background system efficiently
+    else
+        warn("⚠️ Background inventory tiles not ready for baseline: " .. tostring(status))
+        baselineNow() -- Fallback to normal baseline
+    end
+end
+
+-- Enhanced scan function with background inventory optimization
+local function enhancedScanAndNotify()
+    if not isBackgroundInventoryActive then
+        -- If background inventory is not active, try to start it
+        print("⚠️ Background inventory not active, attempting to restart...")
+        backgroundInventoryModule.startBackgroundInventory()
+        task.wait(2)
+    end
+
+    -- Check if inventory tiles are accessible before scanning
+    local success, status = checkInventoryTilesStatus()
+    if success then
+        -- Use optimized scanning with background inventory
+        scanAndNotifySingle()
+    else
+        -- Background inventory not ready, use cooldown and retry
+        print("⏳ Background inventory not ready, waiting... (" .. tostring(status) .. ")")
+        task.wait(1) -- Short wait before retry
+    end
+end
+
+-- Run enhanced baseline
+enhancedBaselineNow()
+
+-- Enhanced main loop with background inventory integration
 task.spawn(function()
     while true do
-        scanAndNotifySingle()
+        enhancedScanAndNotify()
         task.wait(COOLDOWN)
     end
 end)
