@@ -290,6 +290,7 @@ local currentBodyPosition = nil
 
 local isAutoPreset1On = false
 local isAutoPreset2On = false
+local isAutoPreset3On = false
 
 -- Megalodon event variables
 local megalodonEventActive = false
@@ -298,14 +299,51 @@ local megalodonEventStartedAt = 0
 
 local HttpService = game:GetService("HttpService")
 
-local CONFIG_FILE = "auto_fish_v51_disconnect_config.json"
+-- Config folder constant
+local CONFIG_FOLDER = "ConfigFishIt"
+
+-- Function to ensure config folder exists
+local function ensureConfigFolder()
+    if not isfolder then
+        warn("[Config] Folder functions not available")
+        return false
+    end
+
+    if not isfolder(CONFIG_FOLDER) then
+        local success = pcall(function()
+            makefolder(CONFIG_FOLDER)
+        end)
+
+        if success then
+            print("[Config] Created config folder: " .. CONFIG_FOLDER)
+            return true
+        else
+            warn("[Config] Failed to create config folder")
+            return false
+        end
+    end
+
+    return true
+end
+
+-- Dynamic config file based on player username
+local function getConfigFileName()
+    local playerName = LocalPlayer.Name or "Unknown"
+    local userId = LocalPlayer.UserId or 0
+    -- Sanitize filename by removing invalid characters
+    playerName = playerName:gsub("[<>:\"/\\|?*]", "_")
+    -- Use both username and userId for unique identification
+    local fileName = "auto_fish_v58_config_" .. playerName .. "_" .. userId .. ".json"
+    return CONFIG_FOLDER .. "/" .. fileName
+end
 local defaultConfig = {
     autoFarm = false,
     autoSell = false,
     autoCatch = false,
     autoWeather = false,
     autoMegalodon = false,
-    activePreset = "none"
+    activePreset = "none",
+    gpuSaver = false
 }
 local config = {}
 for key, value in pairs(defaultConfig) do
@@ -314,28 +352,80 @@ end
 
 local isApplyingConfig = false
 
+local function validateConfigStructure(loadedConfig)
+    -- Ensure all required fields exist with proper defaults
+    local validatedConfig = {}
+
+    for key, defaultValue in pairs(defaultConfig) do
+        if loadedConfig[key] ~= nil then
+            -- Validate data type matches default
+            if type(loadedConfig[key]) == type(defaultValue) then
+                validatedConfig[key] = loadedConfig[key]
+            else
+                print("Warning: Config field '" .. key .. "' has wrong type, using default")
+                validatedConfig[key] = defaultValue
+            end
+        else
+            validatedConfig[key] = defaultValue
+        end
+    end
+
+    return validatedConfig
+end
+
 local function saveConfig()
-    if not writefile then return end
+    if not writefile then
+        print("[Config] Write function not available")
+        return
+    end
+
+    -- Ensure config folder exists
+    if not ensureConfigFolder() then
+        warn("[Config] Cannot create config folder, save aborted")
+        return
+    end
 
     local success, encoded = pcall(function()
         return HttpService:JSONEncode(config)
     end)
 
     if success then
-        pcall(writefile, CONFIG_FILE, encoded)
+        local configFile = getConfigFileName()
+        local writeSuccess = pcall(function()
+            writefile(configFile, encoded)
+        end)
+
+        if writeSuccess then
+            print("[Config] Successfully saved config for player: " .. LocalPlayer.Name)
+            print("[Config] Saved to: " .. configFile)
+        else
+            warn("[Config] Failed to write config file")
+        end
+    else
+        warn("[Config] Failed to encode config to JSON")
     end
 end
 
 local function loadConfig()
     if not readfile or not isfile then
+        print("[Config] File system not available, using defaults")
+        config = {}
+        for key, value in pairs(defaultConfig) do
+            config[key] = value
+        end
         return
     end
 
-    local success, content = pcall(function()
-        if isfile(CONFIG_FILE) then
-            return readfile(CONFIG_FILE)
-        end
+    -- Ensure config folder exists
+    ensureConfigFolder()
 
+    local configFile = getConfigFileName()
+    print("[Config] Loading from: " .. configFile)
+
+    local success, content = pcall(function()
+        if isfile(configFile) then
+            return readfile(configFile)
+        end
         return nil
     end)
 
@@ -345,23 +435,93 @@ local function loadConfig()
         end)
 
         if ok and type(decoded) == "table" then
+            print("[Config] Successfully loaded config for player: " .. LocalPlayer.Name)
+            config = validateConfigStructure(decoded)
+        else
+            print("[Config] Failed to decode JSON, using defaults")
+            config = {}
             for key, value in pairs(defaultConfig) do
-                if decoded[key] ~= nil then
-                    config[key] = decoded[key]
-                else
-                    config[key] = value
+                config[key] = value
+            end
+        end
+    else
+        print("[Config] No existing config found for player: " .. LocalPlayer.Name .. ", creating new one")
+        config = {}
+        for key, value in pairs(defaultConfig) do
+            config[key] = value
+        end
+    end
+
+    -- Always save after loading to ensure file exists and is up to date
+    saveConfig()
+end
+
+local function migrateOldConfig()
+    -- Check for old config file format and migrate if found
+    if not readfile or not isfile then return end
+
+    -- Check for old format files (both with and without UserID)
+    local playerName = (LocalPlayer.Name or "Unknown"):gsub("[<>:\"/\\|?*]", "_")
+    local userId = LocalPlayer.UserId or 0
+
+    local oldConfigFiles = {
+        "auto_fish_v58_config_" .. playerName .. ".json", -- Very old format
+        "auto_fish_v58_config_" .. playerName .. "_" .. userId .. ".json" -- Previous format (without folder)
+    }
+
+    for _, oldConfigFile in ipairs(oldConfigFiles) do
+        if isfile(oldConfigFile) then
+            print("[Config] Found old config format, migrating: " .. oldConfigFile)
+
+            local success, content = pcall(function()
+                return readfile(oldConfigFile)
+            end)
+
+            if success and content and content ~= "" then
+                local ok, decoded = pcall(function()
+                    return HttpService:JSONDecode(content)
+                end)
+
+                if ok and type(decoded) == "table" then
+                    -- Migrate to new format (with folder)
+                    config = validateConfigStructure(decoded)
+                    saveConfig()
+
+                    -- Optionally delete old file
+                    pcall(function()
+                        if delfile then
+                            delfile(oldConfigFile)
+                            print("[Config] Old config file deleted after migration: " .. oldConfigFile)
+                        end
+                    end)
+
+                    print("[Config] Migration completed successfully")
+                    return true
                 end
             end
         end
     end
 
-    saveConfig()
+    return false
 end
 
 local function updateConfigField(key, value)
+    if defaultConfig[key] == nil then
+        warn("[Config] Attempted to set unknown config field: " .. tostring(key))
+        return
+    end
+
+    if type(value) ~= type(defaultConfig[key]) then
+        warn("[Config] Type mismatch for field '" .. tostring(key) .. "'. Expected " .. type(defaultConfig[key]) .. ", got " .. type(value))
+        return
+    end
+
     config[key] = value
     if not isApplyingConfig then
-        saveConfig()
+        local success = pcall(saveConfig)
+        if not success then
+            warn("[Config] Failed to save config after updating field: " .. tostring(key))
+        end
     end
 end
 
@@ -371,9 +531,19 @@ local function syncConfigFromStates()
     config.autoCatch = isAutoCatchOn
     config.autoWeather = isAutoWeatherOn
     config.autoMegalodon = isAutoMegalodonOn
+    config.gpuSaver = gpuSaverEnabled
 end
 
-loadConfig()
+-- Try to migrate old config first, then load current config
+if not migrateOldConfig() then
+    loadConfig()
+end
+
+-- Player identification info
+print("[Config] Player identification:")
+print("  Username: " .. (LocalPlayer.Name or "Unknown"))
+print("  UserID: " .. (LocalPlayer.UserId or 0))
+print("  Config file: " .. getConfigFileName())
 
 local autoFarmToggle
 local autoSellToggle
@@ -382,6 +552,8 @@ local autoWeatherToggle
 local autoMegalodonToggle
 local autoPreset1Toggle
 local autoPreset2Toggle
+local autoPreset3Toggle
+local gpuSaverToggle
 
 -- ====== FUNGSI UNTUK MENDAPATKAN COIN DAN LEVEL ======
 local function getCurrentCoins()
@@ -425,6 +597,29 @@ local function getCurrentLevel()
     end)
     
     return success and result or "Lvl 0"
+end
+
+-- ====== HELPER FUNCTIONS FOR WEB MONITOR ======
+local function getFishCaught()
+    local success, fishCaught = pcall(function()
+        if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then
+            return LocalPlayer.leaderstats.Caught.Value
+        end
+        return 0
+    end)
+
+    return success and fishCaught or 0
+end
+
+local function getBestFish()
+    local success, bestFish = pcall(function()
+        if LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] then
+            return LocalPlayer.leaderstats["Rarest Fish"].Value
+        end
+        return "None"
+    end)
+
+    return success and bestFish or "None"
 end
 
 -- fungsi quest
@@ -922,6 +1117,11 @@ function enableGPUSaver()
     
     createWhiteScreen()
     print("⚡ GPU Saver Mode: ENABLED")
+
+    -- Update toggle if available
+    if gpuSaverToggle and not isApplyingConfig then
+        gpuSaverToggle:SetValue(true)
+    end
 end
 
 function disableGPUSaver()
@@ -951,6 +1151,11 @@ function disableGPUSaver()
     
     removeWhiteScreen()
     print("⚡ GPU Saver Mode: DISABLED")
+
+    -- Update toggle if available
+    if gpuSaverToggle and not isApplyingConfig then
+        gpuSaverToggle:SetValue(false)
+    end
 end
 
 -- ====== FISH CAUGHT EVENT HANDLER ======
@@ -1056,65 +1261,90 @@ local function enablePreset(presetKey, locationName)
         if config.activePreset and config.activePreset ~= "none" and config.activePreset ~= presetKey then
             table.insert(steps, function()
                 if autoMegalodonToggle then
-                    autoMegalodonToggle:UpdateToggle(nil, false)
+                    autoMegalodonToggle:SetValue(false)
                 end
             end)
             table.insert(steps, function()
                 if autoWeatherToggle then
-                    autoWeatherToggle:UpdateToggle(nil, false)
+                    autoWeatherToggle:SetValue(false)
                 end
             end)
             table.insert(steps, function()
                 if autoCatchToggle then
-                    autoCatchToggle:UpdateToggle(nil, false)
+                    autoCatchToggle:SetValue(false)
                 end
             end)
             table.insert(steps, function()
                 if autoSellToggle then
-                    autoSellToggle:UpdateToggle(nil, false)
+                    autoSellToggle:SetValue(false)
                 end
             end)
             table.insert(steps, function()
                 if autoFarmToggle then
-                    autoFarmToggle:UpdateToggle(nil, false)
+                    autoFarmToggle:SetValue(false)
                 end
             end)
         end
 
         table.insert(steps, function()
             if autoFarmToggle then
-                autoFarmToggle:UpdateToggle(nil, true)
+                autoFarmToggle:SetValue(true)
             end
         end)
         table.insert(steps, function()
             if autoSellToggle then
-                autoSellToggle:UpdateToggle(nil, true)
+                autoSellToggle:SetValue(true)
             end
         end)
         table.insert(steps, function()
             if autoCatchToggle then
-                autoCatchToggle:UpdateToggle(nil, true)
+                autoCatchToggle:SetValue(true)
             end
         end)
+
+        -- Only enable weather and megalodon for auto1 and auto2, not auto3
+        if presetKey ~= "auto3" then
+            table.insert(steps, function()
+                if autoWeatherToggle then
+                    autoWeatherToggle:SetValue(true)
+                end
+            end)
+            table.insert(steps, function()
+                if autoMegalodonToggle then
+                    autoMegalodonToggle:SetValue(true)
+                end
+            end)
+        end
+
         table.insert(steps, function()
-            if autoWeatherToggle then
-                autoWeatherToggle:UpdateToggle(nil, true)
-            end
+            enableGPUSaver()
         end)
-        table.insert(steps, function()
-            if autoMegalodonToggle then
-                autoMegalodonToggle:UpdateToggle(nil, true)
-            end
-        end)
+
+        -- Set custom delay for Kohana preset
+        if presetKey == "auto3" then
+            table.insert(steps, function()
+                setAutoFishDelayForKohana()
+            end)
+        end
 
         runPresetSequence(steps)
 
         if presetKey == "auto1" then
             isAutoPreset1On = true
             isAutoPreset2On = false
+            isAutoPreset3On = false
+        elseif presetKey == "auto2" then
+            isAutoPreset1On = false
+            isAutoPreset2On = true
+            isAutoPreset3On = false
+        elseif presetKey == "auto3" then
+            isAutoPreset1On = false
+            isAutoPreset2On = false
+            isAutoPreset3On = true
         else
             isAutoPreset1On = false
             isAutoPreset2On = true
+            isAutoPreset3On = false
         end
 
         config.activePreset = presetKey
@@ -1130,6 +1360,8 @@ local function disablePreset(presetKey)
                 isAutoPreset1On = false
             elseif presetKey == "auto2" then
                 isAutoPreset2On = false
+            elseif presetKey == "auto3" then
+                isAutoPreset3On = false
             end
             return
         end
@@ -1137,35 +1369,50 @@ local function disablePreset(presetKey)
         local steps = {
             function()
                 if autoMegalodonToggle then
-                    autoMegalodonToggle:UpdateToggle(nil, false)
+                    autoMegalodonToggle:SetValue(false)
                 end
             end,
             function()
                 if autoWeatherToggle then
-                    autoWeatherToggle:UpdateToggle(nil, false)
+                    autoWeatherToggle:SetValue(false)
                 end
             end,
             function()
                 if autoCatchToggle then
-                    autoCatchToggle:UpdateToggle(nil, false)
+                    autoCatchToggle:SetValue(false)
                 end
             end,
             function()
                 if autoSellToggle then
-                    autoSellToggle:UpdateToggle(nil, false)
+                    autoSellToggle:SetValue(false)
                 end
             end,
             function()
                 if autoFarmToggle then
-                    autoFarmToggle:UpdateToggle(nil, false)
+                    autoFarmToggle:SetValue(false)
                 end
             end,
+            function()
+                disableGPUSaver()
+            end,
         }
+
+        -- Reset delay for Kohana preset
+        if presetKey == "auto3" then
+            table.insert(steps, function()
+                autoFishMainDelay = 0.9  -- Reset to default
+                print("🎣 Auto Fish Delay reset to default (0.9s)")
+            end)
+        end
 
         runPresetSequence(steps)
 
         if presetKey == "auto1" then
             isAutoPreset1On = false
+        elseif presetKey == "auto2" then
+            isAutoPreset2On = false
+        elseif presetKey == "auto3" then
+            isAutoPreset3On = false
         else
             isAutoPreset2On = false
         end
@@ -1620,190 +1867,392 @@ local function setAutoWeather(state)
     print("🌤️ Auto Weather: " .. (state and "ENABLED" or "DISABLED"))
 end
 
--- ====== UI Kavo ======
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
-local Window  = Library.CreateLib("Auto Fish v4.5 - Simplified", "DarkTheme")
+local function setAutoFishDelayForKohana()
+    autoFishMainDelay = 5  -- Set to 5 seconds for Kohana preset
+    print("🎣 Auto Fish Delay set to 5 seconds for Kohana")
+end
+
+-- ====== UI Fluent ======
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local Window = Fluent:CreateWindow({
+    Title = "Auto Fish v6.2 - Enhanced with Fluent UI",
+    SubTitle = "Modern GUI with Android Support",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.RightShift
+})
+
+-- Add mobile-friendly drag support
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+InterfaceManager:SetLibrary(Fluent)
+InterfaceManager:SetFolder("FluentScriptHub")
+InterfaceManager:BuildInterfaceSection(Window:AddTab({Title = "Settings", Icon = "settings"}))
+
+-- Optimize for mobile devices
+if game:GetService("UserInputService").TouchEnabled then
+    print("📱 Mobile device detected - GUI optimized for touch controls")
+end
+
+-- Notification for successful GUI upgrade
+Fluent:Notify({
+    Title = "GUI Updated Successfully!",
+    Content = "Auto Fish v6.2 now uses Fluent UI with enhanced Android support and textbox functionality",
+    Duration = 5
+})
 
 -- TAB: Auto
-local TabAuto      = Window:NewTab("Auto Features")
-local SecMain      = TabAuto:NewSection("Main Features")
-local SecOther     = TabAuto:NewSection("Other Features")
-local SecDelays    = TabAuto:NewSection("Delay Settings")
+local TabAuto = Window:AddTab({ Title = "Auto Features", Icon = "zap" })
+local SecMain = TabAuto:AddSection("Main Features")
+local SecOther = TabAuto:AddSection("Other Features")
+local SecDelays = TabAuto:AddSection("Delay Settings")
 
 -- Main toggles with new Auto Farm feature
-autoFarmToggle = SecMain:NewToggle("Auto Farm", "Auto equip rod + fishing (kombinasi)", function(state) 
-    setAutoFarm(state) 
-end)
-
-autoSellToggle = SecMain:NewToggle("Auto Sell", "Auto jual hasil", function(state) 
-    setSell(state) 
-end)
-
-autoCatchToggle = SecMain:NewToggle("Auto Catch", "Auto catch fish", function(state) 
-    setAutoCatch(state) 
-end)
-
-autoPreset1Toggle = SecMain:NewToggle("Auto 1 (Auto Crater)", "Enable core auto features with 0.5s stagger then teleport to Crater Island", function(state)
-    if state then
-        enablePreset("auto1", "Crater Island")
-    else
-        disablePreset("auto1")
+autoFarmToggle = SecMain:AddToggle("AutoFarm", {
+    Title = "Auto Farm",
+    Description = "Auto equip rod + fishing (kombinasi)",
+    Default = false,
+    Callback = function(state)
+        setAutoFarm(state)
     end
-end)
+})
 
-autoPreset2Toggle = SecMain:NewToggle("Auto 2 (Auto Sisyphus)", "Enable core auto features with 0.5s stagger then teleport to Sisyphus State", function(state)
-    if state then
-        enablePreset("auto2", "Sisyphus State")
-    else
-        disablePreset("auto2")
+autoSellToggle = SecMain:AddToggle("AutoSell", {
+    Title = "Auto Sell",
+    Description = "Auto jual hasil",
+    Default = false,
+    Callback = function(state)
+        setSell(state)
     end
-end)
+})
+
+autoCatchToggle = SecMain:AddToggle("AutoCatch", {
+    Title = "Auto Catch",
+    Description = "Auto catch fish",
+    Default = false,
+    Callback = function(state)
+        setAutoCatch(state)
+    end
+})
+
+autoPreset1Toggle = SecMain:AddToggle("AutoPreset1", {
+    Title = "Auto 1 (Auto Crater)",
+    Description = "Enable core auto features with 0.5s stagger then teleport to Crater Island",
+    Default = false,
+    Callback = function(state)
+        if state then
+            enablePreset("auto1", "Crater Island")
+        else
+            disablePreset("auto1")
+        end
+    end
+})
+
+autoPreset2Toggle = SecMain:AddToggle("AutoPreset2", {
+    Title = "Auto 2 (Auto Sisyphus)",
+    Description = "Enable core auto features with 0.5s stagger then teleport to Sisyphus State",
+    Default = false,
+    Callback = function(state)
+        if state then
+            enablePreset("auto2", "Sisyphus State")
+        else
+            disablePreset("auto2")
+        end
+    end
+})
+
+autoPreset3Toggle = SecMain:AddToggle("AutoPreset3", {
+    Title = "Auto 3 (Auto Kohana)",
+    Description = "Enable core auto features with 5s delay then teleport to Kohana Volcano",
+    Default = false,
+    Callback = function(state)
+        if state then
+            enablePreset("auto3", "Kohana Volcano")
+        else
+            disablePreset("auto3")
+        end
+    end
+})
 
 -- Other features
-SecOther:NewToggle("Auto Upgrade Rod", "Auto upgrade rod", function(state) 
-    setUpgrade(state) 
-end)
+SecOther:AddToggle("AutoUpgradeRod", {
+    Title = "Auto Upgrade Rod",
+    Description = "Auto upgrade rod",
+    Default = false,
+    Callback = function(state)
+        setUpgrade(state)
+    end
+})
 
-SecOther:NewToggle("Auto Upgrade Bait", "Auto upgrade bait", function(state) 
-    setUpgradeBait(state) 
-end)
+SecOther:AddToggle("AutoUpgradeBait", {
+    Title = "Auto Upgrade Bait",
+    Description = "Auto upgrade bait",
+    Default = false,
+    Callback = function(state)
+        setUpgradeBait(state)
+    end
+})
 
-autoWeatherToggle = SecOther:NewToggle("Auto Weather", "Auto weather events", function(state) 
-    setAutoWeather(state) 
-end)
+autoWeatherToggle = SecOther:AddToggle("AutoWeather", {
+    Title = "Auto Weather",
+    Description = "Auto weather events",
+    Default = false,
+    Callback = function(state)
+        setAutoWeather(state)
+    end
+})
 
 -- ====== DELAY SETTINGS ======
-SecDelays:NewSlider("Charge Rod Delay", "Delay setelah charge fishing rod (detik)", 10, 0.01, function(s)
-    chargeFishingDelay = s
-end)
+SecDelays:AddSlider("ChargeRodDelay", {
+    Title = "Charge Rod Delay",
+    Description = "Delay setelah charge fishing rod (detik)",
+    Default = 10,
+    Min = 0.01,
+    Max = 30,
+    Rounding = 2,
+    Callback = function(s)
+        chargeFishingDelay = s
+    end
+})
 
-SecDelays:NewSlider("Auto Fish Delay", "Delay loop utama auto fish (detik)", 20, 1, function(s)
-    autoFishMainDelay = s
-end)
+SecDelays:AddSlider("AutoFishDelay", {
+    Title = "Auto Fish Delay",
+    Description = "Delay loop utama auto fish (detik)",
+    Default = 20,
+    Min = 1,
+    Max = 60,
+    Rounding = 1,
+    Callback = function(s)
+        autoFishMainDelay = s
+    end
+})
 
-SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik)", 30, 1, function(s)
-    autoSellDelay = s
-end)
+SecDelays:AddSlider("AutoSellDelay", {
+    Title = "Auto Sell Delay",
+    Description = "Delay auto sell (detik)",
+    Default = 30,
+    Min = 1,
+    Max = 120,
+    Rounding = 1,
+    Callback = function(s)
+        autoSellDelay = s
+    end
+})
 
-SecDelays:NewSlider("Auto Catch Delay", "Delay auto catch (detik)", 10, 0.1, function(s)
-    autoCatchDelay = s
-end)
+SecDelays:AddSlider("AutoCatchDelay", {
+    Title = "Auto Catch Delay",
+    Description = "Delay auto catch (detik)",
+    Default = 10,
+    Min = 0.1,
+    Max = 30,
+    Rounding = 1,
+    Callback = function(s)
+        autoCatchDelay = s
+    end
+})
 
 -- Quick teleport locations
-local TabTeleport = Window:NewTab("Teleport")
-local SecTP = TabTeleport:NewSection("Quick Teleport")
+local TabTeleport = Window:AddTab({ Title = "Teleport", Icon = "navigation" })
+local SecTP = TabTeleport:AddSection("Quick Teleport")
 
 local tpNames = {}
 for _, loc in ipairs(teleportLocations) do table.insert(tpNames, loc.Name) end
 
-SecTP:NewDropdown("Pilih Lokasi", "Teleport instan ke lokasi", tpNames, function(chosen)
-    for _, location in ipairs(teleportLocations) do
-        if location.Name == chosen then
-            pcall(function()
-                local rootPart = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if rootPart then 
-                    rootPart.CFrame = location.CFrame 
-                    print("🚀 Teleported to: " .. chosen)
-                else
-                    warn("⚠ Character or HumanoidRootPart not found")
-                end
-            end)
-            break
+SecTP:AddDropdown("TeleportLocation", {
+    Title = "Pilih Lokasi",
+    Description = "Teleport instan ke lokasi",
+    Values = tpNames,
+    Multi = false,
+    Default = 1,
+    Callback = function(chosen)
+        for _, location in ipairs(teleportLocations) do
+            if location.Name == chosen then
+                pcall(function()
+                    local rootPart = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if rootPart then
+                        rootPart.CFrame = location.CFrame
+                        print("🚀 Teleported to: " .. chosen)
+                    else
+                        warn("⚠ Character or HumanoidRootPart not found")
+                    end
+                end)
+                break
+            end
         end
     end
-end)
+})
 
 -- ====== Shop TAB ======
-local TabShop = Window:NewTab("Shop")
-local SecShop = TabShop:NewSection("Fishing Rods")
-local SecBait = TabShop:NewSection("Bait")
+local TabShop = Window:AddTab({ Title = "Shop", Icon = "shopping-cart" })
+local SecShop = TabShop:AddSection("Fishing Rods")
+local SecBait = TabShop:AddSection("Bait")
 
-SecShop:NewButton("Luck Rod - 300", "Purchase Luck Rod", function()
-    buyRod(rodDatabase.luck)
-end)
+SecShop:AddButton({
+    Title = "Luck Rod - 300",
+    Description = "Purchase Luck Rod",
+    Callback = function()
+        buyRod(rodDatabase.luck)
+    end
+})
 
-SecShop:NewButton("Carbon Rod - 900", "Purchase Carbon Rod", function()
-    buyRod(rodDatabase.carbon)
-end)
+SecShop:AddButton({
+    Title = "Carbon Rod - 900",
+    Description = "Purchase Carbon Rod",
+    Callback = function()
+        buyRod(rodDatabase.carbon)
+    end
+})
 
-SecShop:NewButton("Grass Rod - 1500", "Purchase Grass Rod", function()
-    buyRod(rodDatabase.grass)
-end)
+SecShop:AddButton({
+    Title = "Grass Rod - 1500",
+    Description = "Purchase Grass Rod",
+    Callback = function()
+        buyRod(rodDatabase.grass)
+    end
+})
 
-SecShop:NewButton("Demascus Rod - 3000", "Purchase Demascus Rod", function()
-    buyRod(rodDatabase.demascus)
-end)
+SecShop:AddButton({
+    Title = "Demascus Rod - 3000",
+    Description = "Purchase Demascus Rod",
+    Callback = function()
+        buyRod(rodDatabase.demascus)
+    end
+})
 
-SecShop:NewButton("Ice Rod - 5000", "Purchase Ice Rod", function()
-    buyRod(rodDatabase.ice)
-end)
+SecShop:AddButton({
+    Title = "Ice Rod - 5000",
+    Description = "Purchase Ice Rod",
+    Callback = function()
+        buyRod(rodDatabase.ice)
+    end
+})
 
-SecShop:NewButton("Lucky Rod - 15k", "Purchase Lucky Rod", function()
-    buyRod(rodDatabase.lucky)
-end)
+SecShop:AddButton({
+    Title = "Lucky Rod - 15k",
+    Description = "Purchase Lucky Rod",
+    Callback = function()
+        buyRod(rodDatabase.lucky)
+    end
+})
 
-SecShop:NewButton("Midnight Rod - 50k", "Purchase Midnight Rod", function()
-    buyRod(rodDatabase.midnight)
-end)
+SecShop:AddButton({
+    Title = "Midnight Rod - 50k",
+    Description = "Purchase Midnight Rod",
+    Callback = function()
+        buyRod(rodDatabase.midnight)
+    end
+})
 
-SecShop:NewButton("Steampunk Rod - 215k", "Purchase Steampunk Rod", function()
-    buyRod(rodDatabase.steampunk)
-end)
+SecShop:AddButton({
+    Title = "Steampunk Rod - 215k",
+    Description = "Purchase Steampunk Rod",
+    Callback = function()
+        buyRod(rodDatabase.steampunk)
+    end
+})
 
-SecShop:NewButton("Chrome Rod - 437k", "Purchase Chrome Rod", function()
-    buyRod(rodDatabase.chrome)
-end)
+SecShop:AddButton({
+    Title = "Chrome Rod - 437k",
+    Description = "Purchase Chrome Rod",
+    Callback = function()
+        buyRod(rodDatabase.chrome)
+    end
+})
 
-SecShop:NewButton("Astral Rod - 1m", "Purchase Astral Rod", function()
-    buyRod(rodDatabase.astral)
-end)
+SecShop:AddButton({
+    Title = "Astral Rod - 1m",
+    Description = "Purchase Astral Rod",
+    Callback = function()
+        buyRod(rodDatabase.astral)
+    end
+})
 
 --------- BAIT SHOP
-SecBait:NewButton("TopWater Bait", "Buy Bait", function()
-    buyBait(BaitDatabase.topwaterbait)
-end)
-SecBait:NewButton("Luck Bait 1k", "Buy Bait", function()
-    buyBait(BaitDatabase.luckbait)
-end)
-SecBait:NewButton("Midnight Bait 3k", "Buy Bait", function()
-    buyBait(BaitDatabase.midnightbait)
-end)
-SecBait:NewButton("Chroma Bait 290k", "Buy Bait", function()
-    buyBait(BaitDatabase.chromabait)
-end)
-SecBait:NewButton("DarkMatter Bait 630k", "Buy Bait", function()
-    buyBait(BaitDatabase.darkmatterbait)
-end)
-SecBait:NewButton("Corrupt Bait 1.15m", "Buy Bait", function()
-    buyBait(BaitDatabase.corruptbait)
-end)
-SecBait:NewButton("Aether Bait 3.7m", "Buy Bait", function()
-    buyBait(BaitDatabase.aetherbait)
-end)
+SecBait:AddButton({
+    Title = "TopWater Bait",
+    Description = "Buy Bait",
+    Callback = function()
+        buyBait(BaitDatabase.topwaterbait)
+    end
+})
+SecBait:AddButton({
+    Title = "Luck Bait 1k",
+    Description = "Buy Bait",
+    Callback = function()
+        buyBait(BaitDatabase.luckbait)
+    end
+})
+SecBait:AddButton({
+    Title = "Midnight Bait 3k",
+    Description = "Buy Bait",
+    Callback = function()
+        buyBait(BaitDatabase.midnightbait)
+    end
+})
+SecBait:AddButton({
+    Title = "Chroma Bait 290k",
+    Description = "Buy Bait",
+    Callback = function()
+        buyBait(BaitDatabase.chromabait)
+    end
+})
+SecBait:AddButton({
+    Title = "DarkMatter Bait 630k",
+    Description = "Buy Bait",
+    Callback = function()
+        buyBait(BaitDatabase.darkmatterbait)
+    end
+})
+SecBait:AddButton({
+    Title = "Corrupt Bait 1.15m",
+    Description = "Buy Bait",
+    Callback = function()
+        buyBait(BaitDatabase.corruptbait)
+    end
+})
+SecBait:AddButton({
+    Title = "Aether Bait 3.7m",
+    Description = "Buy Bait",
+    Callback = function()
+        buyBait(BaitDatabase.aetherbait)
+    end
+})
 
 -- Add this in SecOther section after Auto Weather toggle
-autoMegalodonToggle = SecOther:NewToggle("Auto Megalodon Hunt", "Auto teleport to Megalodon events", function(state) 
-    setAutoMegalodon(state) 
-end)
+autoMegalodonToggle = SecOther:AddToggle("AutoMegalodon", {
+    Title = "Auto Megalodon Hunt",
+    Description = "Auto teleport to Megalodon events",
+    Default = false,
+    Callback = function(state)
+        setAutoMegalodon(state)
+    end
+})
 
 local function applyLoadedConfig()
     if config.activePreset == "none" then
         isApplyingConfig = true
 
         if config.autoFarm and autoFarmToggle then
-            autoFarmToggle:UpdateToggle(nil, true)
+            autoFarmToggle:SetValue(true)
         end
         if config.autoSell and autoSellToggle then
-            autoSellToggle:UpdateToggle(nil, true)
+            autoSellToggle:SetValue(true)
         end
         if config.autoCatch and autoCatchToggle then
-            autoCatchToggle:UpdateToggle(nil, true)
+            autoCatchToggle:SetValue(true)
         end
         if config.autoWeather and autoWeatherToggle then
-            autoWeatherToggle:UpdateToggle(nil, true)
+            autoWeatherToggle:SetValue(true)
         end
         if config.autoMegalodon and autoMegalodonToggle then
-            autoMegalodonToggle:UpdateToggle(nil, true)
+            autoMegalodonToggle:SetValue(true)
+        end
+        if config.gpuSaver then
+            enableGPUSaver()
+        end
+        if config.gpuSaver and gpuSaverToggle then
+            gpuSaverToggle:SetValue(true)
         end
 
         isApplyingConfig = false
@@ -1812,11 +2261,146 @@ local function applyLoadedConfig()
     end
 
     if config.activePreset == "auto1" and autoPreset1Toggle then
-        autoPreset1Toggle:UpdateToggle(nil, true)
+        autoPreset1Toggle:SetValue(true)
     elseif config.activePreset == "auto2" and autoPreset2Toggle then
-        autoPreset2Toggle:UpdateToggle(nil, true)
+        autoPreset2Toggle:SetValue(true)
+    elseif config.activePreset == "auto3" and autoPreset3Toggle then
+        autoPreset3Toggle:SetValue(true)
     end
 end
+
+-- ====== PERFORMANCE TAB ======
+local TabPerformance = Window:AddTab({ Title = "Performance", Icon = "zap" })
+local SecGPU = TabPerformance:AddSection("GPU Saver Mode")
+
+gpuSaverToggle = SecGPU:AddToggle("GPUSaver", {
+    Title = "GPU Saver Mode",
+    Description = "Enable white screen to save GPU/battery",
+    Default = false,
+    Callback = function(state)
+        if state then
+            enableGPUSaver()
+        else
+            disableGPUSaver()
+        end
+        updateConfigField("gpuSaver", state)
+    end
+})
+
+SecGPU:AddKeybind("GPUSaverKeybind", {
+    Title = "GPU Saver Hotkey",
+    Description = "Quick toggle GPU saver",
+    Default = "RightControl",
+    Callback = function()
+        if gpuSaverEnabled then
+            disableGPUSaver()
+        else
+            enableGPUSaver()
+        end
+    end
+})
+
+SecGPU:AddButton({
+    Title = "Force Remove White Screen",
+    Description = "Emergency remove if stuck",
+    Callback = function()
+        removeWhiteScreen()
+        gpuSaverEnabled = false
+    end
+})
+
+-- ====== ADVANCED MODULES TAB ======
+local TabModules = Window:AddTab({ Title = "Advanced Modules", Icon = "puzzle" })
+local SecInventoryMgr = TabModules:AddSection("Background Inventory Manager")
+local SecWebMonitor = TabModules:AddSection("Web Monitor")
+
+-- Background Inventory Controls
+SecInventoryMgr:AddButton({
+    Title = "Start Background Inventory",
+    Description = "Keep inventory tiles loaded in background",
+    Callback = function()
+        backgroundInventoryModule.startBackgroundInventory()
+    end
+})
+
+SecInventoryMgr:AddButton({
+    Title = "Stop Background Inventory",
+    Description = "Stop background inventory system",
+    Callback = function()
+        backgroundInventoryModule.stopBackgroundInventory()
+    end
+})
+
+SecInventoryMgr:AddButton({
+    Title = "Check Tiles Status",
+    Description = "Check if inventory tiles are accessible",
+    Callback = function()
+        if _G.checkTilesAccessible then
+            local accessible, status = _G.checkTilesAccessible()
+            print("🔍 Tiles Status:", accessible and "✅ ACCESSIBLE" or "❌ NOT ACCESSIBLE")
+            print("📊 Details:", status)
+        else
+            print("❌ Background inventory not loaded")
+        end
+    end
+})
+
+-- Web Monitor Controls
+SecWebMonitor:AddButton({
+    Title = "Start Web Monitor",
+    Description = "Begin sending data to web dashboard",
+    Callback = function()
+        if _G.WebMonitor then
+            local instance = _G.WebMonitor.startMonitoring()
+            _G.WebMonitorInstance = instance
+            print("✅ Web Monitor started!")
+        else
+            print("❌ Web Monitor not loaded")
+        end
+    end
+})
+
+SecWebMonitor:AddButton({
+    Title = "Stop Web Monitor",
+    Description = "Stop web monitoring",
+    Callback = function()
+        if _G.WebMonitorInstance and _G.WebMonitorInstance.stop then
+            _G.WebMonitorInstance.stop()
+            print("🛑 Web Monitor stopped!")
+        else
+            print("❌ Web Monitor not running")
+        end
+    end
+})
+
+SecWebMonitor:AddButton({
+    Title = "Send Update Now",
+    Description = "Force send data to web dashboard",
+    Callback = function()
+        if _G.WebMonitorInstance and _G.WebMonitorInstance.sendUpdate then
+            local success = _G.WebMonitorInstance.sendUpdate()
+            print(success and "✅ Data sent successfully!" or "❌ Failed to send data")
+        else
+            print("❌ Web Monitor not running")
+        end
+    end
+})
+
+SecWebMonitor:AddButton({
+    Title = "Check Web Monitor Status",
+    Description = "Show web monitor status",
+    Callback = function()
+        if _G.WebMonitorInstance and _G.WebMonitorInstance.getStatus then
+            local status = _G.WebMonitorInstance.getStatus()
+            print("🌐 Web Monitor Status:")
+            print("  Running:", status.running and "✅ YES" or "❌ NO")
+            print("  Server URL:", status.serverUrl)
+            print("  Last Update:", os.date("%H:%M:%S", status.lastUpdate))
+        else
+            print("❌ Web Monitor not running")
+        end
+    end
+})
 
 task.defer(applyLoadedConfig)
 
@@ -1825,12 +2409,13 @@ task.defer(applyLoadedConfig)
 local TabPerformance = Window:NewTab("Performance")
 local SecGPU = TabPerformance:NewSection("GPU Saver Mode")
 
-SecGPU:NewToggle("GPU Saver Mode", "Enable white screen to save GPU/battery", function(state)
+gpuSaverToggle = SecGPU:NewToggle("GPU Saver Mode", "Enable white screen to save GPU/battery", function(state)
     if state then
         enableGPUSaver()
     else
         disableGPUSaver()
     end
+    updateConfigField("gpuSaver", state)
 end)
 
 SecGPU:NewKeybind("GPU Saver Hotkey", "Quick toggle GPU saver", Enum.KeyCode.RightControl, function()
@@ -1848,9 +2433,74 @@ end)
 
 
 
+-- ====== ADVANCED MODULES TAB ======
+local TabModules = Window:NewTab("Advanced Modules")
+local SecInventoryMgr = TabModules:NewSection("Background Inventory Manager")
+local SecWebMonitor = TabModules:NewSection("Web Monitor")
+
+-- Background Inventory Controls
+SecInventoryMgr:NewButton("Start Background Inventory", "Keep inventory tiles loaded in background", function()
+    backgroundInventoryModule.startBackgroundInventory()
+end)
+
+SecInventoryMgr:NewButton("Stop Background Inventory", "Stop background inventory system", function()
+    backgroundInventoryModule.stopBackgroundInventory()
+end)
+
+SecInventoryMgr:NewButton("Check Tiles Status", "Check if inventory tiles are accessible", function()
+    if _G.checkTilesAccessible then
+        local accessible, status = _G.checkTilesAccessible()
+        print("🔍 Tiles Status:", accessible and "✅ ACCESSIBLE" or "❌ NOT ACCESSIBLE")
+        print("📊 Details:", status)
+    else
+        print("❌ Background inventory not loaded")
+    end
+end)
+
+-- Web Monitor Controls
+SecWebMonitor:NewButton("Start Web Monitor", "Begin sending data to web dashboard", function()
+    if _G.WebMonitor then
+        local instance = _G.WebMonitor.startMonitoring()
+        _G.WebMonitorInstance = instance
+        print("✅ Web Monitor started!")
+    else
+        print("❌ Web Monitor not loaded")
+    end
+end)
+
+SecWebMonitor:NewButton("Stop Web Monitor", "Stop web monitoring", function()
+    if _G.WebMonitorInstance and _G.WebMonitorInstance.stop then
+        _G.WebMonitorInstance.stop()
+        print("🛑 Web Monitor stopped!")
+    else
+        print("❌ Web Monitor not running")
+    end
+end)
+
+SecWebMonitor:NewButton("Send Update Now", "Force send data to web dashboard", function()
+    if _G.WebMonitorInstance and _G.WebMonitorInstance.sendUpdate then
+        local success = _G.WebMonitorInstance.sendUpdate()
+        print(success and "✅ Data sent successfully!" or "❌ Failed to send data")
+    else
+        print("❌ Web Monitor not running")
+    end
+end)
+
+SecWebMonitor:NewButton("Check Web Monitor Status", "Show web monitor status", function()
+    if _G.WebMonitorInstance and _G.WebMonitorInstance.getStatus then
+        local status = _G.WebMonitorInstance.getStatus()
+        print("🌐 Web Monitor Status:")
+        print("  Running:", status.running and "✅ YES" or "❌ NO")
+        print("  Server URL:", status.serverUrl)
+        print("  Last Update:", os.date("%H:%M:%S", status.lastUpdate))
+    else
+        print("❌ Web Monitor not running")
+    end
+end)
+
 -- ====== UI CONTROLS ======
-local TabUI = Window:NewTab("UI Controls")
-local SecUI = TabUI:NewSection("Interface Controls")
+local TabUI = Window:AddTab({ Title = "UI Controls", Icon = "settings" })
+local SecUI = TabUI:AddSection("Interface Controls")
 
 -- ====== MINIMIZE SYSTEM ======
 local CoreGui = game:GetService("CoreGui")
@@ -1945,7 +2595,7 @@ local function minimizeUI()
     if not isMinimized then
         isMinimized = true
         if MiniBtn then MiniBtn.Visible = true end
-        Library:ToggleUI()
+        Window:Minimize()
     end
 end
 
@@ -1953,25 +2603,63 @@ local function restoreUI()
     if isMinimized then
         isMinimized = false
         if MiniBtn then MiniBtn.Visible = false end
-        Library:ToggleUI()
+        Window:Minimize()
     end
 end
 
 MiniBtn.MouseButton1Click:Connect(restoreUI)
 
-SecUI:NewKeybind("Minimize/Restore (RightShift)", "Toggle UI cepat", Enum.KeyCode.RightShift, function()
-    if isMinimized then restoreUI() else minimizeUI() end
-end)
+SecUI:AddKeybind("MinimizeKeybind", {
+    Title = "Minimize/Restore",
+    Description = "Toggle UI cepat",
+    Default = "RightShift",
+    Callback = function()
+        if isMinimized then restoreUI() else minimizeUI() end
+    end
+})
 
-SecUI:NewButton("Minimize UI", "Hide the interface", function()
-    minimizeUI()
-end)
+SecUI:AddButton({
+    Title = "Minimize UI",
+    Description = "Hide the interface",
+    Callback = function()
+        minimizeUI()
+    end
+})
+
+-- Add Textbox examples to demonstrate textbox support
+SecUI:AddInput("CustomDelay", {
+    Title = "Custom Delay (seconds)",
+    Description = "Set a custom delay value",
+    Default = "5",
+    Numeric = true,
+    Finished = true,
+    Callback = function(value)
+        local delay = tonumber(value)
+        if delay and delay > 0 then
+            print("🔢 Custom delay set to:", delay, "seconds")
+        else
+            print("❌ Invalid delay value")
+        end
+    end
+})
+
+SecUI:AddInput("PlayerName", {
+    Title = "Target Player Name",
+    Description = "Enter a player name for targeting",
+    Default = "",
+    Placeholder = "Enter player name...",
+    Callback = function(value)
+        if value and value ~= "" then
+            print("🎯 Target player set to:", value)
+        end
+    end
+})
 
 -- Custom minimize button
 task.spawn(function()
     task.wait(2) -- Wait longer for UI to fully load
     
-    local possibleNames = {"Kavo UI", "KavoLibrary", "UI", "MainUI"}
+    local possibleNames = {"Fluent", "FluentUI", "UI", "MainUI"}
     local kavoGui = nil
     
     for _, name in pairs(possibleNames) do
@@ -1992,7 +2680,7 @@ task.spawn(function()
     end
     
     if not kavoGui then
-        warn("❌ Kavo GUI tidak ditemukan untuk minimize button")
+        warn("❌ Fluent GUI tidak ditemukan untuk minimize button")
         return
     end
     
@@ -2225,7 +2913,7 @@ task.spawn(function()
                 end
             end
         end
-        task.wait(8) -- Check every 8 seconds
+        task.wait(12) -- Check every 12 seconds
     end
 end)
 
@@ -2240,7 +2928,7 @@ end)
 local WHITELIST = {"Robot Kraken", "Giant Squid", "Thin Armor Shark", "Frostborn Shark", "Plasma Shark", "Eerie Shark", "Scare", "Ghost Shark", "Blob Shark", "Megalodon", "Lochness Monster"}
 
 local SCAN_WAIT    = 3     -- detik tunggu setelah buka agar tile render
-local COOLDOWN     = 10    -- detik jeda antar loop
+local COOLDOWN     = 15    -- detik jeda antar loop
 local OPEN_TIMEOUT = 6     -- detik max tunggu container/tile
 local SEND_ONLY_ON_CHANGES = true -- true: kirim hanya jika ada kenaikan
 local DEBUG = false
@@ -2579,11 +3267,559 @@ print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
 
 
 
--- ============ LOOP ============
+-- ========== INTEGRATED MODULES ==========
+
+-- ====== ENHANCED BACKGROUND INVENTORY KEEPER ======
+-- Integrated from inventory.lua for better inventory access
+local backgroundInventoryModule = {}
+
+do
+    local LocalPlayer = Players.LocalPlayer
+    local isBackgroundInventoryActive = false
+    local inventoryController = nil
+    local backgroundConnection = nil
+    local originalInventoryState = {}
+    local inventoryGUI = nil
+    local userControlledState = { enabled = nil, visible = nil }
+    local suppressStateSync = false
+    local visibilityConnection = nil
+    local enabledConnection = nil
+    local originalControllerMethods = {}
+    local isReloadingTiles = false
+    local lastUserAction = 0
+    local userActionCooldown = 1
+
+    -- Performance settings
+    local MAIN_LOOP_INTERVAL = 20
+    local PROXY_UPDATE_INTERVAL = 10
+    local INIT_DELAY = 3
+
+    -- Manage user-controlled GUI visibility
+    local function disconnectStateTracking()
+        if visibilityConnection then
+            visibilityConnection:Disconnect()
+            visibilityConnection = nil
+        end
+        if enabledConnection then
+            enabledConnection:Disconnect()
+            enabledConnection = nil
+        end
+    end
+
+    local function startUserStateTracking()
+        if not inventoryGUI then return end
+        local main = inventoryGUI:FindFirstChild("Main")
+        if not main then return end
+
+        disconnectStateTracking()
+        userControlledState.enabled = inventoryGUI.Enabled
+        userControlledState.visible = main.Visible
+
+        visibilityConnection = main:GetPropertyChangedSignal("Visible"):Connect(function()
+            if suppressStateSync then return end
+            lastUserAction = tick()
+            userControlledState.visible = main.Visible
+        end)
+
+        enabledConnection = inventoryGUI:GetPropertyChangedSignal("Enabled"):Connect(function()
+            if suppressStateSync then return end
+            lastUserAction = tick()
+            userControlledState.enabled = inventoryGUI.Enabled
+        end)
+    end
+
+    local function applyUserState()
+        if not inventoryGUI then return end
+        local main = inventoryGUI:FindFirstChild("Main")
+        if not main then return end
+
+        if tick() - lastUserAction < userActionCooldown then return end
+
+        suppressStateSync = true
+        if userControlledState.enabled ~= nil then
+            inventoryGUI.Enabled = userControlledState.enabled
+        end
+        if userControlledState.visible ~= nil then
+            main.Visible = userControlledState.visible
+        end
+        suppressStateSync = false
+    end
+
+    local function isInventoryUnderUserControl()
+        if not inventoryGUI then return false end
+        local main = inventoryGUI:FindFirstChild("Main")
+        if not main then return false end
+
+        if main.Visible and inventoryGUI.Enabled then
+            if userControlledState.visible == true and userControlledState.enabled == true then
+                return true
+            end
+            if tick() - lastUserAction < MAIN_LOOP_INTERVAL + 5 then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function withTemporaryInventoryOpen(callback)
+        if not inventoryGUI then return false, "No inventory GUI" end
+        local main = inventoryGUI:FindFirstChild("Main")
+        if not main then return false, "Inventory main frame missing" end
+
+        if isInventoryUnderUserControl() then
+            return false, "User has control of inventory"
+        end
+
+        if tick() - lastUserAction < userActionCooldown then
+            return false, "User action in progress"
+        end
+
+        suppressStateSync = true
+        local previousEnabled = inventoryGUI.Enabled
+        local previousVisible = main.Visible
+        local previousPosition
+
+        if main:IsA("GuiObject") then
+            previousPosition = main.Position
+            main.Position = UDim2.new(-5, 0, -5, 0)
+        end
+
+        inventoryGUI.Enabled = true
+        main.Visible = true
+
+        local ok, result = pcall(callback)
+
+        task.wait(0.1)
+        main.Visible = previousVisible
+        inventoryGUI.Enabled = previousEnabled
+
+        if previousPosition then
+            main.Position = previousPosition
+        end
+
+        suppressStateSync = false
+        task.wait(0.1)
+        if tick() - lastUserAction >= userActionCooldown then
+            applyUserState()
+        end
+
+        return ok, result
+    end
+
+    local function saveOriginalState()
+        local playerGui = LocalPlayer.PlayerGui
+        inventoryGUI = playerGui:FindFirstChild("Inventory")
+
+        if inventoryGUI then
+            originalInventoryState.enabled = inventoryGUI.Enabled
+            local main = inventoryGUI:FindFirstChild("Main")
+            if main then
+                originalInventoryState.visible = main.Visible
+            end
+            startUserStateTracking()
+            print("💾 Background Inventory: Original state saved")
+        end
+    end
+
+    local function getInventoryController()
+        if inventoryController then return inventoryController end
+
+        local success, result = pcall(function()
+            local controllers = ReplicatedStorage:WaitForChild("Controllers", 5)
+            local invModule = controllers:WaitForChild("InventoryController", 5)
+            return require(invModule)
+        end)
+
+        if success then
+            inventoryController = result
+            print("✅ Background Inventory: Controller loaded")
+            return inventoryController
+        else
+            warn("❌ Background Inventory: Failed to load controller:", result)
+            return nil
+        end
+    end
+
+    local function loadTilesInBackground()
+        if isReloadingTiles then return true end
+        local ctrl = getInventoryController()
+        if not ctrl then return false end
+
+        isReloadingTiles = true
+
+        local success, result = withTemporaryInventoryOpen(function()
+            if ctrl.SetPage then ctrl.SetPage(ctrl, "Items") end
+            if ctrl.SetCategory then ctrl.SetCategory(ctrl, "Fishes") end
+            if ctrl._bindFishes then ctrl._bindFishes(ctrl) end
+            if ctrl.DrawTiles then ctrl.DrawTiles() end
+            if ctrl.InventoryStateChanged then
+                ctrl.InventoryStateChanged:Fire("Fish")
+            end
+        end)
+
+        isReloadingTiles = false
+
+        if not success then
+            warn("Background Inventory: Failed to load tiles:", result)
+            return false
+        end
+
+        return true
+    end
+
+    local function hookInventoryController()
+        local ctrl = getInventoryController()
+        if not ctrl then return false end
+
+        local success, result = pcall(function()
+            if originalControllerMethods.controller ~= ctrl then
+                originalControllerMethods = {
+                    controller = ctrl,
+                    DestroyTiles = ctrl.DestroyTiles,
+                }
+            elseif not originalControllerMethods.DestroyTiles then
+                originalControllerMethods.DestroyTiles = ctrl.DestroyTiles
+            end
+
+            if originalControllerMethods.DestroyTiles and not originalControllerMethods.hooked then
+                ctrl.DestroyTiles = function(...)
+                    if isBackgroundInventoryActive then
+                        return
+                    end
+                    return originalControllerMethods.DestroyTiles(...)
+                end
+                originalControllerMethods.hooked = true
+            end
+        end)
+
+        if not success then
+            warn("Background Inventory: Failed to hook controller:", result)
+        else
+            print("✅ Background Inventory: Controller hooked")
+        end
+
+        return success
+    end
+
+    local function checkTilesAccessible()
+        if not inventoryGUI then return false, "No inventory GUI" end
+
+        local success, result = pcall(function()
+            local container = inventoryGUI.Main.Content.Pages.Inventory
+            local children = container:GetChildren()
+            local tileCount = 0
+
+            for _, child in pairs(children) do
+                if child.Name == "Tile" and child:IsA("GuiObject") then
+                    tileCount = tileCount + 1
+                end
+            end
+
+            return tileCount
+        end)
+
+        if success then
+            return result > 0, "Found " .. result .. " tiles"
+        else
+            return false, "Error accessing tiles: " .. tostring(result)
+        end
+    end
+
+    function backgroundInventoryModule.startBackgroundInventory()
+        if isBackgroundInventoryActive then
+            print("⚠️ Background inventory already active")
+            return
+        end
+
+        print("🚀 Starting background inventory system...")
+
+        task.wait(INIT_DELAY)
+        saveOriginalState()
+
+        isBackgroundInventoryActive = true
+
+        loadTilesInBackground()
+        task.wait(1)
+
+        hookInventoryController()
+
+        backgroundConnection = task.spawn(function()
+            while isBackgroundInventoryActive do
+                local tilesAccessible, status = checkTilesAccessible()
+                local userInControl = isInventoryUnderUserControl()
+
+                if userInControl then
+                    -- print("👤 User controlling inventory, standing by...")
+                elseif not tilesAccessible and tick() - lastUserAction > userActionCooldown * 2 then
+                    print("🔄 Background Inventory: Refreshing tiles... (" .. status .. ")")
+                    loadTilesInBackground()
+                else
+                    -- print("✅ Background Inventory: Tiles maintained (" .. status .. ")")
+                end
+
+                task.wait(MAIN_LOOP_INTERVAL)
+            end
+        end)
+
+        print("✅ Background inventory system started")
+    end
+
+    function backgroundInventoryModule.stopBackgroundInventory()
+        if not isBackgroundInventoryActive then return end
+
+        isBackgroundInventoryActive = false
+
+        if backgroundConnection then
+            task.cancel(backgroundConnection)
+            backgroundConnection = nil
+        end
+
+        applyUserState()
+        disconnectStateTracking()
+
+        pcall(function()
+            if inventoryGUI then
+                local pages = inventoryGUI.Main.Content.Pages
+                local proxy = pages:FindFirstChild("InventoryProxy")
+                if proxy then
+                    proxy:Destroy()
+                end
+            end
+        end)
+
+        if originalControllerMethods.controller then
+            local ctrl = originalControllerMethods.controller
+            if originalControllerMethods.hooked and originalControllerMethods.DestroyTiles then
+                ctrl.DestroyTiles = originalControllerMethods.DestroyTiles
+            end
+            originalControllerMethods = {}
+        end
+
+        print("✅ Background inventory system stopped")
+    end
+
+    -- Export functions
+    _G.startBackgroundInventory = backgroundInventoryModule.startBackgroundInventory
+    _G.stopBackgroundInventory = backgroundInventoryModule.stopBackgroundInventory
+end
+
+-- ====== WEB MONITOR CLIENT ======
+-- Integrated from roblox-client.lua for web dashboard integration
+local webMonitorModule = {}
+
+do
+    local HttpService = game:GetService("HttpService")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Configuration
+    local SERVER_URL = "https://faktacerdas.site"
+    local UPDATE_INTERVAL = 55
+
+    local function safeRequest(url, method, data)
+        local success, result = pcall(function()
+            local requestData = {
+                Url = url,
+                Method = method or "GET",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                }
+            }
+
+            if data then
+                requestData.Body = HttpService:JSONEncode(data)
+            end
+
+            -- Try different HTTP request methods based on executor
+            if syn and syn.request then
+                return syn.request(requestData)
+            elseif http_request then
+                return http_request(requestData)
+            elseif fluxus and fluxus.request then
+                return fluxus.request(requestData)
+            elseif request then
+                return request(requestData)
+            else
+                error("No HTTP request method available")
+            end
+        end)
+
+        if success then
+            return result
+        else
+            warn("[Web Monitor] HTTP Request failed: " .. tostring(result))
+            return nil
+        end
+    end
+
+    -- Get inventory items from the game
+    local function getInventoryItems()
+        local success, inventory = pcall(function()
+            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+            if not playerGui then return {} end
+
+            local inventoryGui = playerGui:FindFirstChild("Inventory")
+            if not inventoryGui then return {} end
+
+            local main = inventoryGui:FindFirstChild("Main")
+            if not main then return {} end
+
+            local content = main:FindFirstChild("Content")
+            if not content then return {} end
+
+            local pages = content:FindFirstChild("Pages")
+            if not pages then return {} end
+
+            local inventoryPage = pages:FindFirstChild("Inventory")
+            if not inventoryPage then return {} end
+
+            local items = {}
+            for _, child in pairs(inventoryPage:GetChildren()) do
+                if child.Name == "Tile" then
+                    local itemName = child:FindFirstChild("ItemName")
+                    if itemName and itemName.Text and itemName.Text ~= "" then
+                        table.insert(items, itemName.Text)
+                    end
+                end
+            end
+
+            return items
+        end)
+
+        return success and inventory or {}
+    end
+
+    -- Use existing functions from main script
+    local function collectPlayerData()
+        return {
+            inventory = getInventoryItems(),
+            fishCaught = getFishCaught(),
+            sessionFishCaught = sessionStats.totalFish,
+            coins = getCurrentCoins(),
+            level = getCurrentLevel(),
+            bestFish = getBestFish(),
+            timestamp = os.time()
+        }
+    end
+
+    local function sendDataToServer(data)
+        local username = LocalPlayer.Name
+        local url = SERVER_URL .. "/api/players/" .. username .. "/update"
+
+        local response = safeRequest(url, "POST", data)
+
+        if response and response.StatusCode == 200 then
+            print("[Web Monitor] Data sent successfully")
+            return true
+        else
+            warn("[Web Monitor] Failed to send data to server")
+            return false
+        end
+    end
+
+    local function sendPing()
+        local username = LocalPlayer.Name
+        local url = SERVER_URL .. "/api/players/" .. username .. "/ping"
+
+        local response = safeRequest(url, "POST", {})
+
+        if response and response.StatusCode == 200 then
+            return true
+        else
+            return false
+        end
+    end
+
+    function webMonitorModule.startMonitoring()
+        local lastUpdate = 0
+        local isRunning = true
+
+        print("[Web Monitor] Starting inventory monitoring...")
+        print("[Web Monitor] Server URL: " .. SERVER_URL)
+        print("[Web Monitor] Update interval: " .. UPDATE_INTERVAL .. " seconds")
+
+        -- Initial data send
+        task.spawn(function()
+            local data = collectPlayerData()
+            sendDataToServer(data)
+        end)
+
+        -- Main monitoring loop
+        task.spawn(function()
+            while isRunning do
+                local currentTime = tick()
+
+                -- Send data every UPDATE_INTERVAL seconds
+                if currentTime - lastUpdate >= UPDATE_INTERVAL then
+                    local data = collectPlayerData()
+                    local success = sendDataToServer(data)
+
+                    if success then
+                        lastUpdate = currentTime
+                    end
+                end
+
+                -- Send ping every 25 seconds
+                if math.fmod(math.floor(currentTime), 25) == 0 then
+                    sendPing()
+                end
+
+                task.wait(1)
+            end
+        end)
+
+        return {
+            stop = function()
+                isRunning = false
+                print("[Web Monitor] Monitoring stopped")
+            end,
+
+            sendUpdate = function()
+                local data = collectPlayerData()
+                return sendDataToServer(data)
+            end,
+
+            getStatus = function()
+                return {
+                    running = isRunning,
+                    lastUpdate = lastUpdate,
+                    serverUrl = SERVER_URL
+                }
+            end
+        }
+    end
+
+    -- Export to global scope
+    _G.WebMonitor = webMonitorModule
+end
+
+-- ====== INITIALIZATION OF INTEGRATED MODULES ======
+print("🔧 Initializing integrated modules...")
+
+-- Start background inventory system
+task.spawn(function()
+    task.wait(5) -- Wait for main script to stabilize
+    backgroundInventoryModule.startBackgroundInventory()
+end)
+
+-- Start web monitoring
+local webMonitorInstance
+task.spawn(function()
+    task.wait(8) -- Wait a bit longer for background inventory to be ready
+    webMonitorInstance = webMonitorModule.startMonitoring()
+    _G.WebMonitorInstance = webMonitorInstance
+end)
+
+print("✅ Integrated modules initialized!")
+print("📱 Web Monitor: https://faktacerdas.site")
+print("🎮 Background Inventory: Keeping tiles loaded")
+
+-- ============ ORIGINAL LOOP ============
 print("🚀 Inventory Whitelist Notifier (mutation-aware) start...")
 baselineNow()
 
-while true do
-    scanAndNotifySingle()
-    task.wait(COOLDOWN)
-end
+task.spawn(function()
+    while true do
+        scanAndNotifySingle()
+        task.wait(COOLDOWN)
+    end
+end)
