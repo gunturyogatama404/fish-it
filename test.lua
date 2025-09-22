@@ -240,15 +240,6 @@ end
 -- Auto-execute performance optimization on script start
 ultimatePerformance()
 
--- Optional FPS monitor
-task.spawn(function()
-    while task.wait(5) do
-        local fps = workspace:GetRealPhysicsFPS()
-        if fps then
-            print("📊 Current FPS: " .. math.floor(fps))
-        end
-    end
-end)
 
 local player = game.Players.LocalPlayer
 local replicatedStorage = game:GetService("ReplicatedStorage")
@@ -1038,36 +1029,11 @@ local function createWhiteScreen()
         disableGPUSaver()
     end)
     
-    -- FPS Counter (top right)
-    local fpsLabel = Instance.new("TextLabel")
-    fpsLabel.Size = UDim2.new(0, 200, 0, 50)
-    fpsLabel.Position = UDim2.new(1, -220, 0, 20)
-    fpsLabel.BackgroundTransparency = 1
-    fpsLabel.Text = "FPS: Calculating..."
-    fpsLabel.TextColor3 = Color3.new(0, 1, 0)
-    fpsLabel.TextSize = 18
-    fpsLabel.Font = Enum.Font.SourceSansBold
-    fpsLabel.TextXAlignment = Enum.TextXAlignment.Right
-    fpsLabel.Parent = frame
     
--- ====== IMPROVED UPDATE SYSTEM ======
+-- ====== OPTIMIZED UPDATE SYSTEM ======
     task.spawn(function()
-        local lastUpdate = tick()
-        local frameCount = 0
-        
-        connections.fpsConnection = RunService.RenderStepped:Connect(function()
-            frameCount = frameCount + 1
-            local currentTime = tick()
-            
-            if currentTime - lastUpdate >= 1 then
-                local fps = frameCount / (currentTime - lastUpdate)
-                
-                -- Safe FPS update
-                pcall(function()
-                    if fpsLabel and fpsLabel.Parent then
-                        fpsLabel.Text = string.format("FPS: %.0f", math.floor(fps))
-                    end
-                end)
+        while whiteScreenGui and whiteScreenGui.Parent do
+            task.wait(2) -- Update every 2 seconds instead of every frame
                 
                 -- Safe session time update
                 pcall(function()
@@ -1163,10 +1129,7 @@ local function createWhiteScreen()
                     end
                 end)
                 
-                frameCount = 0
-                lastUpdate = currentTime
-            end
-        end)
+        end
     end)
     
     -- Real-time listeners for Total Caught and Best Caught
@@ -1197,10 +1160,6 @@ local function removeWhiteScreen()
         whiteScreenGui = nil
     end
     
-    if connections.fpsConnection then
-        connections.fpsConnection:Disconnect()
-        connections.fpsConnection = nil
-    end
     
     if connections.caughtConnection then
         connections.caughtConnection:Disconnect()
@@ -1236,7 +1195,6 @@ function enableGPUSaver()
             end
         end
         
-        setfpscap(5)
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
