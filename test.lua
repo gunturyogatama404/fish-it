@@ -240,15 +240,7 @@ end
 -- Auto-execute performance optimization on script start
 ultimatePerformance()
 
--- Optional FPS monitor
-task.spawn(function()
-    while task.wait(5) do
-        local fps = workspace:GetRealPhysicsFPS()
-        if fps then
-            print("📊 Current FPS: " .. math.floor(fps))
-        end
-    end
-end)
+-- Optional FPS monitor has been removed.
 
 local player = game.Players.LocalPlayer
 local replicatedStorage = game:GetService("ReplicatedStorage")
@@ -1043,135 +1035,84 @@ local function createWhiteScreen()
         disableGPUSaver()
     end)
     
-    -- FPS Counter (top right)
-    local fpsLabel = Instance.new("TextLabel")
-    fpsLabel.Size = UDim2.new(0, 200, 0, 50)
-    fpsLabel.Position = UDim2.new(1, -220, 0, 20)
-    fpsLabel.BackgroundTransparency = 1
-    fpsLabel.Text = "FPS: Calculating..."
-    fpsLabel.TextColor3 = Color3.new(0, 1, 0)
-    fpsLabel.TextSize = 18
-    fpsLabel.Font = Enum.Font.SourceSansBold
-    fpsLabel.TextXAlignment = Enum.TextXAlignment.Right
-    fpsLabel.Parent = frame
+
     
 -- ====== IMPROVED UPDATE SYSTEM ======
     task.spawn(function()
-        local lastUpdate = tick()
-        local frameCount = 0
-        
-        connections.fpsConnection = RunService.RenderStepped:Connect(function()
-            frameCount = frameCount + 1
-            local currentTime = tick()
+        while whiteScreenGui and whiteScreenGui.Parent do
+            -- Safe session time update
+            pcall(function()
+                if sessionLabel and sessionLabel.Parent then
+                    local currentUptime = math.max(0, os.time() - startTime)
+                    sessionLabel.Text = "⏱️ Uptime: " .. FormatTime(currentUptime)
+                end
+            end)
             
-            if currentTime - lastUpdate >= 1 then
-                local fps = frameCount / (currentTime - lastUpdate)
-                
-                -- Safe FPS update
-                pcall(function()
-                    if fpsLabel and fpsLabel.Parent then
-                        fpsLabel.Text = string.format("FPS: %.0f", math.floor(fps))
-                    end
-                end)
-                
-                -- Safe session time update
-                pcall(function()
-                    if sessionLabel and sessionLabel.Parent then
-                        local currentUptime = math.max(0, os.time() - startTime)
-                        sessionLabel.Text = "⏱️ Uptime: " .. FormatTime(currentUptime)
-                    end
-                end)
-                
-                -- Safe fishing stats update
-                pcall(function()
-                    if fishStatsLabel and fishStatsLabel.Parent then
-                        local fishCount = math.max(0, sessionStats.totalFish)
-                        fishStatsLabel.Text = "🎣 Fish Caught: " .. FormatNumber(fishCount)
-                    end
-                end)
-                
-                -- Safe earnings update
-                pcall(function()
-                    if coinLabel and coinLabel.Parent then
-                        coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
-                    end
-                end)
+            -- Safe fishing stats update
+            pcall(function()
+                if fishStatsLabel and fishStatsLabel.Parent then
+                    local fishCount = math.max(0, sessionStats.totalFish)
+                    fishStatsLabel.Text = "🎣 Fish Caught: " .. FormatNumber(fishCount)
+                end
+            end)
+            
+            -- Safe earnings update
+            pcall(function()
+                if coinLabel and coinLabel.Parent then
+                    coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
+                end
+            end)
 
-                -- Safe earnings update
-                pcall(function()
-                    if levelLabel and levelLabel.Parent then
-                        levelLabel.Text = "⭐ " .. getCurrentLevel()
-                    end
-                end)
+            -- Safe level update
+            pcall(function()
+                if levelLabel and levelLabel.Parent then
+                    levelLabel.Text = "⭐ " .. getCurrentLevel()
+                end
+            end)
 
-                -- Safe quest
-                pcall(function()
-                    if quest1Label and quest1Label.Parent then
-                        quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1")
-                    end
-                end)
-
-                pcall(function()
-                    if quest2Label and quest2Label.Parent then
-                        quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2")
-                    end
-                end)
-                
-                pcall(function()
-                    if quest3Label and quest3Label.Parent then
-                        quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3")
-                    end
-                end)
-
-                pcall(function()
-                    if quest4Label and quest4Label.Parent then
-                        quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4")
-                    end
-                end)
-                
-                -- Safe status update
-                pcall(function()
-                    if statusLabel and statusLabel.Parent then
-                        statusLabel.Text = "🤖 Auto Farm: " .. (isAutoFarmOn and "🟢 ON" or "🔴 OFF") .. 
-                                         "  |  Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
-                                         "  |  Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF") ..
-                                         "\nAuto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
-                                         "  |  Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
-                    end
-                end)
-                
-                -- Safe Total Caught & Best Caught update
-                pcall(function()
-                    if titleLabel and titleLabel.Parent then
-                        local currentCaught = 0
-                        local currentBest = "None"
-                        
-                        if LocalPlayer.leaderstats then
-                            if LocalPlayer.leaderstats.Caught then
-                                currentCaught = tonumber(LocalPlayer.leaderstats.Caught.Value) or 0
-                            end
-                            if LocalPlayer.leaderstats["Rarest Fish"] then
-                                currentBest = tostring(LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
-                            end
+            -- Safe quest updates
+            pcall(function()
+                if quest1Label and quest1Label.Parent then quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1") end
+                if quest2Label and quest2Label.Parent then quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2") end
+                if quest3Label and quest3Label.Parent then quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3") end
+                if quest4Label and quest4Label.Parent then quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4") end
+            end)
+            
+            -- Safe status update
+            pcall(function()
+                if statusLabel and statusLabel.Parent then
+                    statusLabel.Text = "🤖 Auto Farm: " .. (isAutoFarmOn and "🟢 ON" or "🔴 OFF") .. 
+                                     "  |  Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
+                                     "  |  Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF") ..
+                                     "\nAuto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
+                                     "  |  Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
+                end
+            end)
+            
+            -- Safe Total Caught & Best Caught update
+            pcall(function()
+                if titleLabel and titleLabel.Parent then
+                    local currentCaught = 0
+                    local currentBest = "None"
+                    
+                    if LocalPlayer.leaderstats then
+                        if LocalPlayer.leaderstats.Caught then
+                            currentCaught = tonumber(LocalPlayer.leaderstats.Caught.Value) or 0
                         end
-                        
-                        titleLabel.Text = "🟢 " .. (LocalPlayer.Name or "Player") .. 
-                                        "\nTotal Caught: " .. FormatNumber(currentCaught) .. 
-                                        "\nBest Caught: " .. currentBest
+                        if LocalPlayer.leaderstats["Rarest Fish"] then
+                            currentBest = tostring(LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
+                        end
                     end
-                end)
-                
-                -- Safe last update time
-                pcall(function()
-                    if lastUpdateLabel and lastUpdateLabel.Parent then
-                        lastUpdateLabel.Text = "Last Update: " .. os.date("%H:%M:%S")
-                    end
-                end)
-                
-                frameCount = 0
-                lastUpdate = currentTime
-            end
-        end)
+                    
+                    titleLabel.Text = "🟢 " .. (LocalPlayer.Name or "Player") .. 
+                                    "\nTotal Caught: " .. FormatNumber(currentCaught) .. 
+                                    "\nBest Caught: " .. currentBest
+                end
+            end)
+            
+            task.wait(1) -- Update every second
+        end
+    end)
     end)
     
     -- Real-time listeners for Total Caught and Best Caught
@@ -1202,10 +1143,7 @@ local function removeWhiteScreen()
         whiteScreenGui = nil
     end
     
-    if connections.fpsConnection then
-        connections.fpsConnection:Disconnect()
-        connections.fpsConnection = nil
-    end
+
     
     if connections.caughtConnection then
         connections.caughtConnection:Disconnect()
