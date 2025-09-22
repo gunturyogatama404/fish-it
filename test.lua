@@ -254,7 +254,7 @@ local BestCaught = leaderstats:WaitForChild("Rarest Fish")
 local AllTimeCaught = leaderstats:WaitForChild("Caught")
 
 -- ====== FISHING STATS TRACKING VARIABLES ======
-local startTime = os.time()
+local startTime = tick() -- Using tick() for more precise timing
 local sessionStats = {
     totalFish = 0,
     totalValue = 0,
@@ -776,6 +776,10 @@ end
 -- ====== FISHING STATS FUNCTIONS ======
 -- Format waktu
 local function FormatTime(seconds)
+    -- Ensure we have a valid number
+    seconds = tonumber(seconds) or 0
+    seconds = math.max(0, math.floor(seconds))
+
     local hours = math.floor(seconds / 3600)
     local minutes = math.floor((seconds % 3600) / 60)
     local secs = seconds % 60
@@ -1038,7 +1042,8 @@ local function createWhiteScreen()
                 -- Safe session time update
                 pcall(function()
                     if sessionLabel and sessionLabel.Parent then
-                        local currentUptime = math.max(0, os.time() - startTime)
+                        local currentTime = tick()
+                        local currentUptime = math.max(0, math.floor(currentTime - startTime))
                         sessionLabel.Text = "⏱️ Uptime: " .. FormatTime(currentUptime)
                     end
                 end)
@@ -3395,79 +3400,7 @@ task.spawn(function()
 end)
 
 
--- ====== DISCONNECT NOTIFIER ======
--- Setup disconnect detection and webhook notification
-local function setupDisconnectNotifier()
-    local disconnectReasons = {
-        [Enum.DisconnectReason.RemoteDisconnection] = "Remote disconnection",
-        [Enum.DisconnectReason.LostConnection] = "Lost connection to server",
-        [Enum.DisconnectReason.OutOfMemory] = "Out of memory",
-        [Enum.DisconnectReason.Duplicate] = "Duplicate login detected",
-        [Enum.DisconnectReason.Kicked] = "Kicked from server",
-        [Enum.DisconnectReason.BadChecksum] = "Bad checksum",
-        [Enum.DisconnectReason.TimedOut] = "Connection timed out",
-        [Enum.DisconnectReason.Unknown] = "Unknown disconnect reason"
-    }
-
-    -- Listen for disconnect events
-    game:GetService("Players").PlayerRemoving:Connect(function(player)
-        if player == LocalPlayer then
-            local reason = "Player left the game"
-            sendUnifiedWebhook("disconnect", {
-                reason = reason
-            })
-        end
-    end)
-
-    -- Listen for game disconnection
-    game:GetService("ReplicatedStorage").ChildRemoved:Connect(function()
-        task.wait(1) -- Small delay to avoid false positives
-        if not game:IsLoaded() then
-            sendUnifiedWebhook("disconnect", {
-                reason = "Game disconnected or closed"
-            })
-        end
-    end)
-
-    -- Listen for CoreGui connection loss
-    game:GetService("RunService").Heartbeat:Connect(function()
-        if not game:GetService("Players").LocalPlayer then
-            sendUnifiedWebhook("disconnect", {
-                reason = "LocalPlayer reference lost"
-            })
-        end
-    end)
-
-    -- Setup connection monitoring
-    local lastHeartbeat = tick()
-    local connectionMonitor = game:GetService("RunService").Heartbeat:Connect(function()
-        lastHeartbeat = tick()
-    end)
-
-    -- Monitor for connection issues
-    task.spawn(function()
-        while game:IsLoaded() do
-            task.wait(30) -- Check every 30 seconds
-            local currentTime = tick()
-
-            -- If heartbeat hasn't updated in more than 60 seconds, likely disconnected
-            if currentTime - lastHeartbeat > 60 then
-                sendUnifiedWebhook("disconnect", {
-                    reason = "Connection lost - No heartbeat for " .. math.floor(currentTime - lastHeartbeat) .. " seconds"
-                })
-                break
-            end
-        end
-    end)
-
-    print("🔌 Disconnect Notifier: ENABLED")
-end
-
--- Initialize disconnect notifier
-task.spawn(function()
-    task.wait(5) -- Wait for game to fully load
-    setupDisconnectNotifier()
-end)
+-- The "Disconnect Notifier" section has been removed due to compatibility issues.
 
 -- ============ SCRIPT INITIALIZATION ============
 print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
