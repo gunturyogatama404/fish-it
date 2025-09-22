@@ -343,7 +343,13 @@ local defaultConfig = {
     autoWeather = false,
     autoMegalodon = false,
     activePreset = "none",
-    gpuSaver = false
+    gpuSaver = false,
+    chargeFishingDelay = 0.01,
+    autoFishMainDelay = 0.9,
+    autoSellDelay = 5,
+    autoCatchDelay = 0.2,
+    weatherIdDelay = 3,
+    weatherCycleDelay = 100
 }
 local config = {}
 for key, value in pairs(defaultConfig) do
@@ -532,12 +538,134 @@ local function syncConfigFromStates()
     config.autoWeather = isAutoWeatherOn
     config.autoMegalodon = isAutoMegalodonOn
     config.gpuSaver = gpuSaverEnabled
+    config.chargeFishingDelay = chargeFishingDelay
+    config.autoFishMainDelay = autoFishMainDelay
+    config.autoSellDelay = autoSellDelay
+    config.autoCatchDelay = autoCatchDelay
+    config.weatherIdDelay = weatherIdDelay
+    config.weatherCycleDelay = weatherCycleDelay
+end
+
+local function applyDelayConfig()
+    if not config then
+        return
+    end
+
+    local previousState = isApplyingConfig
+    local updated = false
+    isApplyingConfig = true
+
+    local function applyField(field, minValue, defaultValue)
+        local value = tonumber(config[field])
+        if value == nil then
+            value = defaultValue
+            updated = true
+        end
+        local clamped = math.max(minValue, value)
+        if clamped ~= value then
+            updated = true
+        end
+        config[field] = clamped
+        return clamped
+    end
+
+    chargeFishingDelay = applyField("chargeFishingDelay", 0.01, defaultConfig.chargeFishingDelay)
+    autoFishMainDelay = applyField("autoFishMainDelay", 0.1, defaultConfig.autoFishMainDelay)
+    autoSellDelay = applyField("autoSellDelay", 1, defaultConfig.autoSellDelay)
+    autoCatchDelay = applyField("autoCatchDelay", 0.1, defaultConfig.autoCatchDelay)
+    weatherIdDelay = applyField("weatherIdDelay", 1, defaultConfig.weatherIdDelay)
+    weatherCycleDelay = applyField("weatherCycleDelay", 10, defaultConfig.weatherCycleDelay)
+
+    if updated then
+        pcall(saveConfig)
+    end
+
+    isApplyingConfig = previousState
+    print("[Config] Delay settings applied from config")
+end
+
+local function roundDelay(value)
+    return math.floor(value * 100 + 0.5) / 100
+end
+
+local function setChargeFishingDelay(value)
+    local numeric = tonumber(value) or chargeFishingDelay
+    local clamped = math.max(0.01, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - chargeFishingDelay) < 0.001 then
+        return
+    end
+    chargeFishingDelay = clamped
+    updateConfigField("chargeFishingDelay", clamped)
+    print(string.format("[Delays] Charge Fishing Delay: %.2fs", clamped))
+end
+
+local function setAutoFishMainDelay(value)
+    local numeric = tonumber(value) or autoFishMainDelay
+    local clamped = math.max(0.1, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - autoFishMainDelay) < 0.001 then
+        return
+    end
+    autoFishMainDelay = clamped
+    updateConfigField("autoFishMainDelay", clamped)
+    print(string.format("[Delays] Auto Fish Main Delay: %.2fs", clamped))
+end
+
+local function setAutoSellDelay(value)
+    local numeric = tonumber(value) or autoSellDelay
+    local clamped = math.max(1, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - autoSellDelay) < 0.001 then
+        return
+    end
+    autoSellDelay = clamped
+    updateConfigField("autoSellDelay", clamped)
+    print(string.format("[Delays] Auto Sell Delay: %.2fs", clamped))
+end
+
+local function setAutoCatchDelay(value)
+    local numeric = tonumber(value) or autoCatchDelay
+    local clamped = math.max(0.1, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - autoCatchDelay) < 0.001 then
+        return
+    end
+    autoCatchDelay = clamped
+    updateConfigField("autoCatchDelay", clamped)
+    print(string.format("[Delays] Auto Catch Delay: %.2fs", clamped))
+end
+
+local function setWeatherIdDelay(value)
+    local numeric = tonumber(value) or weatherIdDelay
+    local clamped = math.max(1, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - weatherIdDelay) < 0.001 then
+        return
+    end
+    weatherIdDelay = clamped
+    updateConfigField("weatherIdDelay", clamped)
+    print(string.format("[Delays] Weather ID Delay: %.2fs", clamped))
+end
+
+local function setWeatherCycleDelay(value)
+    local numeric = tonumber(value) or weatherCycleDelay
+    local clamped = math.max(10, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - weatherCycleDelay) < 0.001 then
+        return
+    end
+    weatherCycleDelay = clamped
+    updateConfigField("weatherCycleDelay", clamped)
+    print(string.format("[Delays] Weather Cycle Delay: %.2fs", clamped))
 end
 
 -- Try to migrate old config first, then load current config
 if not migrateOldConfig() then
     loadConfig()
 end
+
+applyDelayConfig()
 
 -- Player identification info
 print("[Config] Player identification:")
@@ -554,6 +682,12 @@ local autoPreset1Toggle
 local autoPreset2Toggle
 local autoPreset3Toggle
 local gpuSaverToggle
+local chargeFishingSlider
+local autoFishMainSlider
+local autoSellSlider
+local autoCatchSlider
+local weatherIdSlider
+local weatherCycleSlider
 
 -- ====== FUNGSI UNTUK MENDAPATKAN COIN DAN LEVEL ======
 local function getCurrentCoins()
@@ -599,28 +733,7 @@ local function getCurrentLevel()
     return success and result or "Lvl 0"
 end
 
--- ====== HELPER FUNCTIONS FOR WEB MONITOR ======
-local function getFishCaught()
-    local success, fishCaught = pcall(function()
-        if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then
-            return LocalPlayer.leaderstats.Caught.Value
-        end
-        return 0
-    end)
 
-    return success and fishCaught or 0
-end
-
-local function getBestFish()
-    local success, bestFish = pcall(function()
-        if LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] then
-            return LocalPlayer.leaderstats["Rarest Fish"].Value
-        end
-        return "None"
-    end)
-
-    return success and bestFish or "None"
-end
 
 -- fungsi quest
 
@@ -1400,8 +1513,12 @@ local function disablePreset(presetKey)
         -- Reset delay for Kohana preset
         if presetKey == "auto3" then
             table.insert(steps, function()
-                autoFishMainDelay = 0.9  -- Reset to default
-                print("🎣 Auto Fish Delay reset to default (0.9s)")
+                if autoFishMainSlider then
+                    autoFishMainSlider:Set(0.9)
+                else
+                    setAutoFishMainDelay(0.9)
+                end
+                print("[Preset] Auto Fish Delay reset to default (0.9s)")
             end)
         end
 
@@ -1868,8 +1985,12 @@ local function setAutoWeather(state)
 end
 
 local function setAutoFishDelayForKohana()
-    autoFishMainDelay = 5  -- Set to 5 seconds for Kohana preset
-    print("🎣 Auto Fish Delay set to 5 seconds for Kohana")
+    if autoFishMainSlider then
+        autoFishMainSlider:Set(5)
+    else
+        setAutoFishMainDelay(5)
+    end
+    print("[Preset] Auto Fish Delay set to 5 seconds for Kohana")
 end
 
 
@@ -2864,20 +2985,51 @@ autoWeatherToggle = SecOther:NewToggle("Auto Weather", "Auto weather events", fu
     setAutoWeather(state)
 end)
 
-SecDelays:NewSlider("Charge Rod Delay", "Delay setelah charge fishing rod (detik)", 10, 0.01, function(s)
-    chargeFishingDelay = s
+chargeFishingSlider = SecDelays:NewSlider("Charge Rod Delay", "Delay setelah charge fishing rod (detik, min: 0.01)", 10, 0.01, function(value)
+    setChargeFishingDelay(value)
 end)
 
-SecDelays:NewSlider("Auto Fish Delay", "Delay loop utama auto fish (detik)", 20, 1, function(s)
-    autoFishMainDelay = s
+autoFishMainSlider = SecDelays:NewSlider("Auto Fish Delay", "Delay loop utama auto fish (detik, min: 0.1)", 20, 0.1, function(value)
+    setAutoFishMainDelay(value)
 end)
 
-SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik)", 30, 1, function(s)
-    autoSellDelay = s
+autoSellSlider = SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik, min: 1)", 30, 1, function(value)
+    setAutoSellDelay(value)
 end)
 
-SecDelays:NewSlider("Auto Catch Delay", "Delay auto catch (detik)", 10, 0.1, function(s)
-    autoCatchDelay = s
+autoCatchSlider = SecDelays:NewSlider("Auto Catch Delay", "Delay auto catch (detik, min: 0.1)", 10, 0.1, function(value)
+    setAutoCatchDelay(value)
+end)
+
+weatherIdSlider = SecDelays:NewSlider("Weather ID Delay", "Delay antar weather ID (detik, min: 1)", 60, 1, function(value)
+    setWeatherIdDelay(value)
+end)
+
+weatherCycleSlider = SecDelays:NewSlider("Weather Cycle Delay", "Delay siklus weather (detik, min: 10)", 600, 10, function(value)
+    setWeatherCycleDelay(value)
+end)
+
+task.defer(function()
+    task.wait(1)
+    if chargeFishingSlider then
+        chargeFishingSlider:Set(config.chargeFishingDelay or chargeFishingDelay)
+    end
+    if autoFishMainSlider then
+        autoFishMainSlider:Set(config.autoFishMainDelay or autoFishMainDelay)
+    end
+    if autoSellSlider then
+        autoSellSlider:Set(config.autoSellDelay or autoSellDelay)
+    end
+    if autoCatchSlider then
+        autoCatchSlider:Set(config.autoCatchDelay or autoCatchDelay)
+    end
+    if weatherIdSlider then
+        weatherIdSlider:Set(config.weatherIdDelay or weatherIdDelay)
+    end
+    if weatherCycleSlider then
+        weatherCycleSlider:Set(config.weatherCycleDelay or weatherCycleDelay)
+    end
+    print("[UI] Delay sliders initialized from config")
 end)
 
 local TabTeleport = Window:NewTab("Teleport")
@@ -3047,70 +3199,7 @@ end)
 
 
 
--- ====== ADVANCED MODULES TAB ======
-local TabModules = Window:NewTab("Advanced Modules")
-local SecInventoryMgr = TabModules:NewSection("Background Inventory Manager")
-local SecWebMonitor = TabModules:NewSection("Web Monitor")
 
--- Background Inventory Controls
-SecInventoryMgr:NewButton("Start Background Inventory", "Keep inventory tiles loaded in background", function()
-    backgroundInventoryModule.startBackgroundInventory()
-end)
-
-SecInventoryMgr:NewButton("Stop Background Inventory", "Stop background inventory system", function()
-    backgroundInventoryModule.stopBackgroundInventory()
-end)
-
-SecInventoryMgr:NewButton("Check Tiles Status", "Check if inventory tiles are accessible", function()
-    if _G.checkTilesAccessible then
-        local accessible, status = _G.checkTilesAccessible()
-        print("🔍 Tiles Status:", accessible and "✅ ACCESSIBLE" or "❌ NOT ACCESSIBLE")
-        print("📊 Details:", status)
-    else
-        print("❌ Background inventory not loaded")
-    end
-end)
-
--- Web Monitor Controls
-SecWebMonitor:NewButton("Start Web Monitor", "Begin sending data to web dashboard", function()
-    if _G.WebMonitor then
-        local instance = _G.WebMonitor.startMonitoring()
-        _G.WebMonitorInstance = instance
-        print("✅ Web Monitor started!")
-    else
-        print("❌ Web Monitor not loaded")
-    end
-end)
-
-SecWebMonitor:NewButton("Stop Web Monitor", "Stop web monitoring", function()
-    if _G.WebMonitorInstance and _G.WebMonitorInstance.stop then
-        _G.WebMonitorInstance.stop()
-        print("🛑 Web Monitor stopped!")
-    else
-        print("❌ Web Monitor not running")
-    end
-end)
-
-SecWebMonitor:NewButton("Send Update Now", "Force send data to web dashboard", function()
-    if _G.WebMonitorInstance and _G.WebMonitorInstance.sendUpdate then
-        local success = _G.WebMonitorInstance.sendUpdate()
-        print(success and "✅ Data sent successfully!" or "❌ Failed to send data")
-    else
-        print("❌ Web Monitor not running")
-    end
-end)
-
-SecWebMonitor:NewButton("Check Web Monitor Status", "Show web monitor status", function()
-    if _G.WebMonitorInstance and _G.WebMonitorInstance.getStatus then
-        local status = _G.WebMonitorInstance.getStatus()
-        print("🌐 Web Monitor Status:")
-        print("  Running:", status.running and "✅ YES" or "❌ NO")
-        print("  Server URL:", status.serverUrl)
-        print("  Last Update:", os.date("%H:%M:%S", status.lastUpdate))
-    else
-        print("❌ Web Monitor not running")
-    end
-end)
 
 -- ====== UI CONTROLS ======
 local TabUI = Window:NewTab("UI Controls")
@@ -3494,336 +3583,7 @@ task.spawn(function()
 end)
 
 
--- Inventory Whitelist Notifier (mutations-aware, single message per loop)
--- Counts by species (Tile.ItemName), shows pretty display (Variant + Base when available)
 
--- ============ CONFIG ============
--- Note: Now using unified webhook system - no separate URL needed
-
--- Whitelist pakai NAMA SPECIES (tanpa prefix varian)
-local WHITELIST = {"Robot Kraken", "Giant Squid", "Thin Armor Shark", "Frostborn Shark", "Plasma Shark", "Eerie Shark", "Scare", "Ghost Shark", "Blob Shark", "Megalodon", "Lochness Monster"}
-
-local SCAN_WAIT    = 3     -- detik tunggu setelah buka agar tile render
-local COOLDOWN     = 15    -- detik jeda antar loop
-local OPEN_TIMEOUT = 6     -- detik max tunggu container/tile
-local SEND_ONLY_ON_CHANGES = true -- true: kirim hanya jika ada kenaikan
-local DEBUG = false
-
--- ============ SERVICES ============
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local GuiService = game:GetService("GuiService")
-
-
-local hasSentDisconnectWebhook = false  -- Flag untuk avoid kirim berulang
-local PING_THRESHOLD = 1000  -- ms, jika > ini = poor connection
-local FREEZE_THRESHOLD = 3  -- detik, jika delta > ini = freeze
-
-local hasSentDisconnectWebhook = false  -- Flag untuk avoid kirim berulang
-local player = Players.LocalPlayer
--- ============ UTIL ============
-local function trim(s) return (s or ""):gsub("^%s+",""):gsub("%s+$","") end
-local function normSpaces(s) return trim((s or ""):gsub("%s+"," ")) end
-local function toKey(s) return string.lower(normSpaces(s or "")) end
-local WL = {}; for _, n in ipairs(WHITELIST) do WL[toKey(n)] = true end
-local function dprint(...) if DEBUG then print("[INV-DEBUG]", ...) end end
-
--- ============ WEBHOOK ============
-local function sendDiscordEmbed(description, totalWhitelistCount)
-    sendUnifiedWebhook("fish_found", {
-        description = description,
-        totalWhitelistCount = totalWhitelistCount
-    })
-end
-
--- ============ BACKGROUND INVENTORY REFERENCES ============
--- Background inventory functionality is implemented in backgroundInventoryModule (later in script)
--- This avoids duplicate variable declarations that cause Lua register limit errors
-
--- Reference variables that will be set by backgroundInventoryModule
-local function isBackgroundInventoryActive()
-    return _G.isBackgroundInventoryActive and _G.isBackgroundInventoryActive() or false
-end
-
-local function checkInventoryTilesStatus()
-    if _G.checkInventoryTilesStatus then
-        return _G.checkInventoryTilesStatus()
-    else
-        return false, "Module not loaded yet"
-    end
-end
-
-local function getInventoryGui()
-    return Players.LocalPlayer.PlayerGui:FindFirstChild("Inventory")
-end
-
-local function getInventoryContainer()
-    local inv = getInventoryGui(); if not inv then return nil end
-    local main = inv:FindFirstChild("Main")
-    local content = main and main:FindFirstChild("Content")
-    local pages = content and content:FindFirstChild("Pages")
-    return pages and pages:FindFirstChild("Inventory") or nil
-end
-
--- Legacy functions for compatibility - now use background system
-local function openInventory()
-    dprint("Using background inventory system")
-    return true
-end
-
-local function closeInventory()
-    -- Background system handles this automatically
-end
-
--- ============ SCAN (VARIANT-AWARE) ============
--- return: displayName (varian+base bila ada), speciesName (base)
-local function getNamesFromTile(tile)
-    if not tile or not tile:IsA("GuiObject") then return nil, nil end
-
-    -- base/species dari Tile.ItemName (BUKAN search descendant supaya gak ketukar)
-    local baseLabel = tile:FindFirstChild("ItemName")
-    local base = baseLabel and baseLabel:IsA("TextLabel") and normSpaces(baseLabel.Text) or nil
-
-    -- varian/prefix (Shiny/Big/Ghoulish/...) dari Tile.Variant.ItemName (kalau ada)
-    local variantName
-    local variant = tile:FindFirstChild("Variant")
-    if variant then
-        local vItem = variant:FindFirstChild("ItemName")
-        if vItem and vItem:IsA("TextLabel") then
-            local t = normSpaces(vItem.Text)
-            if t ~= "" then variantName = t end
-        end
-    end
-
-    -- Kadang label varian SUDAH berisi nama lengkap (mis. "Shiny Big Boar Fish")
-    -- Jika ya dan base ada di dalamnya, pakai yang varian sebagai display.
-    local display
-    if variantName and base then
-        local vlow, blow = toKey(variantName), toKey(base)
-        if string.find(vlow, blow, 1, true) then
-            display = variantName
-        else
-            -- gabungkan: "Variant Base"  (hindari duplikasi)
-            display = variantName .. " " .. base
-        end
-    else
-        display = variantName or base
-    end
-
-    -- Fallback terakhir: ambil text label terpanjang di tile
-    if not display then
-        local longest
-        for _, d in ipairs(tile:GetDescendants()) do
-            if d:IsA("TextLabel") then
-                local t = normSpaces(d.Text)
-                if t ~= "" and (not longest or #t > #longest) then longest = t end
-            end
-        end
-        display = longest
-    end
-
-    -- speciesName: prioritaskan base (Tile.ItemName)
-    local species = base or display
-    return display, species
-end
-
--- returns: speciesCounts (key->count), speciesPretty (key->display species), totalWhitelist
-local function countTilesBySpecies(timeoutSec)
-    local counts, pretty, totalWL = {}, {}, 0
-    local t0 = os.clock()
-    repeat
-        local container = getInventoryContainer()
-        if container then
-            local tiles = container:GetChildren()
-            local hasTile = false
-            for _,ch in ipairs(tiles) do if ch.Name == "Tile" then hasTile = true break end end
-            if hasTile and (os.clock() - t0) >= SCAN_WAIT then break end
-        end
-        RunService.Heartbeat:Wait()
-    until (os.clock() - t0) >= (timeoutSec or OPEN_TIMEOUT)
-
-    local container = getInventoryContainer()
-    if not container then dprint("container NOT FOUND"); return counts, pretty, 0 end
-
-    local tiles = container:GetChildren()
-    dprint("Tiles:", #tiles)
-    for _, child in ipairs(tiles) do
-        if child.Name == "Tile" and child:IsA("GuiObject") then
-            local displayName, speciesName = getNamesFromTile(child)
-            if speciesName and speciesName ~= "" then
-                local key = toKey(speciesName)
-                if WL[key] then
-                    counts[key] = (counts[key] or 0) + 1
-                    pretty[key] = pretty[key] or speciesName -- simpan nama species yg cantik
-                    totalWL = totalWL + 1
-                    dprint("Tile ->", displayName or speciesName, " | species:", speciesName, " | key:", key)
-                end
-            end
-        end
-    end
-    return counts, pretty, totalWL
-end
-
--- ============ STATE & BUILDERS ============
-local seenCounts = {}   -- key -> last count
-local prettyCache = {}  -- key -> species display
-
-local function buildTotalsLines(counts)
-    local lines = {}
-    for key, cnt in pairs(counts) do
-        local pretty = prettyCache[key] or key
-        table.insert(lines, string.format("• %dx %s", cnt, pretty))
-    end
-    table.sort(lines)
-    return lines
-end
-
-local function buildDiffLines(counts)
-    local diffs = {}
-    for key, cnt in pairs(counts) do
-        local last = seenCounts[key] or 0
-        local inc = cnt - last
-        if inc > 0 then
-            local pretty = prettyCache[key] or key
-            table.insert(diffs, string.format("+%d %s !New", inc, pretty))
-        end
-    end
-    table.sort(diffs)
-    return diffs
-end
-
--- ============ BASELINE ============
-local function baselineNow()
-    -- Check if background inventory is available
-    local success, status = checkInventoryTilesStatus()
-    if not success then
-        warn("❌ Background inventory not ready for baseline: " .. tostring(status))
-        -- Fallback: try to use background system
-        if isBackgroundInventoryActive then
-            print("⚠️ Using fallback baseline with background system")
-        else
-            warn("❌ Background inventory not active, baseline may fail")
-        end
-    end
-
-    -- Use background inventory - no need to open/close
-    dprint("🎯 Enhanced baseline using background inventory")
-
-    -- Reduced wait time since inventory is already open in background
-    local t0 = os.clock(); while os.clock() - t0 < (SCAN_WAIT * 0.3) do RunService.Heartbeat:Wait() end
-    local counts, pretty = countTilesBySpecies(OPEN_TIMEOUT)
-    seenCounts = counts
-    for k,v in pairs(pretty) do prettyCache[k] = v end
-    -- No need to close inventory - background system handles it
-    print("✅ Enhanced baseline completed using background inventory")
-end
-
--- ============ ENHANCED SCAN & SEND (background inventory optimized) ============
-local function scanAndNotifySingle()
-    -- Check if background inventory is available
-    local success, status = checkInventoryTilesStatus()
-    if not success then
-        warn("❌ Background inventory not ready for scan: " .. tostring(status))
-        return
-    end
-
-    -- Use background inventory - no need to open/close
-    dprint("🎯 Enhanced scan using background inventory")
-
-    -- Minimal wait since inventory is already open in background
-    local t0 = os.clock(); while os.clock() - t0 < (SCAN_WAIT * 0.3) do RunService.Heartbeat:Wait() end
-
-    local counts, pretty, totalWL = countTilesBySpecies(OPEN_TIMEOUT)
-    for k,v in pairs(pretty) do prettyCache[k] = v end
-
-    local totalLines = buildTotalsLines(counts)
-    local diffLines  = buildDiffLines(counts)
-
-    if SEND_ONLY_ON_CHANGES and #diffLines == 0 then
-        dprint("No whitelist changes; skip send")
-        seenCounts = counts
-        -- No need to close inventory - background system handles it
-        return
-    end
-
-    local description = table.concat(totalLines, "\n")
-    if #diffLines > 0 then
-        description = description .. "\n\n" .. table.concat(diffLines, "\n")
-    end
-    sendDiscordEmbed(description, totalWL)
-
-    seenCounts = counts
-    -- No need to close inventory - background system handles it
-end
-
--- ============ DISCONNECT NOTIFIER ============
-
-local function sendDisconnectWebhook(username, reason)
-    if hasSentDisconnectWebhook then return end
-    hasSentDisconnectWebhook = true
-
-    sendUnifiedWebhook("disconnect", {
-        reason = reason or "Unknown"
-    })
-end
-
-local function setupDisconnectNotifier()
-    local username = Players.LocalPlayer.Name  -- Atau DisplayName jika mau
-    
-    -- Kode lama: Error message dan PlayerRemoving
-    GuiService.ErrorMessageChanged:Connect(function(message)
-        local lowerMessage = string.lower(message)
-        local reason = "Unknown"
-        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") then
-            reason = "Connection Lost: " .. message
-        elseif lowerMessage:find("kick") or lowerMessage:find("banned") then
-            reason = "Kicked: " .. message
-        elseif lowerMessage:find("timeout") then
-            reason = "Timeout: " .. message
-        elseif lowerMessage:find("error") then
-            reason = "General Error: " .. message
-        else
-            return
-        end
-        task.spawn(function() sendDisconnectWebhook(username, reason) end)
-    end)
-    
-    Players.PlayerRemoving:Connect(function(removedPlayer)
-        if removedPlayer == Players.LocalPlayer and not hasSentDisconnectWebhook then
-            task.spawn(function() sendDisconnectWebhook(username, "Disconnected (Player Removed)") end)
-        end
-    end)
-    
-    -- Baru: Loop check ping untuk internet loss
-    task.spawn(function()
-        while true do
-            local success, ping = pcall(function()
-                return Players.LocalPlayer:GetNetworkPing()
-            end)
-            if not success or ping > PING_THRESHOLD then
-                local reason = not success and "Connection Lost (Ping Failed)" or "High Ping Detected (" .. ping .. "ms)"
-                task.spawn(function() sendDisconnectWebhook(username, reason) end)
-                break  -- Stop loop setelah kirim
-            end
-            task.wait(5)  -- Check setiap 5 detik
-        end
-    end)
-    
-    -- Baru: Detect freeze via Stepped delta
-    local lastTime = tick()
-    RunService.Stepped:Connect(function(_, delta)
-        if delta > FREEZE_THRESHOLD then
-            task.spawn(function() sendDisconnectWebhook(username, "Game Freeze Detected (Delta: " .. delta .. "s)") end)
-        end
-        lastTime = tick()
-    end)
-    
-    print("🚨 Advanced disconnect notifier setup complete")
-end
-
--- Panggil setup
-setupDisconnectNotifier()
 
 -- ============ SCRIPT INITIALIZATION ============
 print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
@@ -3832,650 +3592,3 @@ print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
 
 -- ========== INTEGRATED MODULES ==========
 
--- ====== ENHANCED BACKGROUND INVENTORY KEEPER ======
--- Integrated from inventory.lua for better inventory access
-local backgroundInventoryModule = {}
-
-do
-    local LocalPlayer = Players.LocalPlayer
-    local isBackgroundInventoryActive = false
-    local inventoryController = nil
-    local backgroundConnection = nil
-    local originalInventoryState = {}
-    local inventoryGUI = nil
-    local userControlledState = { enabled = nil, visible = nil }
-    local suppressStateSync = false
-    local visibilityConnection = nil
-    local enabledConnection = nil
-    local originalControllerMethods = {}
-    local isReloadingTiles = false
-    local lastUserAction = 0
-    local userActionCooldown = 1
-
-    -- Performance settings
-    local MAIN_LOOP_INTERVAL = 20
-    local PROXY_UPDATE_INTERVAL = 10
-    local INIT_DELAY = 3
-
-    -- Manage user-controlled GUI visibility
-    local function disconnectStateTracking()
-        if visibilityConnection then
-            visibilityConnection:Disconnect()
-            visibilityConnection = nil
-        end
-        if enabledConnection then
-            enabledConnection:Disconnect()
-            enabledConnection = nil
-        end
-    end
-
-    local function startUserStateTracking()
-        if not inventoryGUI then return end
-        local main = inventoryGUI:FindFirstChild("Main")
-        if not main then return end
-
-        disconnectStateTracking()
-        userControlledState.enabled = inventoryGUI.Enabled
-        userControlledState.visible = main.Visible
-
-        visibilityConnection = main:GetPropertyChangedSignal("Visible"):Connect(function()
-            if suppressStateSync then return end
-            lastUserAction = tick()
-            userControlledState.visible = main.Visible
-        end)
-
-        enabledConnection = inventoryGUI:GetPropertyChangedSignal("Enabled"):Connect(function()
-            if suppressStateSync then return end
-            lastUserAction = tick()
-            userControlledState.enabled = inventoryGUI.Enabled
-        end)
-    end
-
-    local function applyUserState()
-        if not inventoryGUI then return end
-        local main = inventoryGUI:FindFirstChild("Main")
-        if not main then return end
-
-        if tick() - lastUserAction < userActionCooldown then return end
-
-        suppressStateSync = true
-        if userControlledState.enabled ~= nil then
-            inventoryGUI.Enabled = userControlledState.enabled
-        end
-        if userControlledState.visible ~= nil then
-            main.Visible = userControlledState.visible
-        end
-        suppressStateSync = false
-    end
-
-    local function isInventoryUnderUserControl()
-        if not inventoryGUI then return false end
-        local main = inventoryGUI:FindFirstChild("Main")
-        if not main then return false end
-
-        if main.Visible and inventoryGUI.Enabled then
-            if userControlledState.visible == true and userControlledState.enabled == true then
-                return true
-            end
-            if tick() - lastUserAction < MAIN_LOOP_INTERVAL + 5 then
-                return true
-            end
-        end
-        return false
-    end
-
-    local function withTemporaryInventoryOpen(callback)
-        if not inventoryGUI then return false, "No inventory GUI" end
-        local main = inventoryGUI:FindFirstChild("Main")
-        if not main then return false, "Inventory main frame missing" end
-
-        if isInventoryUnderUserControl() then
-            return false, "User has control of inventory"
-        end
-
-        if tick() - lastUserAction < userActionCooldown then
-            return false, "User action in progress"
-        end
-
-        suppressStateSync = true
-        local previousEnabled = inventoryGUI.Enabled
-        local previousVisible = main.Visible
-        local previousPosition
-
-        if main:IsA("GuiObject") then
-            previousPosition = main.Position
-            main.Position = UDim2.new(-5, 0, -5, 0)
-        end
-
-        inventoryGUI.Enabled = true
-        main.Visible = true
-
-        local ok, result = pcall(callback)
-
-        task.wait(0.1)
-        main.Visible = previousVisible
-        inventoryGUI.Enabled = previousEnabled
-
-        if previousPosition then
-            main.Position = previousPosition
-        end
-
-        suppressStateSync = false
-        task.wait(0.1)
-        if tick() - lastUserAction >= userActionCooldown then
-            applyUserState()
-        end
-
-        return ok, result
-    end
-
-    local function saveOriginalState()
-        local playerGui = LocalPlayer.PlayerGui
-        inventoryGUI = playerGui:FindFirstChild("Inventory")
-
-        if inventoryGUI then
-            originalInventoryState.enabled = inventoryGUI.Enabled
-            local main = inventoryGUI:FindFirstChild("Main")
-            if main then
-                originalInventoryState.visible = main.Visible
-            end
-            startUserStateTracking()
-            print("💾 Background Inventory: Original state saved")
-        end
-    end
-
-    local function getInventoryController()
-        if inventoryController then return inventoryController end
-
-        local success, result = pcall(function()
-            local controllers = ReplicatedStorage:WaitForChild("Controllers", 5)
-            local invModule = controllers:WaitForChild("InventoryController", 5)
-            return require(invModule)
-        end)
-
-        if success then
-            inventoryController = result
-            print("✅ Background Inventory: Controller loaded")
-            return inventoryController
-        else
-            warn("❌ Background Inventory: Failed to load controller:", result)
-            return nil
-        end
-    end
-
-    local function loadTilesInBackground()
-        if isReloadingTiles then return true end
-        local ctrl = getInventoryController()
-        if not ctrl then return false end
-
-        isReloadingTiles = true
-
-        local success, result = withTemporaryInventoryOpen(function()
-            if ctrl.SetPage then ctrl.SetPage(ctrl, "Items") end
-            if ctrl.SetCategory then ctrl.SetCategory(ctrl, "Fishes") end
-            if ctrl._bindFishes then ctrl._bindFishes(ctrl) end
-            if ctrl.DrawTiles then ctrl.DrawTiles() end
-            if ctrl.InventoryStateChanged then
-                ctrl.InventoryStateChanged:Fire("Fish")
-            end
-        end)
-
-        isReloadingTiles = false
-
-        if not success then
-            warn("Background Inventory: Failed to load tiles:", result)
-            return false
-        end
-
-        return true
-    end
-
-    local function hookInventoryController()
-        local ctrl = getInventoryController()
-        if not ctrl then return false end
-
-        local success, result = pcall(function()
-            if originalControllerMethods.controller ~= ctrl then
-                originalControllerMethods = {
-                    controller = ctrl,
-                    DestroyTiles = ctrl.DestroyTiles,
-                }
-            elseif not originalControllerMethods.DestroyTiles then
-                originalControllerMethods.DestroyTiles = ctrl.DestroyTiles
-            end
-
-            if originalControllerMethods.DestroyTiles and not originalControllerMethods.hooked then
-                ctrl.DestroyTiles = function(...)
-                    if isBackgroundInventoryActive then
-                        return
-                    end
-                    return originalControllerMethods.DestroyTiles(...)
-                end
-                originalControllerMethods.hooked = true
-            end
-        end)
-
-        if not success then
-            warn("Background Inventory: Failed to hook controller:", result)
-        else
-            print("✅ Background Inventory: Controller hooked")
-        end
-
-        return success
-    end
-
-    local function checkTilesAccessible()
-        if not inventoryGUI then return false, "No inventory GUI" end
-
-        local success, result = pcall(function()
-            local container = inventoryGUI.Main.Content.Pages.Inventory
-            local children = container:GetChildren()
-            local tileCount = 0
-
-            for _, child in pairs(children) do
-                if child.Name == "Tile" and child:IsA("GuiObject") then
-                    tileCount = tileCount + 1
-                end
-            end
-
-            return tileCount
-        end)
-
-        if success then
-            return result > 0, "Found " .. result .. " tiles"
-        else
-            return false, "Error accessing tiles: " .. tostring(result)
-        end
-    end
-
-    function backgroundInventoryModule.startBackgroundInventory()
-        if isBackgroundInventoryActive then
-            print("⚠️ Background inventory already active")
-            return
-        end
-
-        print("🚀 Starting background inventory system...")
-
-        task.wait(INIT_DELAY)
-        saveOriginalState()
-
-        isBackgroundInventoryActive = true
-
-        loadTilesInBackground()
-        task.wait(1)
-
-        hookInventoryController()
-
-        backgroundConnection = task.spawn(function()
-            while isBackgroundInventoryActive do
-                local tilesAccessible, status = checkTilesAccessible()
-                local userInControl = isInventoryUnderUserControl()
-
-                if userInControl then
-                    -- print("👤 User controlling inventory, standing by...")
-                elseif not tilesAccessible and tick() - lastUserAction > userActionCooldown * 2 then
-                    print("🔄 Background Inventory: Refreshing tiles... (" .. status .. ")")
-                    loadTilesInBackground()
-                else
-                    -- print("✅ Background Inventory: Tiles maintained (" .. status .. ")")
-                end
-
-                task.wait(MAIN_LOOP_INTERVAL)
-            end
-        end)
-
-        print("✅ Background inventory system started")
-    end
-
-    function backgroundInventoryModule.stopBackgroundInventory()
-        if not isBackgroundInventoryActive then return end
-
-        isBackgroundInventoryActive = false
-
-        if backgroundConnection then
-            task.cancel(backgroundConnection)
-            backgroundConnection = nil
-        end
-
-        applyUserState()
-        disconnectStateTracking()
-
-        pcall(function()
-            if inventoryGUI then
-                local pages = inventoryGUI.Main.Content.Pages
-                local proxy = pages:FindFirstChild("InventoryProxy")
-                if proxy then
-                    proxy:Destroy()
-                end
-            end
-        end)
-
-        if originalControllerMethods.controller then
-            local ctrl = originalControllerMethods.controller
-            if originalControllerMethods.hooked and originalControllerMethods.DestroyTiles then
-                ctrl.DestroyTiles = originalControllerMethods.DestroyTiles
-            end
-            originalControllerMethods = {}
-        end
-
-        print("✅ Background inventory system stopped")
-    end
-
-    -- Export functions
-    _G.startBackgroundInventory = backgroundInventoryModule.startBackgroundInventory
-    _G.stopBackgroundInventory = backgroundInventoryModule.stopBackgroundInventory
-
-    -- Set reference variables to avoid Lua register limit errors
-    -- Create a function to check if background inventory is active
-    function backgroundInventoryModule.isActive()
-        return isBackgroundInventoryActive
-    end
-
-    -- Export the tiles check function
-    function backgroundInventoryModule.checkTilesStatus()
-        return checkTilesAccessible()
-    end
-
-    -- Update global references to avoid duplicate declarations
-    _G.isBackgroundInventoryActive = backgroundInventoryModule.isActive
-    _G.checkInventoryTilesStatus = backgroundInventoryModule.checkTilesStatus
-end
-
--- ====== WEB MONITOR CLIENT ======
--- Integrated from roblox-client.lua for web dashboard integration
-local webMonitorModule = {}
-
-do
-    local HttpService = game:GetService("HttpService")
-    local LocalPlayer = Players.LocalPlayer
-
-    -- Configuration
-    local SERVER_URL = "https://faktacerdas.site"
-    local UPDATE_INTERVAL = 55
-
-    local function safeRequest(url, method, data)
-        local success, result = pcall(function()
-            local requestData = {
-                Url = url,
-                Method = method or "GET",
-                Headers = {
-                    ["Content-Type"] = "application/json"
-                }
-            }
-
-            if data then
-                requestData.Body = HttpService:JSONEncode(data)
-            end
-
-            -- Try different HTTP request methods based on executor
-            if syn and syn.request then
-                return syn.request(requestData)
-            elseif http_request then
-                return http_request(requestData)
-            elseif fluxus and fluxus.request then
-                return fluxus.request(requestData)
-            elseif request then
-                return request(requestData)
-            else
-                error("No HTTP request method available")
-            end
-        end)
-
-        if success then
-            return result
-        else
-            warn("[Web Monitor] HTTP Request failed: " .. tostring(result))
-            return nil
-        end
-    end
-
-    -- Get inventory items from the game
-    local function getInventoryItems()
-        local success, inventory = pcall(function()
-            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-            if not playerGui then return {} end
-
-            local inventoryGui = playerGui:FindFirstChild("Inventory")
-            if not inventoryGui then return {} end
-
-            local main = inventoryGui:FindFirstChild("Main")
-            if not main then return {} end
-
-            local content = main:FindFirstChild("Content")
-            if not content then return {} end
-
-            local pages = content:FindFirstChild("Pages")
-            if not pages then return {} end
-
-            local inventoryPage = pages:FindFirstChild("Inventory")
-            if not inventoryPage then return {} end
-
-            local items = {}
-            for _, child in pairs(inventoryPage:GetChildren()) do
-                if child.Name == "Tile" then
-                    local itemName = child:FindFirstChild("ItemName")
-                    if itemName and itemName.Text and itemName.Text ~= "" then
-                        table.insert(items, itemName.Text)
-                    end
-                end
-            end
-
-            return items
-        end)
-
-        return success and inventory or {}
-    end
-
-    -- Use existing functions from main script
-    local function collectPlayerData()
-        return {
-            inventory = getInventoryItems(),
-            fishCaught = getFishCaught(),
-            sessionFishCaught = sessionStats.totalFish,
-            coins = getCurrentCoins(),
-            level = getCurrentLevel(),
-            bestFish = getBestFish(),
-            timestamp = os.time()
-        }
-    end
-
-    local function sendDataToServer(data)
-        local username = LocalPlayer.Name
-        local url = SERVER_URL .. "/api/players/" .. username .. "/update"
-
-        local response = safeRequest(url, "POST", data)
-
-        if response and response.StatusCode == 200 then
-            print("[Web Monitor] Data sent successfully")
-            return true
-        else
-            warn("[Web Monitor] Failed to send data to server")
-            return false
-        end
-    end
-
-    local function sendPing()
-        local username = LocalPlayer.Name
-        local url = SERVER_URL .. "/api/players/" .. username .. "/ping"
-
-        local response = safeRequest(url, "POST", {})
-
-        if response and response.StatusCode == 200 then
-            return true
-        else
-            return false
-        end
-    end
-
-    function webMonitorModule.startMonitoring()
-        local lastUpdate = 0
-        local isRunning = true
-
-        print("[Web Monitor] Starting inventory monitoring...")
-        print("[Web Monitor] Server URL: " .. SERVER_URL)
-        print("[Web Monitor] Update interval: " .. UPDATE_INTERVAL .. " seconds")
-
-        -- Initial data send
-        task.spawn(function()
-            local data = collectPlayerData()
-            sendDataToServer(data)
-        end)
-
-        -- Main monitoring loop
-        task.spawn(function()
-            while isRunning do
-                local currentTime = tick()
-
-                -- Send data every UPDATE_INTERVAL seconds
-                if currentTime - lastUpdate >= UPDATE_INTERVAL then
-                    local data = collectPlayerData()
-                    local success = sendDataToServer(data)
-
-                    if success then
-                        lastUpdate = currentTime
-                    end
-                end
-
-                -- Send ping every 25 seconds
-                if math.fmod(math.floor(currentTime), 25) == 0 then
-                    sendPing()
-                end
-
-                task.wait(1)
-            end
-        end)
-
-        return {
-            stop = function()
-                isRunning = false
-                print("[Web Monitor] Monitoring stopped")
-            end,
-
-            sendUpdate = function()
-                local data = collectPlayerData()
-                return sendDataToServer(data)
-            end,
-
-            getStatus = function()
-                return {
-                    running = isRunning,
-                    lastUpdate = lastUpdate,
-                    serverUrl = SERVER_URL
-                }
-            end
-        }
-    end
-
-    -- Export to global scope
-    _G.WebMonitor = webMonitorModule
-end
-
--- ====== INITIALIZATION OF INTEGRATED MODULES ======
-print("🔧 Initializing integrated modules...")
-
--- Enhanced Background Inventory Startup System
-task.spawn(function()
-    print("🚀 Initializing enhanced background inventory system...")
-    task.wait(5) -- Wait for main script to stabilize
-
-    -- Start background inventory
-    backgroundInventoryModule.startBackgroundInventory()
-
-    -- Wait for background inventory to stabilize
-    task.wait(3)
-
-    -- Verify background inventory is working
-    local function verifyBackgroundInventory()
-        local success, status = checkInventoryTilesStatus()
-        if success then
-            print("✅ Enhanced background inventory verified and ready")
-            return true
-        else
-            print("⚠️ Background inventory needs more time...")
-            return false
-        end
-    end
-
-    -- Try verification up to 3 times
-    local attempts = 0
-    local maxAttempts = 3
-    while attempts < maxAttempts do
-        if verifyBackgroundInventory() then
-            break
-        end
-        attempts = attempts + 1
-        task.wait(2)
-    end
-
-    if attempts >= maxAttempts then
-        warn("❌ Background inventory verification failed after " .. maxAttempts .. " attempts")
-    else
-        print("🎯 Enhanced background inventory system fully operational")
-    end
-end)
-
--- Start web monitoring with background inventory integration
-local webMonitorInstance
-task.spawn(function()
-    task.wait(8) -- Wait for background inventory to be ready
-    webMonitorInstance = webMonitorModule.startMonitoring()
-    _G.WebMonitorInstance = webMonitorInstance
-end)
-
-print("✅ Integrated modules initialized!")
-print("📱 Web Monitor: https://faktacerdas.site")
-print("🎮 Background Inventory: Keeping tiles loaded")
-
--- ============ ENHANCED MAIN LOOP WITH BACKGROUND INVENTORY ============
-print("🚀 Enhanced Inventory Whitelist Notifier (background-optimized) start...")
-
--- Enhanced baseline function that uses background inventory
-local function enhancedBaselineNow()
-    if not isBackgroundInventoryActive then
-        warn("⚠️ Background inventory not active, using fallback baseline")
-        baselineNow()
-        return
-    end
-
-    -- Use background inventory for baseline
-    local success, status = checkInventoryTilesStatus()
-    if success then
-        print("🎯 Enhanced baseline using background inventory")
-        baselineNow() -- This now uses background system efficiently
-    else
-        warn("⚠️ Background inventory tiles not ready for baseline: " .. tostring(status))
-        baselineNow() -- Fallback to normal baseline
-    end
-end
-
--- Enhanced scan function with background inventory optimization
-local function enhancedScanAndNotify()
-    if not isBackgroundInventoryActive then
-        -- If background inventory is not active, try to start it
-        print("⚠️ Background inventory not active, attempting to restart...")
-        backgroundInventoryModule.startBackgroundInventory()
-        task.wait(2)
-    end
-
-    -- Check if inventory tiles are accessible before scanning
-    local success, status = checkInventoryTilesStatus()
-    if success then
-        -- Use optimized scanning with background inventory
-        scanAndNotifySingle()
-    else
-        -- Background inventory not ready, use cooldown and retry
-        print("⏳ Background inventory not ready, waiting... (" .. tostring(status) .. ")")
-        task.wait(1) -- Short wait before retry
-    end
-end
-
--- Run enhanced baseline
-enhancedBaselineNow()
-
--- Enhanced main loop with background inventory integration
-task.spawn(function()
-    while true do
-        enhancedScanAndNotify()
-        task.wait(COOLDOWN)
-    end
-end)
