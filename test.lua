@@ -1858,20 +1858,23 @@ local function autoDetectMegalodon()
     local eventPosition = nil
     local debugMode = false -- Set to true for troubleshooting
 
-    -- New, specific path detection first, based on user feedback
+    -- New, more robust path detection to handle multiple "Props" children
     pcall(function()
         local menuRings = workspace:FindFirstChild("!!! MENU RINGS")
         if menuRings then
-            local props = menuRings:FindFirstChild("Props")
-            if props then
-                local huntFolder = props:FindFirstChild("Megalodon Hunt")
-                if huntFolder then
-                    -- Corrected path: The "Color" object is directly under "Megalodon Hunt"
-                    local colorPart = huntFolder:FindFirstChild("Color")
-                    if colorPart and colorPart.Position then
-                        eventPosition = colorPart.Position
-                        eventFound = true
-                        print("[Megalodon] Event found at new path: " .. colorPart:GetFullName())
+            -- Iterate through all children of "!!! MENU RINGS" to find the correct "Props" folder
+            for _, propsFolder in ipairs(menuRings:GetChildren()) do
+                if propsFolder.Name == "Props" then
+                    if debugMode then print("[Megalodon Debug] Checking Props folder: " .. propsFolder:GetFullName()) end
+                    local huntFolder = propsFolder:FindFirstChild("Megalodon Hunt")
+                    if huntFolder then
+                        local colorPart = huntFolder:FindFirstChild("Color")
+                        if colorPart and colorPart.Position then
+                            eventPosition = colorPart.Position
+                            eventFound = true
+                            print("[Megalodon] Event found at new path: " .. colorPart:GetFullName())
+                            break -- Exit the loop once found
+                        end
                     end
                 end
             end
@@ -1882,14 +1885,11 @@ local function autoDetectMegalodon()
     if not eventFound then
         if debugMode then print("[Megalodon Debug] New path failed, trying old detection method...") end
         
-        -- Search for Megalodon event in Workspace (handle multiple Props folders)
+        -- Search for Megalodon event directly in Workspace (handle multiple Props folders)
         for _, child in ipairs(workspace:GetChildren()) do
-            -- Only check children named "Props" or "props" (case insensitive)
             if string.lower(child.Name) == "props" then
-                if debugMode then
-                    print("[Megalodon Debug] Checking Props folder: " .. child.Name)
-                end
-                -- Try different variations of megalodon hunt naming
+                if debugMode then print("[Megalodon Debug] Checking root Props folder: " .. child.Name) end
+                
                 local megalodonHunt = child:FindFirstChild("Megalodon Hunt") or
                                     child:FindFirstChild("megalodon hunt") or
                                     child:FindFirstChild("Megalodon_Hunt") or
@@ -1912,7 +1912,6 @@ local function autoDetectMegalodon()
         if debugMode then print("[Megalodon Debug] Standard fallback failed, trying deep search...") end
         for _, child in ipairs(workspace:GetChildren()) do
             if string.lower(child.Name) == "props" then
-                -- Search all children of Props for megalodon-related items
                 for _, subChild in ipairs(child:GetChildren()) do
                     if string.find(string.lower(subChild.Name), "megalodon") then
                         if subChild:FindFirstChild("Color") and subChild.Color.Position then
