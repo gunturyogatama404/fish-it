@@ -1858,7 +1858,7 @@ local function autoDetectMegalodon()
     local eventPosition = nil
     local debugMode = false -- Set to true for troubleshooting
 
-    -- New, specific path detection first
+    -- New, specific path detection first, based on user feedback
     pcall(function()
         local menuRings = workspace:FindFirstChild("!!! MENU RINGS")
         if menuRings then
@@ -1866,11 +1866,12 @@ local function autoDetectMegalodon()
             if props then
                 local huntFolder = props:FindFirstChild("Megalodon Hunt")
                 if huntFolder then
-                    local megalodonHunt = huntFolder:FindFirstChild("Megalodon Hunt")
-                    if megalodonHunt and megalodonHunt:FindFirstChild("Color") then
-                        eventPosition = megalodonHunt.Color.Position
+                    -- Corrected path: The "Color" object is directly under "Megalodon Hunt"
+                    local colorPart = huntFolder:FindFirstChild("Color")
+                    if colorPart and colorPart.Position then
+                        eventPosition = colorPart.Position
                         eventFound = true
-                        print("[Megalodon] Event found at new path: " .. megalodonHunt:GetFullName())
+                        print("[Megalodon] Event found at new path: " .. colorPart:GetFullName())
                     end
                 end
             end
@@ -1896,7 +1897,7 @@ local function autoDetectMegalodon()
                                     child:FindFirstChild("MegalodonHunt") or
                                     child:FindFirstChild("megalodonh hunt")
 
-                if megalodonHunt and megalodonHunt:FindFirstChild("Color") then
+                if megalodonHunt and megalodonHunt:FindFirstChild("Color") and megalodonHunt.Color.Position then
                     eventPosition = megalodonHunt.Color.Position
                     eventFound = true
                     print("[Megalodon] Event found via fallback in: " .. child.Name .. "/" .. megalodonHunt.Name)
@@ -1914,7 +1915,7 @@ local function autoDetectMegalodon()
                 -- Search all children of Props for megalodon-related items
                 for _, subChild in ipairs(child:GetChildren()) do
                     if string.find(string.lower(subChild.Name), "megalodon") then
-                        if subChild:FindFirstChild("Color") then
+                        if subChild:FindFirstChild("Color") and subChild.Color.Position then
                             eventPosition = subChild.Color.Position
                             eventFound = true
                             print("[Megalodon] Fallback detection found in: " .. child.Name .. "/" .. subChild.Name)
@@ -1933,7 +1934,6 @@ local function autoDetectMegalodon()
             megalodonEventActive = true
             megalodonMissingAlertSent = false
             megalodonEventStartedAt = os.time()
-            -- Event found - no webhook needed, just track it silently
         end
 
         if not hasTeleportedToMegalodon then
@@ -1954,7 +1954,6 @@ local function autoDetectMegalodon()
             megalodonSavedPosition = nil
             hasTeleportedToMegalodon = false
 
-            -- Event ended - no webhook needed, just reset state silently
             if wasActive and not megalodonMissingAlertSent then
                 megalodonMissingAlertSent = true
                 megalodonEventStartedAt = 0
