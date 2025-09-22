@@ -254,7 +254,7 @@ local BestCaught = leaderstats:WaitForChild("Rarest Fish")
 local AllTimeCaught = leaderstats:WaitForChild("Caught")
 
 -- ====== FISHING STATS TRACKING VARIABLES ======
-local startTime = tick() -- Using tick() for more precise timing
+local startTime = os.time() -- Using os.time() for stable uptime calculation
 local sessionStats = {
     totalFish = 0,
     totalValue = 0,
@@ -356,10 +356,10 @@ local defaultConfig = {
     gpuSaver = false,
     chargeFishingDelay = 0.01,
     autoFishMainDelay = 0.9,
-    autoSellDelay = 5,
+    autoSellDelay = 36,
     autoCatchDelay = 0.2,
     weatherIdDelay = 3,
-    weatherCycleDelay = 100
+    weatherCycleDelay = 36
 }
 local config = {}
 for key, value in pairs(defaultConfig) do
@@ -579,12 +579,12 @@ local function applyDelayConfig()
         return clamped
     end
 
-    chargeFishingDelay = applyField("chargeFishingDelay", 0.01, defaultConfig.chargeFishingDelay)
+    chargeFishingDelay = applyField("chargeFishingDelay", 0.1, defaultConfig.chargeFishingDelay)
     autoFishMainDelay = applyField("autoFishMainDelay", 0.1, defaultConfig.autoFishMainDelay)
-    autoSellDelay = applyField("autoSellDelay", 1, defaultConfig.autoSellDelay)
+    autoSellDelay = applyField("autoSellDelay", 36, defaultConfig.autoSellDelay)
     autoCatchDelay = applyField("autoCatchDelay", 0.1, defaultConfig.autoCatchDelay)
     weatherIdDelay = applyField("weatherIdDelay", 1, defaultConfig.weatherIdDelay)
-    weatherCycleDelay = applyField("weatherCycleDelay", 10, defaultConfig.weatherCycleDelay)
+    weatherCycleDelay = applyField("weatherCycleDelay", 35, defaultConfig.weatherCycleDelay)
 
     if updated then
         pcall(saveConfig)
@@ -828,10 +828,10 @@ local connections = {}
 -- ====== DELAY VARIABLES ======
 local chargeFishingDelay = 0.01
 local autoFishMainDelay = 0.9
-local autoSellDelay = 5
+local autoSellDelay = 36
 local autoCatchDelay = 0.2
 local weatherIdDelay = 3
-local weatherCycleDelay = 100
+local weatherCycleDelay = 36
 
 local HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool
 
@@ -1037,18 +1037,32 @@ local function createWhiteScreen()
     -- Auto features status (centered)
     local statusLabel = Instance.new("TextLabel")
     statusLabel.Name = "StatusLabel"
-    statusLabel.Size = UDim2.new(0, 600, 0, 60)
+    statusLabel.Size = UDim2.new(0, 600, 0, 40)
     statusLabel.Position = UDim2.new(0.5, -300, 0, 450)
     statusLabel.BackgroundTransparency = 1
     statusLabel.Text = "🤖 Auto Farm: " .. (isAutoFarmOn and "🟢 ON" or "🔴 OFF") .. 
-                      "  |  Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
-                      "  |  Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF")
+                      " | Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
+                      " | Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF")
     statusLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
     statusLabel.TextSize = 16
     statusLabel.Font = Enum.Font.SourceSans
     statusLabel.TextXAlignment = Enum.TextXAlignment.Center
     statusLabel.TextYAlignment = Enum.TextYAlignment.Center
     statusLabel.Parent = frame
+
+    local extraStatusLabel = Instance.new("TextLabel")
+    extraStatusLabel.Name = "ExtraStatusLabel"
+    extraStatusLabel.Size = UDim2.new(0, 600, 0, 40)
+    extraStatusLabel.Position = UDim2.new(0.5, -300, 0, 470)
+    extraStatusLabel.BackgroundTransparency = 1
+    extraStatusLabel.Text = "🦈 Auto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
+                          " | 🌤️ Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
+    extraStatusLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+    extraStatusLabel.TextSize = 16
+    extraStatusLabel.Font = Enum.Font.SourceSans
+    extraStatusLabel.TextXAlignment = Enum.TextXAlignment.Center
+    extraStatusLabel.TextYAlignment = Enum.TextYAlignment.Center
+    extraStatusLabel.Parent = frame
 
     -- Close button for Android/mobile users
     local closeButton = Instance.new("TextButton")
@@ -1066,26 +1080,31 @@ local function createWhiteScreen()
     closeButton.MouseButton1Click:Connect(function()
         disableGPUSaver()
     end)
-    
-    
--- ====== OPTIMIZED UPDATE SYSTEM ======
+
+    -- ====== IMPROVED UPDATE SYSTEM (from reference) ======
     task.spawn(function()
-        while whiteScreenGui and whiteScreenGui.Parent do
-            task.wait(2) -- Update every 2 seconds instead of every frame
+        local lastUpdate = tick()
+        local frameCount = 0
+        
+        connections.renderConnection = RunService.RenderStepped:Connect(function()
+            frameCount = frameCount + 1
+            local currentTime = tick()
+            
+            if currentTime - lastUpdate >= 1 then
+                local fps = frameCount / (currentTime - lastUpdate)
+                
+                -- Safe FPS update
+                pcall(function()
+                    if fpsLabel and fpsLabel.Parent then
+                        fpsLabel.Text = string.format("📊 FPS: %.0f", fps)
+                    end
+                end)
                 
                 -- Safe session time update
                 pcall(function()
                     if sessionLabel and sessionLabel.Parent then
-                        local currentTime = tick()
-                        local currentUptime = math.max(0, math.floor(currentTime - startTime))
+                        local currentUptime = math.max(0, os.time() - startTime)
                         sessionLabel.Text = "⏱️ Uptime: " .. FormatTime(currentUptime)
-                    end
-                end)
-
-                -- Safe FPS update
-                pcall(function()
-                    if fpsLabel and fpsLabel.Parent then
-                        fpsLabel.Text = "📊 FPS: " .. currentFPS
                     end
                 end)
                 
@@ -1097,85 +1116,52 @@ local function createWhiteScreen()
                     end
                 end)
                 
-                -- Safe earnings update
+                -- Safe coins update
                 pcall(function()
                     if coinLabel and coinLabel.Parent then
                         coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
                     end
                 end)
 
-                -- Safe earnings update
+                -- Safe level update
                 pcall(function()
                     if levelLabel and levelLabel.Parent then
                         levelLabel.Text = "⭐ " .. getCurrentLevel()
                     end
                 end)
 
-                -- Safe quest
-                pcall(function()
-                    if quest1Label and quest1Label.Parent then
-                        quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1")
-                    end
-                end)
-
-                pcall(function()
-                    if quest2Label and quest2Label.Parent then
-                        quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2")
-                    end
-                end)
-                
-                pcall(function()
-                    if quest3Label and quest3Label.Parent then
-                        quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3")
-                    end
-                end)
-
-                pcall(function()
-                    if quest4Label and quest4Label.Parent then
-                        quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4")
-                    end
-                end)
+                -- Safe quest updates
+                pcall(function() if quest1Label and quest1Label.Parent then quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1") end end)
+                pcall(function() if quest2Label and quest2Label.Parent then quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2") end end)
+                pcall(function() if quest3Label and quest3Label.Parent then quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3") end end)
+                pcall(function() if quest4Label and quest4Label.Parent then quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4") end end)
                 
                 -- Safe status update
                 pcall(function()
                     if statusLabel and statusLabel.Parent then
                         statusLabel.Text = "🤖 Auto Farm: " .. (isAutoFarmOn and "🟢 ON" or "🔴 OFF") .. 
-                                         "  |  Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
-                                         "  |  Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF") ..
-                                         "  |  Auto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
-                                         "  |  Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
+                                         " | Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
+                                         " | Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF")
+                    end
+                    if extraStatusLabel and extraStatusLabel.Parent then
+                        extraStatusLabel.Text = "🦈 Auto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
+                                              " | 🌤️ Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
                     end
                 end)
                 
                 -- Safe Total Caught & Best Caught update
                 pcall(function()
                     if titleLabel and titleLabel.Parent then
-                        local currentCaught = 0
-                        local currentBest = "None"
-                        
-                        if LocalPlayer.leaderstats then
-                            if LocalPlayer.leaderstats.Caught then
-                                currentCaught = tonumber(LocalPlayer.leaderstats.Caught.Value) or 0
-                            end
-                            if LocalPlayer.leaderstats["Rarest Fish"] then
-                                currentBest = tostring(LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
-                            end
-                        end
-                        
-                        titleLabel.Text = "🟢 " .. (LocalPlayer.Name or "Player") .. 
-                                        "\nTotal Caught: " .. FormatNumber(currentCaught) .. 
-                                        "\nBest Caught: " .. currentBest
+                        local currentCaught = (LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught and LocalPlayer.leaderstats.Caught.Value) or 0
+                        local currentBest = (LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] and LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
+                        titleLabel.Text = "🟢 " .. LocalPlayer.Name .. "\nTotal Caught: " .. FormatNumber(currentCaught) .. "\nBest Caught: " .. currentBest
                     end
                 end)
                 
-                -- Safe last update time
-                pcall(function()
-                    if lastUpdateLabel and lastUpdateLabel.Parent then
-                        lastUpdateLabel.Text = "Last Update: " .. os.date("%H:%M:%S")
-                    end
-                end)
-                
-        end
+                frameCount = 0
+                lastUpdate = currentTime
+            end
+        end)
     end)
     
     -- Real-time listeners for Total Caught and Best Caught
@@ -1206,6 +1192,10 @@ local function removeWhiteScreen()
         whiteScreenGui = nil
     end
     
+    if connections.renderConnection then
+        connections.renderConnection:Disconnect()
+        connections.renderConnection = nil
+    end
     
     if connections.caughtConnection then
         connections.caughtConnection:Disconnect()
@@ -1241,6 +1231,7 @@ function enableGPUSaver()
             end
         end
         
+        pcall(function() setfpscap(5) end) -- Limit FPS to 5
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
@@ -1274,6 +1265,7 @@ function disableGPUSaver()
             end
         end
         
+        pcall(function() setfpscap(0) end) -- Remove FPS limit
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, true)
         workspace.CurrentCamera.FieldOfView = 70
     end)
@@ -2764,6 +2756,20 @@ do
                         textBox.Text = tostring(value)
                     end
 
+                    -- Auto-save on text change with debounce
+                    local lastChanged = 0
+                    local debounceTime = 0.5 -- seconds
+                    textBox.Changed:Connect(function(property)
+                        if property == "Text" then
+                            lastChanged = tick()
+                            task.delay(debounceTime, function()
+                                if tick() - lastChanged >= debounceTime then
+                                    commitValue(textBox.Text)
+                                end
+                            end)
+                        end
+                    end)
+
                     textBox.FocusLost:Connect(function()
                         commitValue(textBox.Text)
                     end)
@@ -2942,7 +2948,7 @@ autoWeatherToggle = SecOther:NewToggle("Auto Weather", "Auto weather events", fu
     setAutoWeather(state)
 end)
 
-chargeFishingSlider = SecDelays:NewSlider("Charge Rod Delay", "Delay setelah charge fishing rod (detik, min: 0.01)", 10, 0.01, function(value)
+chargeFishingSlider = SecDelays:NewSlider("Charge Rod Delay", "Delay setelah charge fishing rod (detik, min: 0.01)", 10, 0.1, function(value)
     setChargeFishingDelay(value)
 end)
 
@@ -2950,7 +2956,7 @@ autoFishMainSlider = SecDelays:NewSlider("Auto Fish Delay", "Delay loop utama au
     setAutoFishMainDelay(value)
 end)
 
-autoSellSlider = SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik, min: 1)", 30, 1, function(value)
+autoSellSlider = SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik, min: 1)", 30, 34, function(value)
     setAutoSellDelay(value)
 end)
 
@@ -2962,7 +2968,7 @@ weatherIdSlider = SecDelays:NewSlider("Weather ID Delay", "Delay antar weather I
     setWeatherIdDelay(value)
 end)
 
-weatherCycleSlider = SecDelays:NewSlider("Weather Cycle Delay", "Delay siklus weather (detik, min: 10)", 600, 10, function(value)
+weatherCycleSlider = SecDelays:NewSlider("Weather Cycle Delay", "Delay siklus weather (detik, min: 10)", 600, 30, function(value)
     setWeatherCycleDelay(value)
 end)
 
