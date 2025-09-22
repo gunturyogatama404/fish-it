@@ -1113,7 +1113,6 @@ local function createWhiteScreen()
             task.wait(1) -- Update every second
         end
     end)
-    end)
     
     -- Real-time listeners for Total Caught and Best Caught
     if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then
