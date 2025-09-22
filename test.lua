@@ -262,6 +262,27 @@ local sessionStats = {
     fishTypes = {}
 }
 
+-- ====== FPS TRACKING VARIABLES ======
+local RunService = game:GetService("RunService")
+local frameCount = 0
+local lastFPSUpdate = tick()
+local currentFPS = 0
+
+-- FPS Counter function
+local function updateFPS()
+    frameCount = frameCount + 1
+    local currentTime = tick()
+
+    if currentTime - lastFPSUpdate >= 1 then
+        currentFPS = frameCount
+        frameCount = 0
+        lastFPSUpdate = currentTime
+    end
+end
+
+-- Connect FPS counter to heartbeat
+RunService.Heartbeat:Connect(updateFPS)
+
 -- Database ikan lengkap
 local fishDatabase = {
     [163] = {name = "Viperfish", sellPrice = 94}
@@ -908,12 +929,25 @@ local function createWhiteScreen()
     sessionLabel.Font = Enum.Font.SourceSansBold
     sessionLabel.TextXAlignment = Enum.TextXAlignment.Center
     sessionLabel.Parent = frame
+
+    -- FPS Counter (centered)
+    local fpsLabel = Instance.new("TextLabel")
+    fpsLabel.Name = "FPSLabel"
+    fpsLabel.Size = UDim2.new(0, 400, 0, 40)
+    fpsLabel.Position = UDim2.new(0.5, -200, 0, 200)
+    fpsLabel.BackgroundTransparency = 1
+    fpsLabel.Text = "📊 FPS: " .. currentFPS
+    fpsLabel.TextColor3 = Color3.new(1, 1, 1)
+    fpsLabel.TextSize = 22
+    fpsLabel.Font = Enum.Font.SourceSansBold
+    fpsLabel.TextXAlignment = Enum.TextXAlignment.Center
+    fpsLabel.Parent = frame
     
     -- Fishing stats (centered)
     local fishStatsLabel = Instance.new("TextLabel")
     fishStatsLabel.Name = "FishStatsLabel"
     fishStatsLabel.Size = UDim2.new(0, 400, 0, 40)
-    fishStatsLabel.Position = UDim2.new(0.5, -200, 0, 200)
+    fishStatsLabel.Position = UDim2.new(0.5, -200, 0, 220)
     fishStatsLabel.BackgroundTransparency = 1
     fishStatsLabel.Text = "🎣 Fish Caught: " .. FormatNumber(sessionStats.totalFish)
     fishStatsLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -921,12 +955,12 @@ local function createWhiteScreen()
     fishStatsLabel.Font = Enum.Font.SourceSans
     fishStatsLabel.TextXAlignment = Enum.TextXAlignment.Center
     fishStatsLabel.Parent = frame
-    
+
 -- Coin display (mengganti earnings)
     local coinLabel = Instance.new("TextLabel")
     coinLabel.Name = "CoinLabel"
     coinLabel.Size = UDim2.new(0, 400, 0, 40)
-    coinLabel.Position = UDim2.new(0.5, -200, 0, 220)
+    coinLabel.Position = UDim2.new(0.5, -200, 0, 240)
     coinLabel.BackgroundTransparency = 1
     coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
     coinLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -939,7 +973,7 @@ local function createWhiteScreen()
     local levelLabel = Instance.new("TextLabel")
     levelLabel.Name = "LevelLabel"
     levelLabel.Size = UDim2.new(0, 400, 0, 40)
-    levelLabel.Position = UDim2.new(0.5, -200, 0, 240)
+    levelLabel.Position = UDim2.new(0.5, -200, 0, 260)
     levelLabel.BackgroundTransparency = 1
     levelLabel.Text = "⭐ " .. getCurrentLevel()
     levelLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -951,7 +985,7 @@ local function createWhiteScreen()
         local quest1Label = Instance.new("TextLabel")
     quest1Label.Name = "Quest1Label"
     quest1Label.Size = UDim2.new(0, 600, 0, 30)  -- Lebar lebih untuk 2 quests, height compact
-    quest1Label.Position = UDim2.new(0.5, -300, 0, 310)  -- Di bawah level
+    quest1Label.Position = UDim2.new(0.5, -300, 0, 330)  -- Di bawah level
     quest1Label.BackgroundTransparency = 1
     quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1")
     quest1Label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -964,7 +998,7 @@ local function createWhiteScreen()
     local quest2Label = Instance.new("TextLabel")
     quest2Label.Name = "Quest2Label"
     quest2Label.Size = UDim2.new(0, 600, 0, 30)  -- Lebar lebih untuk 2 quests, height compact
-    quest2Label.Position = UDim2.new(0.5, -300, 0, 330)  -- Di bawah level
+    quest2Label.Position = UDim2.new(0.5, -300, 0, 350)  -- Di bawah level
     quest2Label.BackgroundTransparency = 1
     quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2")
     quest2Label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -977,7 +1011,7 @@ local function createWhiteScreen()
     local quest3Label = Instance.new("TextLabel")
     quest3Label.Name = "Quest3Label"
     quest3Label.Size = UDim2.new(0, 600, 0, 30)  -- Lebar lebih untuk 2 quests, height compact
-    quest3Label.Position = UDim2.new(0.5, -300, 0, 350)  -- Di bawah level
+    quest3Label.Position = UDim2.new(0.5, -300, 0, 370)  -- Di bawah level
     quest3Label.BackgroundTransparency = 1
     quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3")
     quest3Label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -990,7 +1024,7 @@ local function createWhiteScreen()
     local quest4Label = Instance.new("TextLabel")
     quest4Label.Name = "Quest4Label"
     quest4Label.Size = UDim2.new(0, 600, 0, 30)  -- Lebar lebih untuk 2 quests, height compact
-    quest4Label.Position = UDim2.new(0.5, -300, 0, 370)  -- Di bawah level
+    quest4Label.Position = UDim2.new(0.5, -300, 0, 390)  -- Di bawah level
     quest4Label.BackgroundTransparency = 1
     quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4")
     quest4Label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -1004,7 +1038,7 @@ local function createWhiteScreen()
     local statusLabel = Instance.new("TextLabel")
     statusLabel.Name = "StatusLabel"
     statusLabel.Size = UDim2.new(0, 600, 0, 60)
-    statusLabel.Position = UDim2.new(0.5, -300, 0, 430)
+    statusLabel.Position = UDim2.new(0.5, -300, 0, 450)
     statusLabel.BackgroundTransparency = 1
     statusLabel.Text = "🤖 Auto Farm: " .. (isAutoFarmOn and "🟢 ON" or "🔴 OFF") .. 
                       "  |  Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
@@ -1045,6 +1079,13 @@ local function createWhiteScreen()
                         local currentTime = tick()
                         local currentUptime = math.max(0, math.floor(currentTime - startTime))
                         sessionLabel.Text = "⏱️ Uptime: " .. FormatTime(currentUptime)
+                    end
+                end)
+
+                -- Safe FPS update
+                pcall(function()
+                    if fpsLabel and fpsLabel.Parent then
+                        fpsLabel.Text = "📊 FPS: " .. currentFPS
                     end
                 end)
                 
