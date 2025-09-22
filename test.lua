@@ -240,7 +240,15 @@ end
 -- Auto-execute performance optimization on script start
 ultimatePerformance()
 
--- Optional FPS monitor has been removed.
+-- Optional FPS monitor
+task.spawn(function()
+    while task.wait(5) do
+        local fps = workspace:GetRealPhysicsFPS()
+        if fps then
+            print("📊 Current FPS: " .. math.floor(fps))
+        end
+    end
+end)
 
 local player = game.Players.LocalPlayer
 local replicatedStorage = game:GetService("ReplicatedStorage")
@@ -271,7 +279,8 @@ local fishDatabase = {
 local isAutoFarmOn = false
 local isAutoSellOn = false
 local isAutoCatchOn = false
-
+local isUpgradeOn = false
+local isUpgradeBaitOn = false
 local isAutoWeatherOn = false
 local gpuSaverEnabled = false
 local isAutoMegalodonOn = false
@@ -1035,83 +1044,137 @@ local function createWhiteScreen()
         disableGPUSaver()
     end)
     
-
+    -- FPS Counter (top right)
+    local fpsLabel = Instance.new("TextLabel")
+    fpsLabel.Size = UDim2.new(0, 200, 0, 50)
+    fpsLabel.Position = UDim2.new(1, -220, 0, 20)
+    fpsLabel.BackgroundTransparency = 1
+    fpsLabel.Text = "FPS: Calculating..."
+    fpsLabel.TextColor3 = Color3.new(0, 1, 0)
+    fpsLabel.TextSize = 18
+    fpsLabel.Font = Enum.Font.SourceSansBold
+    fpsLabel.TextXAlignment = Enum.TextXAlignment.Right
+    fpsLabel.Parent = frame
     
 -- ====== IMPROVED UPDATE SYSTEM ======
     task.spawn(function()
-        while whiteScreenGui and whiteScreenGui.Parent do
-            -- Safe session time update
-            pcall(function()
-                if sessionLabel and sessionLabel.Parent then
-                    local currentUptime = math.max(0, os.time() - startTime)
-                    sessionLabel.Text = "⏱️ Uptime: " .. FormatTime(currentUptime)
-                end
-            end)
+        local lastUpdate = tick()
+        local frameCount = 0
+        
+        connections.fpsConnection = RunService.RenderStepped:Connect(function()
+            frameCount = frameCount + 1
+            local currentTime = tick()
             
-            -- Safe fishing stats update
-            pcall(function()
-                if fishStatsLabel and fishStatsLabel.Parent then
-                    local fishCount = math.max(0, sessionStats.totalFish)
-                    fishStatsLabel.Text = "🎣 Fish Caught: " .. FormatNumber(fishCount)
-                end
-            end)
-            
-            -- Safe earnings update
-            pcall(function()
-                if coinLabel and coinLabel.Parent then
-                    coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
-                end
-            end)
-
-            -- Safe level update
-            pcall(function()
-                if levelLabel and levelLabel.Parent then
-                    levelLabel.Text = "⭐ " .. getCurrentLevel()
-                end
-            end)
-
-            -- Safe quest updates
-            pcall(function()
-                if quest1Label and quest1Label.Parent then quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1") end
-                if quest2Label and quest2Label.Parent then quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2") end
-                if quest3Label and quest3Label.Parent then quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3") end
-                if quest4Label and quest4Label.Parent then quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4") end
-            end)
-            
-            -- Safe status update
-            pcall(function()
-                if statusLabel and statusLabel.Parent then
-                    statusLabel.Text = "🤖 Auto Farm: " .. (isAutoFarmOn and "🟢 ON" or "🔴 OFF") .. 
-                                     "  |  Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
-                                     "  |  Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF") ..
-                                     "\nAuto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
-                                     "  |  Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
-                end
-            end)
-            
-            -- Safe Total Caught & Best Caught update
-            pcall(function()
-                if titleLabel and titleLabel.Parent then
-                    local currentCaught = 0
-                    local currentBest = "None"
-                    
-                    if LocalPlayer.leaderstats then
-                        if LocalPlayer.leaderstats.Caught then
-                            currentCaught = tonumber(LocalPlayer.leaderstats.Caught.Value) or 0
-                        end
-                        if LocalPlayer.leaderstats["Rarest Fish"] then
-                            currentBest = tostring(LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
-                        end
+            if currentTime - lastUpdate >= 1 then
+                local fps = frameCount / (currentTime - lastUpdate)
+                
+                -- Safe FPS update
+                pcall(function()
+                    if fpsLabel and fpsLabel.Parent then
+                        fpsLabel.Text = string.format("FPS: %.0f", math.floor(fps))
                     end
-                    
-                    titleLabel.Text = "🟢 " .. (LocalPlayer.Name or "Player") .. 
-                                    "\nTotal Caught: " .. FormatNumber(currentCaught) .. 
-                                    "\nBest Caught: " .. currentBest
-                end
-            end)
-            
-            task.wait(1) -- Update every second
-        end
+                end)
+                
+                -- Safe session time update
+                pcall(function()
+                    if sessionLabel and sessionLabel.Parent then
+                        local currentUptime = math.max(0, os.time() - startTime)
+                        sessionLabel.Text = "⏱️ Uptime: " .. FormatTime(currentUptime)
+                    end
+                end)
+                
+                -- Safe fishing stats update
+                pcall(function()
+                    if fishStatsLabel and fishStatsLabel.Parent then
+                        local fishCount = math.max(0, sessionStats.totalFish)
+                        fishStatsLabel.Text = "🎣 Fish Caught: " .. FormatNumber(fishCount)
+                    end
+                end)
+                
+                -- Safe earnings update
+                pcall(function()
+                    if coinLabel and coinLabel.Parent then
+                        coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
+                    end
+                end)
+
+                -- Safe earnings update
+                pcall(function()
+                    if levelLabel and levelLabel.Parent then
+                        levelLabel.Text = "⭐ " .. getCurrentLevel()
+                    end
+                end)
+
+                -- Safe quest
+                pcall(function()
+                    if quest1Label and quest1Label.Parent then
+                        quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1")
+                    end
+                end)
+
+                pcall(function()
+                    if quest2Label and quest2Label.Parent then
+                        quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2")
+                    end
+                end)
+                
+                pcall(function()
+                    if quest3Label and quest3Label.Parent then
+                        quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3")
+                    end
+                end)
+
+                pcall(function()
+                    if quest4Label and quest4Label.Parent then
+                        quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4")
+                    end
+                end)
+                
+                -- Safe status update
+                pcall(function()
+                    if statusLabel and statusLabel.Parent then
+                        statusLabel.Text = "🤖 Auto Farm: " .. (isAutoFarmOn and "🟢 ON" or "🔴 OFF") .. 
+                                         "  |  Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
+                                         "  |  Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF") ..
+                                         "\nUpgrade Rod: " .. (isUpgradeOn and "🟢 ON" or "🔴 OFF") ..
+                                         "  |  Upgrade Bait: " .. (isUpgradeBaitOn and "🟢 ON" or "🔴 OFF") ..
+                                         "  |  Auto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
+                                         "  |  Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
+                    end
+                end)
+                
+                -- Safe Total Caught & Best Caught update
+                pcall(function()
+                    if titleLabel and titleLabel.Parent then
+                        local currentCaught = 0
+                        local currentBest = "None"
+                        
+                        if LocalPlayer.leaderstats then
+                            if LocalPlayer.leaderstats.Caught then
+                                currentCaught = tonumber(LocalPlayer.leaderstats.Caught.Value) or 0
+                            end
+                            if LocalPlayer.leaderstats["Rarest Fish"] then
+                                currentBest = tostring(LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
+                            end
+                        end
+                        
+                        titleLabel.Text = "🟢 " .. (LocalPlayer.Name or "Player") .. 
+                                        "\nTotal Caught: " .. FormatNumber(currentCaught) .. 
+                                        "\nBest Caught: " .. currentBest
+                    end
+                end)
+                
+                -- Safe last update time
+                pcall(function()
+                    if lastUpdateLabel and lastUpdateLabel.Parent then
+                        lastUpdateLabel.Text = "Last Update: " .. os.date("%H:%M:%S")
+                    end
+                end)
+                
+                frameCount = 0
+                lastUpdate = currentTime
+            end
+        end)
     end)
     
     -- Real-time listeners for Total Caught and Best Caught
@@ -1142,7 +1205,10 @@ local function removeWhiteScreen()
         whiteScreenGui = nil
     end
     
-
+    if connections.fpsConnection then
+        connections.fpsConnection:Disconnect()
+        connections.fpsConnection = nil
+    end
     
     if connections.caughtConnection then
         connections.caughtConnection:Disconnect()
@@ -1495,7 +1561,12 @@ local function disablePreset(presetKey)
 end
 
 
--- Rod and bait ID/databases have been removed as per instructions.
+-- ====== DAFTAR IDS ======
+local rodIDs = {79, 76, 85, 76, 78, 4, 80, 6, 7, 5}
+local baitIDs = {10, 2, 3, 6, 8, 15, 16}
+local WeatherIDs = {"Cloudy", "Storm","Wind"}
+local rodDatabase = {luck = 79,carbon = 76,grass = 85,demascus = 76,ice = 78,lucky = 4,midnight = 80,steampunk = 6,chrome = 7,astral = 5}
+local BaitDatabase = {topwaterbait = 10,luckbait = 2,midnightbait = 3,chromabait = 6,darkmatterbait = 8,corruptbait = 15,aetherbait = 16}
 
 
 -- ====== CORE FUNCTIONS ======
@@ -1545,7 +1616,67 @@ local function unequipRod()
     end)
 end
 
--- The buyRod and buyBait functions have been removed as per instructions.
+-- buy luck rod
+local function buyRod(rodDatabase)
+    if purchaseRodEvent then
+        pcall(function()
+            purchaseRodEvent:InvokeServer(rodDatabase)
+        end)
+    else
+        local success, err = pcall(function()
+            local replicatedStorage = game:GetService("ReplicatedStorage")
+            if replicatedStorage then
+                local directEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseFishingRod"]
+                if directEvent then
+                    task.wait(0.5) -- Add delay to prevent rate limiting
+                    directEvent:InvokeServer(rodDatabase)
+                end
+            end
+        end)
+
+        if not success then
+            -- Check if it's an asset or network error
+            if string.find(tostring(err):lower(), "asset is not approved") or
+               string.find(tostring(err):lower(), "failed to load") or
+               string.find(tostring(err):lower(), "network") then
+                -- Silently continue
+            else
+                warn("[Purchase Rod] Error: " .. tostring(err))
+            end
+        end
+    end
+end
+
+-- buy bait
+local function buyBait(BaitDatabase)
+    if purchaseBaitEvent then
+        pcall(function()
+            purchaseBaitEvent:InvokeServer(BaitDatabase)
+        end)
+    else
+        local success, err = pcall(function()
+            local replicatedStorage = game:GetService("ReplicatedStorage")
+            if replicatedStorage then
+                local directEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseBait"]
+                if directEvent then
+                    task.wait(0.5) -- Add delay to prevent rate limiting
+                    directEvent:InvokeServer(BaitDatabase)
+                end
+            end
+        end)
+
+        if not success then
+            -- Check if it's an asset or network error
+            if string.find(tostring(err):lower(), "asset is not approved") or
+               string.find(tostring(err):lower(), "failed to load") or
+               string.find(tostring(err):lower(), "network") then
+                -- Silently continue
+            else
+                warn("[Purchase Bait] Error: " .. tostring(err))
+            end
+        end
+    end
+end
 
 -- ====== MEGALODON HUNT FUNCTIONS ======
 local function teleportToMegalodon(position, isEventTeleport)
@@ -1872,7 +2003,15 @@ local function setSell(state)
     print("💰 Auto Sell: " .. (state and "ENABLED" or "DISABLED"))
 end
 
+local function setUpgrade(state)
+    isUpgradeOn = state
+    print("⬆️ Auto Upgrade Rod: " .. (state and "ENABLED" or "DISABLED"))
+end
 
+local function setUpgradeBait(state)
+    isUpgradeBaitOn = state
+    print("⬆️ Auto Upgrade Bait: " .. (state and "ENABLED" or "DISABLED"))
+end
 
 local function setAutoCatch(state)
     isAutoCatchOn = state
@@ -2875,7 +3014,13 @@ autoPreset3Toggle = SecMain:NewToggle("Auto 3 (Auto Kohana)", "Enable core auto 
     end
 end)
 
+SecOther:NewToggle("Auto Upgrade Rod", "Auto upgrade rod", function(state)
+    setUpgrade(state)
+end)
 
+SecOther:NewToggle("Auto Upgrade Bait", "Auto upgrade bait", function(state)
+    setUpgradeBait(state)
+end)
 
 autoWeatherToggle = SecOther:NewToggle("Auto Weather", "Auto weather events", function(state)
     setAutoWeather(state)
@@ -2953,7 +3098,71 @@ SecTP:NewDropdown("Pilih Lokasi", "Teleport instan ke lokasi", tpNames, function
     end
 end)
 
--- The "Shop" tab has been removed as per instructions.
+local TabShop = Window:NewTab("Shop")
+local SecShop = TabShop:NewSection("Fishing Rods")
+local SecBait = TabShop:NewSection("Bait")
+
+SecShop:NewButton("Luck Rod - 300", "Purchase Luck Rod", function()
+    buyRod(rodDatabase.luck)
+end)
+
+SecShop:NewButton("Carbon Rod - 900", "Purchase Carbon Rod", function()
+    buyRod(rodDatabase.carbon)
+end)
+
+SecShop:NewButton("Grass Rod - 1500", "Purchase Grass Rod", function()
+    buyRod(rodDatabase.grass)
+end)
+
+SecShop:NewButton("Demascus Rod - 3000", "Purchase Demascus Rod", function()
+    buyRod(rodDatabase.demascus)
+end)
+
+SecShop:NewButton("Ice Rod - 5000", "Purchase Ice Rod", function()
+    buyRod(rodDatabase.ice)
+end)
+
+SecShop:NewButton("Lucky Rod - 15k", "Purchase Lucky Rod", function()
+    buyRod(rodDatabase.lucky)
+end)
+
+SecShop:NewButton("Midnight Rod - 50k", "Purchase Midnight Rod", function()
+    buyRod(rodDatabase.midnight)
+end)
+
+SecShop:NewButton("Steampunk Rod - 215k", "Purchase Steampunk Rod", function()
+    buyRod(rodDatabase.steampunk)
+end)
+
+SecShop:NewButton("Chrome Rod - 437k", "Purchase Chrome Rod", function()
+    buyRod(rodDatabase.chrome)
+end)
+
+SecShop:NewButton("Astral Rod - 1m", "Purchase Astral Rod", function()
+    buyRod(rodDatabase.astral)
+end)
+
+SecBait:NewButton("TopWater Bait", "Buy Bait", function()
+    buyBait(BaitDatabase.topwaterbait)
+end)
+SecBait:NewButton("Luck Bait 1k", "Buy Bait", function()
+    buyBait(BaitDatabase.luckbait)
+end)
+SecBait:NewButton("Midnight Bait 3k", "Buy Bait", function()
+    buyBait(BaitDatabase.midnightbait)
+end)
+SecBait:NewButton("Chroma Bait 290k", "Buy Bait", function()
+    buyBait(BaitDatabase.chromabait)
+end)
+SecBait:NewButton("DarkMatter Bait 630k", "Buy Bait", function()
+    buyBait(BaitDatabase.darkmatterbait)
+end)
+SecBait:NewButton("Corrupt Bait 1.15m", "Buy Bait", function()
+    buyBait(BaitDatabase.corruptbait)
+end)
+SecBait:NewButton("Aether Bait 3.7m", "Buy Bait", function()
+    buyBait(BaitDatabase.aetherbait)
+end)
 
 autoMegalodonToggle = SecOther:NewToggle("Auto Megalodon Hunt", "Auto teleport to Megalodon events", function(state)
     setAutoMegalodon(state)
@@ -3312,7 +3521,47 @@ task.spawn(function()
     end
 end)
 
--- Auto-upgrade loops for rods and bait have been removed as per instructions.
+-- Auto Upgrade Rod Loop
+task.spawn(function()
+    while true do
+        if isUpgradeOn then
+            for _, id in ipairs(rodIDs) do
+                if not isUpgradeOn then break end
+                pcall(function()
+                    if purchaseRodEvent then
+                        purchaseRodEvent:InvokeServer(id)
+                    end
+                end)
+                task.wait(2)
+            end
+        end
+        task.wait(0.1)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(1) -- biar nggak error
+    end
+end)
+
+-- Auto Upgrade Bait Loop
+task.spawn(function()
+    while true do
+        if isUpgradeBaitOn then
+            for _, id in ipairs(baitIDs) do
+                if not isUpgradeBaitOn then break end
+                pcall(function()
+                    if purchaseBaitEvent then
+                        purchaseBaitEvent:InvokeServer(id)
+                    end
+                end)
+                task.wait(2)
+            end
+        end
+        task.wait(0.1)
+    end
+end)
 
 -- Auto Weather Loop
 task.spawn(function()
