@@ -733,7 +733,28 @@ local function getCurrentLevel()
     return success and result or "Lvl 0"
 end
 
+-- ====== HELPER FUNCTIONS FOR WEB MONITOR ======
+local function getFishCaught()
+    local success, fishCaught = pcall(function()
+        if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then
+            return LocalPlayer.leaderstats.Caught.Value
+        end
+        return 0
+    end)
 
+    return success and fishCaught or 0
+end
+
+local function getBestFish()
+    local success, bestFish = pcall(function()
+        if LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] then
+            return LocalPlayer.leaderstats["Rarest Fish"].Value
+        end
+        return "None"
+    end)
+
+    return success and bestFish or "None"
+end
 
 -- fungsi quest
 
@@ -1699,207 +1720,6 @@ local function disableMegalodonLock()
         currentBodyPosition = nil
     end
 end
-
--- ====== MEGALODON WEBHOOK ======
-local lastWebhookTime = 0
-local WEBHOOK_COOLDOWN = 15 -- 15 seconds cooldown between webhooks to prevent rate limiting
-local webhookRetryDelay = 5 -- Base retry delay in seconds
-local maxRetryAttempts = 3
-
--- ====== UNIFIED WEBHOOK CONFIGURATION ======
--- Set your Discord webhook URL here for all notifications (fish, megalodon, disconnect)
--- Example: "https://discord.com/api/webhooks/1234567890/abcdefghijklmnop"
-local UNIFIED_WEBHOOK_URL = webhook2  -- PASTE YOUR DISCORD WEBHOOK URL HERE
-
--- ====== UNIFIED WEBHOOK FUNCTION ======
-local function sendUnifiedWebhook(webhookType, data)
-    -- Check if webhook URL is configured
-    if not UNIFIED_WEBHOOK_URL or UNIFIED_WEBHOOK_URL == "" then
-        warn('[Webhook] URL not configured! Please set UNIFIED_WEBHOOK_URL variable.')
-        return
-    end
-
-    -- Rate limiting check
-    local currentTime = tick()
-    if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then
-        print('[Webhook] Cooldown active, skipping...')
-        return
-    end
-
-    local embed = {}
-
-    -- Configure embed based on webhook type
-    if webhookType == "megalodon_missing" then
-        embed = {
-            title = '[Megalodon] Event Missing',
-            description = 'No Megalodon Hunt props detected in this server.',
-            color = 16711680, -- Red
-            fields = {
-                { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
-                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true }
-            },
-            footer = { text = 'Megalodon Watch - Auto Fish' }
-        }
-    elseif webhookType == "fish_found" then
-        embed = {
-            title = "🎣 SECRET Fish Found",
-            description = data.description or "Fish detected in inventory",
-            color = 3066993, -- Blue-green
-            fields = {
-                { name = "🕒 Waktu",  value = os.date("%H:%M:%S"), inline = true },
-                { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
-                { name = "📦 Total (whitelist)", value = tostring(data.totalWhitelistCount or 0) .. " fish", inline = true },
-            },
-            footer = { text = "Inventory Notifier • Auto Fish" }
-        }
-    elseif webhookType == "disconnect" then
-        embed = {
-            title = "⚠️ Player Disconnected",
-            description = data.reason or "Player has disconnected from the server",
-            color = 16776960, -- Yellow
-            fields = {
-                { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
-                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
-                { name = "🔌 Reason", value = data.reason or "Unknown", inline = false }
-            },
-            footer = { text = "Disconnect Notifier • Auto Fish Script" }
-        }
-    else
-        warn('[Webhook] Unknown webhook type: ' .. tostring(webhookType))
-        return
-    end
-
-    local body = HttpService:JSONEncode({ embeds = {embed} })
-
-    -- Send webhook with exponential backoff retry logic
-    task.spawn(function()
-        local attempt = 1
-        local success = false
-
-        while attempt <= maxRetryAttempts and not success do
-            local currentRetryDelay = webhookRetryDelay * (2 ^ (attempt - 1)) -- Exponential backoff
-
-            if attempt > 1 then
-                print('[Webhook] Retry attempt ' .. attempt .. ' after ' .. currentRetryDelay .. ' seconds...')
-                task.wait(currentRetryDelay)
-            end
-
-            success, err = pcall(function()
-                if syn and syn.request then
-                    syn.request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                elseif http_request then
-                    http_request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                elseif fluxus and fluxus.request then
-                    fluxus.request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                elseif request then
-                    request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                else
-                    error("Executor tidak support HTTP requests")
-                end
-            end)
-
-            if success then
-                lastWebhookTime = tick()
-                print('[Webhook] ' .. webhookType .. ' sent successfully on attempt ' .. attempt)
-                break
-            else
-                warn('[Webhook] ' .. webhookType .. ' attempt ' .. attempt .. ' failed: ' .. tostring(err))
-
-                -- Handle specific rate limiting errors
-                if string.find(tostring(err):lower(), "429") or string.find(tostring(err):lower(), "rate") then
-                    print('[Webhook] Rate limited detected, extending cooldown...')
-                    lastWebhookTime = tick() + 60 -- Block webhooks for 60 seconds on rate limit
-                    task.wait(60) -- Wait longer for rate limit recovery
-                    break -- Don't retry immediately on rate limit
-                elseif string.find(tostring(err):lower(), "network") or string.find(tostring(err):lower(), "timeout") then
-                    print('[Webhook] Network error detected, will retry...')
-                end
-
-                attempt = attempt + 1
-            end
-        end
-
-        if not success then
-            warn('[Webhook] All ' .. webhookType .. ' attempts failed')
-        end
-    end)
-end
-
--- Legacy function for compatibility
-local sendMegalodonEventWebhook = function(status, data)
-    if status == "missing" then
-        sendUnifiedWebhook("megalodon_missing", data)
-    end
-end
-
--- ============ DISCONNECT NOTIFIER ============
-local GuiService = game:GetService("GuiService")
-local hasSentDisconnectWebhook = false
-local PING_THRESHOLD = 1000
-local FREEZE_THRESHOLD = 3
-
-local function sendDisconnectWebhook(username, reason)
-    if hasSentDisconnectWebhook then return end
-    hasSentDisconnectWebhook = true
-
-    sendUnifiedWebhook("disconnect", {
-        reason = reason or "Unknown"
-    })
-end
-
-local function setupDisconnectNotifier()
-    local username = Players.LocalPlayer.Name
-    
-    GuiService.ErrorMessageChanged:Connect(function(message)
-        local lowerMessage = string.lower(message)
-        local reason = "Unknown"
-        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") then
-            reason = "Connection Lost: " .. message
-        elseif lowerMessage:find("kick") or lowerMessage:find("banned") then
-            reason = "Kicked: " .. message
-        elseif lowerMessage:find("timeout") then
-            reason = "Timeout: " .. message
-        elseif lowerMessage:find("error") then
-            reason = "General Error: " .. message
-        else
-            return
-        end
-        task.spawn(function() sendDisconnectWebhook(username, reason) end)
-    end)
-    
-    Players.PlayerRemoving:Connect(function(removedPlayer)
-        if removedPlayer == Players.LocalPlayer and not hasSentDisconnectWebhook then
-            task.spawn(function() sendDisconnectWebhook(username, "Disconnected (Player Removed)") end)
-        end
-    end)
-    
-    task.spawn(function()
-        while true do
-            local success, ping = pcall(function()
-                return Players.LocalPlayer:GetNetworkPing()
-            end)
-            if not success or ping > PING_THRESHOLD then
-                local reason = not success and "Connection Lost (Ping Failed)" or "High Ping Detected (" .. ping .. "ms)"
-                task.spawn(function() sendDisconnectWebhook(username, reason) end)
-                break
-            end
-            task.wait(5)
-        end
-    end)
-    
-    local lastTime = tick()
-    RunService.Stepped:Connect(function(_, delta)
-        if delta > FREEZE_THRESHOLD then
-            task.spawn(function() sendDisconnectWebhook(username, "Game Freeze Detected (Delta: " .. delta .. "s)") end)
-        end
-        lastTime = tick()
-    end)
-    
-    print("🚨 Advanced disconnect notifier setup complete")
-end
-
--- Panggil setup
-setupDisconnectNotifier()
 
 -- ====== MEGALODON WEBHOOK ======
 local lastWebhookTime = 0
@@ -3400,7 +3220,7 @@ end)
 
 
 
-
+-- The "Advanced Modules" tab and its contents have been removed as per instructions.
 
 -- ====== UI CONTROLS ======
 local TabUI = Window:NewTab("UI Controls")
@@ -3784,7 +3604,7 @@ task.spawn(function()
 end)
 
 
-
+-- The "Inventory Whitelist Notifier" and "Disconnect Notifier" sections have been removed as per instructions.
 
 -- ============ SCRIPT INITIALIZATION ============
 print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
@@ -3793,3 +3613,8 @@ print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
 
 -- ========== INTEGRATED MODULES ==========
 
+-- The "Enhanced Background Inventory Keeper" module has been removed as per instructions.
+
+-- The "Web Monitor Client" module has been removed as per instructions.
+
+-- Initialization and main loops for removed modules have been deleted as per instructions.
