@@ -356,10 +356,10 @@ local defaultConfig = {
     gpuSaver = false,
     chargeFishingDelay = 0.01,
     autoFishMainDelay = 0.9,
-    autoSellDelay = 36,
+    autoSellDelay = 35,
     autoCatchDelay = 0.2,
     weatherIdDelay = 3,
-    weatherCycleDelay = 36
+    weatherCycleDelay = 100
 }
 local config = {}
 for key, value in pairs(defaultConfig) do
@@ -828,10 +828,10 @@ local connections = {}
 -- ====== DELAY VARIABLES ======
 local chargeFishingDelay = 0.01
 local autoFishMainDelay = 0.9
-local autoSellDelay = 36
+local autoSellDelay = 5
 local autoCatchDelay = 0.2
 local weatherIdDelay = 3
-local weatherCycleDelay = 36
+local weatherCycleDelay = 100
 
 local HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool
 
@@ -2139,6 +2139,22 @@ do
         titleLabel.TextYAlignment = Enum.TextYAlignment.Center
         titleLabel.Parent = topBar
 
+        -- Minimize button
+        local minimizeButton = Instance.new("TextButton")
+        minimizeButton.Name = "MinimizeButton"
+        minimizeButton.Size = UDim2.new(0, 30, 0, 30)
+        minimizeButton.Position = UDim2.new(1, -70, 0.5, -15)
+        minimizeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        minimizeButton.Text = "−"
+        minimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        minimizeButton.TextSize = 18
+        minimizeButton.Font = Enum.Font.GothamBold
+        minimizeButton.Parent = topBar
+
+        local minimizeCorner = Instance.new("UICorner")
+        minimizeCorner.CornerRadius = UDim.new(0, 6)
+        minimizeCorner.Parent = minimizeButton
+
         -- Close button
         local closeButton = Instance.new("TextButton")
         closeButton.Name = "CloseButton"
@@ -2209,6 +2225,11 @@ do
             _currentTab = nil,
             _tabScrollFrame = tabScrollFrame,
             _closeButton = closeButton,
+            _minimizeButton = minimizeButton,
+            _contentFrame = contentFrame,
+            _tabContainer = tabContainer,
+            _isMinimized = false,
+            _originalHeight = responsive.windowHeight,
         }
 
         -- Enhanced drag system
@@ -2216,8 +2237,8 @@ do
         local dragStart, startPos
 
         local function beginDrag(input)
-            if input.Position.X > closeButton.AbsolutePosition.X then
-                return -- Don't drag if clicking close button
+            if input.Position.X > minimizeButton.AbsolutePosition.X then
+                return -- Don't drag if clicking minimize or close button
             end
 
             dragging = true
@@ -2264,6 +2285,19 @@ do
             closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
         end)
 
+        -- Minimize button functionality
+        minimizeButton.MouseButton1Click:Connect(function()
+            window:MinimizeUI()
+        end)
+
+        minimizeButton.MouseEnter:Connect(function()
+            minimizeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        end)
+
+        minimizeButton.MouseLeave:Connect(function()
+            minimizeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        end)
+
         local function highlightTab(tabName)
             for name, button in pairs(window._tabButtons) do
                 if name == tabName then
@@ -2306,6 +2340,30 @@ do
                 self._screenGui.Enabled = not self._screenGui.Enabled
             end
             return self._screenGui.Enabled
+        end
+
+        function window:MinimizeUI(force)
+            if typeof(force) == "boolean" then
+                self._isMinimized = force
+            else
+                self._isMinimized = not self._isMinimized
+            end
+
+            if self._isMinimized then
+                -- Minimize: hide content and resize to just title bar
+                self._contentFrame.Visible = false
+                self._tabContainer.Visible = false
+                self._mainFrame.Size = UDim2.new(0, self._mainFrame.Size.X.Offset, 0, 45)
+                self._minimizeButton.Text = "+"
+            else
+                -- Restore: show content and restore original size
+                self._contentFrame.Visible = true
+                self._tabContainer.Visible = true
+                self._mainFrame.Size = UDim2.new(0, self._mainFrame.Size.X.Offset, 0, self._originalHeight)
+                self._minimizeButton.Text = "−"
+            end
+
+            return self._isMinimized
         end
 
         function window:NewTab(tabName)
@@ -2893,6 +2951,12 @@ do
     function Library:ToggleUI(force)
         if self._lastWindow then
             return self._lastWindow:ToggleUI(force)
+        end
+    end
+
+    function Library:MinimizeUI(force)
+        if self._lastWindow then
+            return self._lastWindow:MinimizeUI(force)
         end
     end
 
