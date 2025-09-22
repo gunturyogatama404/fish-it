@@ -279,8 +279,6 @@ local fishDatabase = {
 local isAutoFarmOn = false
 local isAutoSellOn = false
 local isAutoCatchOn = false
-local isUpgradeOn = false
-local isUpgradeBaitOn = false
 local isAutoWeatherOn = false
 local gpuSaverEnabled = false
 local isAutoMegalodonOn = false
@@ -838,8 +836,6 @@ local function getNetworkEvents()
             cancelFishingEvent = net:WaitForChild("RF/CancelFishingInputs", 10),
             equipEvent = net:WaitForChild("RE/EquipToolFromHotbar", 10),
             unequipEvent = net:WaitForChild("RE/UnequipToolFromHotbar", 10),
-            purchaseRodEvent = net:WaitForChild("RF/PurchaseFishingRod", 10),
-            purchaseBaitEvent = net:WaitForChild("RF/PurchaseBait", 10),
             WeatherEvent = net:WaitForChild("RF/PurchaseWeatherEvent", 10),
             fishCaughtEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/FishCaught", 10)
         }
@@ -868,8 +864,6 @@ local requestMinigameEvent = networkEvents.requestMinigameEvent
 local cancelFishingEvent = networkEvents.cancelFishingEvent
 local equipEvent = networkEvents.equipEvent
 local unequipEvent = networkEvents.unequipEvent
-local purchaseRodEvent = networkEvents.purchaseRodEvent
-local purchaseBaitEvent = networkEvents.purchaseBaitEvent
 local WeatherEvent = networkEvents.WeatherEvent
 local fishCaughtEvent = networkEvents.fishCaughtEvent
 
@@ -1136,8 +1130,6 @@ local function createWhiteScreen()
                         statusLabel.Text = "🤖 Auto Farm: " .. (isAutoFarmOn and "🟢 ON" or "🔴 OFF") .. 
                                          "  |  Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
                                          "  |  Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF") ..
-                                         "\nUpgrade Rod: " .. (isUpgradeOn and "🟢 ON" or "🔴 OFF") ..
-                                         "  |  Upgrade Bait: " .. (isUpgradeBaitOn and "🟢 ON" or "🔴 OFF") ..
                                          "  |  Auto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
                                          "  |  Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
                     end
@@ -1562,11 +1554,7 @@ end
 
 
 -- ====== DAFTAR IDS ======
-local rodIDs = {79, 76, 85, 76, 78, 4, 80, 6, 7, 5}
-local baitIDs = {10, 2, 3, 6, 8, 15, 16}
 local WeatherIDs = {"Cloudy", "Storm","Wind"}
-local rodDatabase = {luck = 79,carbon = 76,grass = 85,demascus = 76,ice = 78,lucky = 4,midnight = 80,steampunk = 6,chrome = 7,astral = 5}
-local BaitDatabase = {topwaterbait = 10,luckbait = 2,midnightbait = 3,chromabait = 6,darkmatterbait = 8,corruptbait = 15,aetherbait = 16}
 
 
 -- ====== CORE FUNCTIONS ======
@@ -1616,67 +1604,6 @@ local function unequipRod()
     end)
 end
 
--- buy luck rod
-local function buyRod(rodDatabase)
-    if purchaseRodEvent then
-        pcall(function()
-            purchaseRodEvent:InvokeServer(rodDatabase)
-        end)
-    else
-        local success, err = pcall(function()
-            local replicatedStorage = game:GetService("ReplicatedStorage")
-            if replicatedStorage then
-                local directEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseFishingRod"]
-                if directEvent then
-                    task.wait(0.5) -- Add delay to prevent rate limiting
-                    directEvent:InvokeServer(rodDatabase)
-                end
-            end
-        end)
-
-        if not success then
-            -- Check if it's an asset or network error
-            if string.find(tostring(err):lower(), "asset is not approved") or
-               string.find(tostring(err):lower(), "failed to load") or
-               string.find(tostring(err):lower(), "network") then
-                -- Silently continue
-            else
-                warn("[Purchase Rod] Error: " .. tostring(err))
-            end
-        end
-    end
-end
-
--- buy bait
-local function buyBait(BaitDatabase)
-    if purchaseBaitEvent then
-        pcall(function()
-            purchaseBaitEvent:InvokeServer(BaitDatabase)
-        end)
-    else
-        local success, err = pcall(function()
-            local replicatedStorage = game:GetService("ReplicatedStorage")
-            if replicatedStorage then
-                local directEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseBait"]
-                if directEvent then
-                    task.wait(0.5) -- Add delay to prevent rate limiting
-                    directEvent:InvokeServer(BaitDatabase)
-                end
-            end
-        end)
-
-        if not success then
-            -- Check if it's an asset or network error
-            if string.find(tostring(err):lower(), "asset is not approved") or
-               string.find(tostring(err):lower(), "failed to load") or
-               string.find(tostring(err):lower(), "network") then
-                -- Silently continue
-            else
-                warn("[Purchase Bait] Error: " .. tostring(err))
-            end
-        end
-    end
-end
 
 -- ====== MEGALODON HUNT FUNCTIONS ======
 local function teleportToMegalodon(position, isEventTeleport)
@@ -2003,15 +1930,7 @@ local function setSell(state)
     print("💰 Auto Sell: " .. (state and "ENABLED" or "DISABLED"))
 end
 
-local function setUpgrade(state)
-    isUpgradeOn = state
-    print("⬆️ Auto Upgrade Rod: " .. (state and "ENABLED" or "DISABLED"))
-end
 
-local function setUpgradeBait(state)
-    isUpgradeBaitOn = state
-    print("⬆️ Auto Upgrade Bait: " .. (state and "ENABLED" or "DISABLED"))
-end
 
 local function setAutoCatch(state)
     isAutoCatchOn = state
@@ -3014,13 +2933,7 @@ autoPreset3Toggle = SecMain:NewToggle("Auto 3 (Auto Kohana)", "Enable core auto 
     end
 end)
 
-SecOther:NewToggle("Auto Upgrade Rod", "Auto upgrade rod", function(state)
-    setUpgrade(state)
-end)
 
-SecOther:NewToggle("Auto Upgrade Bait", "Auto upgrade bait", function(state)
-    setUpgradeBait(state)
-end)
 
 autoWeatherToggle = SecOther:NewToggle("Auto Weather", "Auto weather events", function(state)
     setAutoWeather(state)
@@ -3098,71 +3011,6 @@ SecTP:NewDropdown("Pilih Lokasi", "Teleport instan ke lokasi", tpNames, function
     end
 end)
 
-local TabShop = Window:NewTab("Shop")
-local SecShop = TabShop:NewSection("Fishing Rods")
-local SecBait = TabShop:NewSection("Bait")
-
-SecShop:NewButton("Luck Rod - 300", "Purchase Luck Rod", function()
-    buyRod(rodDatabase.luck)
-end)
-
-SecShop:NewButton("Carbon Rod - 900", "Purchase Carbon Rod", function()
-    buyRod(rodDatabase.carbon)
-end)
-
-SecShop:NewButton("Grass Rod - 1500", "Purchase Grass Rod", function()
-    buyRod(rodDatabase.grass)
-end)
-
-SecShop:NewButton("Demascus Rod - 3000", "Purchase Demascus Rod", function()
-    buyRod(rodDatabase.demascus)
-end)
-
-SecShop:NewButton("Ice Rod - 5000", "Purchase Ice Rod", function()
-    buyRod(rodDatabase.ice)
-end)
-
-SecShop:NewButton("Lucky Rod - 15k", "Purchase Lucky Rod", function()
-    buyRod(rodDatabase.lucky)
-end)
-
-SecShop:NewButton("Midnight Rod - 50k", "Purchase Midnight Rod", function()
-    buyRod(rodDatabase.midnight)
-end)
-
-SecShop:NewButton("Steampunk Rod - 215k", "Purchase Steampunk Rod", function()
-    buyRod(rodDatabase.steampunk)
-end)
-
-SecShop:NewButton("Chrome Rod - 437k", "Purchase Chrome Rod", function()
-    buyRod(rodDatabase.chrome)
-end)
-
-SecShop:NewButton("Astral Rod - 1m", "Purchase Astral Rod", function()
-    buyRod(rodDatabase.astral)
-end)
-
-SecBait:NewButton("TopWater Bait", "Buy Bait", function()
-    buyBait(BaitDatabase.topwaterbait)
-end)
-SecBait:NewButton("Luck Bait 1k", "Buy Bait", function()
-    buyBait(BaitDatabase.luckbait)
-end)
-SecBait:NewButton("Midnight Bait 3k", "Buy Bait", function()
-    buyBait(BaitDatabase.midnightbait)
-end)
-SecBait:NewButton("Chroma Bait 290k", "Buy Bait", function()
-    buyBait(BaitDatabase.chromabait)
-end)
-SecBait:NewButton("DarkMatter Bait 630k", "Buy Bait", function()
-    buyBait(BaitDatabase.darkmatterbait)
-end)
-SecBait:NewButton("Corrupt Bait 1.15m", "Buy Bait", function()
-    buyBait(BaitDatabase.corruptbait)
-end)
-SecBait:NewButton("Aether Bait 3.7m", "Buy Bait", function()
-    buyBait(BaitDatabase.aetherbait)
-end)
 
 autoMegalodonToggle = SecOther:NewToggle("Auto Megalodon Hunt", "Auto teleport to Megalodon events", function(state)
     setAutoMegalodon(state)
@@ -3521,23 +3369,6 @@ task.spawn(function()
     end
 end)
 
--- Auto Upgrade Rod Loop
-task.spawn(function()
-    while true do
-        if isUpgradeOn then
-            for _, id in ipairs(rodIDs) do
-                if not isUpgradeOn then break end
-                pcall(function()
-                    if purchaseRodEvent then
-                        purchaseRodEvent:InvokeServer(id)
-                    end
-                end)
-                task.wait(2)
-            end
-        end
-        task.wait(0.1)
-    end
-end)
 
 task.spawn(function()
     while true do
@@ -3545,23 +3376,6 @@ task.spawn(function()
     end
 end)
 
--- Auto Upgrade Bait Loop
-task.spawn(function()
-    while true do
-        if isUpgradeBaitOn then
-            for _, id in ipairs(baitIDs) do
-                if not isUpgradeBaitOn then break end
-                pcall(function()
-                    if purchaseBaitEvent then
-                        purchaseBaitEvent:InvokeServer(id)
-                    end
-                end)
-                task.wait(2)
-            end
-        end
-        task.wait(0.1)
-    end
-end)
 
 -- Auto Weather Loop
 task.spawn(function()
