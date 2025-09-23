@@ -193,7 +193,7 @@ do
             ["Sea Dragon"] = true,
             ["Viperfish"] = true
         },
-        COOLDOWN_SECONDS = 10,
+        COOLDOWN_SECONDS = 1,
         
         -- =======================================================================
         -- PENTING: Ganti URL di bawah ini dengan URL gambar dari GitHub Anda!
