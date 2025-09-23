@@ -195,6 +195,7 @@ do
         },
         COOLDOWN_SECONDS = 10,
         -- Fish images mapping (Using rbxcdn for better Discord compatibility)
+        -- NOTE: This is now mostly a fallback. Images are fetched automatically.
         FISH_IMAGES = {
             ["Viperfish"] = "https://tr.rbxcdn.com/132331063285672/420/420/Image/Png"
         }
@@ -204,7 +205,7 @@ do
     local isInitialScan = true
     local lastWebhookTime = 0
 
-    local function sendNotification(itemName, amount)
+    local function sendNotification(itemName, amount, assetId)
         if not WEBHOOK_URL or WEBHOOK_URL == "PASTE_YOUR_WEBHOOK_URL_HERE" then return end
         if tick() - lastWebhookTime < CONFIG.COOLDOWN_SECONDS then return end
 
@@ -219,14 +220,17 @@ do
             footer = { text = "Inventory Notifier" }
         }
 
-        -- Add image if available for this fish (both image and thumbnail for better compatibility)
-        if CONFIG.FISH_IMAGES[itemName] then
-            embed.thumbnail = {
-                url = CONFIG.FISH_IMAGES[itemName]
-            }
-            embed.image = {
-                url = CONFIG.FISH_IMAGES[itemName]
-            }
+        -- Coba dapatkan URL gambar dari config, jika tidak ada, buat dari assetId
+        local imageUrl = CONFIG.FISH_IMAGES[itemName]
+        if not imageUrl and assetId then
+            -- Menggunakan API thumbnail Roblox yang lebih modern dan andal
+            imageUrl = "https://www.roblox.com/asset-thumbnail/image?assetId=" .. tostring(assetId) .. "&width=420&height=420&format=png"
+        end
+
+        -- Tambahkan gambar ke embed jika URL ada
+        if imageUrl then
+            embed.thumbnail = { url = imageUrl }
+            embed.image = { url = imageUrl }
         end
 
         local payload = { embeds = {embed} }
@@ -249,31 +253,46 @@ do
         invContainer = invContainer and invContainer:FindFirstChild("Inventory")
         if not invContainer then return end
 
-        local currentItemCounts = {}
+        local currentItemData = {}
         for _, tile in ipairs(invContainer:GetChildren()) do
             if tile.Name == "Tile" and tile:FindFirstChild("ItemName") then
                 local itemName = tile.ItemName.Text
                 if CONFIG.WHITELIST[itemName] then
-                    currentItemCounts[itemName] = (currentItemCounts[itemName] or 0) + 1
+                    local amount = ((currentItemData[itemName] and currentItemData[itemName].amount) or 0) + 1
+                    local assetId = (currentItemData[itemName] and currentItemData[itemName].assetId) or nil
+
+                    -- Jika assetId belum ada, coba ekstrak dari tile
+                    if not assetId then
+                        local iconLabel = tile:FindFirstChildOfClass("ImageLabel")
+                        if iconLabel and iconLabel.Image then
+                            local id = string.match(iconLabel.Image, "%d+")
+                            if id then
+                                assetId = id
+                            end
+                        end
+                    end
+                    
+                    currentItemData[itemName] = { amount = amount, assetId = assetId }
                 end
             end
         end
 
         if isInitialScan then
-            trackedItemCounts = currentItemCounts
+            trackedItemCounts = currentItemData
             isInitialScan = false
             print("[Notifier] Initial scan complete. Monitoring for new items.")
             return
         end
 
-        for itemName, currentCount in pairs(currentItemCounts) do
-            local previousCount = trackedItemCounts[itemName] or 0
-            if currentCount > previousCount then
-                sendNotification(itemName, currentCount - previousCount)
+        for itemName, data in pairs(currentItemData) do
+            local previousAmount = (trackedItemCounts[itemName] and trackedItemCounts[itemName].amount) or 0
+            if data.amount > previousAmount then
+                local newAmount = data.amount - previousAmount
+                sendNotification(itemName, newAmount, data.assetId)
             end
         end
 
-        trackedItemCounts = currentItemCounts
+        trackedItemCounts = currentItemData
     end
 end
 
