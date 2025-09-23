@@ -194,9 +194,9 @@ do
             ["Viperfish"] = true -- Contoh
         },
         COOLDOWN_SECONDS = 10,
-        -- Fish images mapping (Roblox Asset IDs converted to direct image URLs)
+        -- Fish images mapping (Using rbxcdn for better Discord compatibility)
         FISH_IMAGES = {
-            ["Viperfish"] = "https://assetdelivery.roblox.com/v1/asset/?id=132331063285672"
+            ["Viperfish"] = "https://tr.rbxcdn.com/132331063285672/420/420/Image/Png"
         }
     }
 
@@ -219,8 +219,11 @@ do
             footer = { text = "Inventory Notifier" }
         }
 
-        -- Add image if available for this fish
+        -- Add image if available for this fish (both image and thumbnail for better compatibility)
         if CONFIG.FISH_IMAGES[itemName] then
+            embed.thumbnail = {
+                url = CONFIG.FISH_IMAGES[itemName]
+            }
             embed.image = {
                 url = CONFIG.FISH_IMAGES[itemName]
             }
