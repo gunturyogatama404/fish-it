@@ -204,11 +204,12 @@ do
         -- Anda BISA menggunakan link GitHub biasa (contoh: https://github.com/user/repo/blob/main/image.png)
         -- Skrip akan otomatis mengubahnya ke format yang benar.
         FISH_IMAGES = {
-            ["Viperfish"] = "https://github.com/DarylLoudi/fish-it/blob/main/viper.png",
-            ["Megalodon"] = "PASTE_YOUR_GITHUB_URL_FOR_MEGALODON_HERE",
-            ["Titanic Trout"] = "", -- Salin URL Anda ke sini
-            ["Galleon"] = "", -- Salin URL Anda ke sini
-            ["Sea Dragon"] = "" -- Salin URL Anda ke sini
+            ["Megalodon"] = "https://github.com/DarylLoudi/fish-it/blob/main/Megalodon.png",
+            ["Blob Shark"] = "https://github.com/DarylLoudi/fish-it/blob/main/blob.png",
+            ["Frostborn Shark"] = "https://github.com/DarylLoudi/fish-it/blob/main/frost.png",
+            ["Giant Squid"] = "https://github.com/DarylLoudi/fish-it/blob/main/gsquid.png",
+            ["Ghost Shark"] = "https://github.com/DarylLoudi/fish-it/blob/main/ghost.png",
+            ["Robot Kraken"] = "https://github.com/DarylLoudi/fish-it/blob/main/kraken.png"
         }
     }
 
