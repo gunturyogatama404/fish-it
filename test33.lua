@@ -224,30 +224,31 @@ do
         return url
     end
 
-    local function sendNotification(itemName, amount)
+    local function sendNotification(itemData, amount)
         if not WEBHOOK_URL or WEBHOOK_URL == "PASTE_YOUR_WEBHOOK_URL_HERE" then return end
         if tick() - lastWebhookTime < CONFIG.COOLDOWN_SECONDS then return end
 
         local embed = {
             title = "🎣 Item Langka Ditemukan!",
-            description = string.format("**+%d %s** telah ditambahkan ke inventory.", amount, itemName),
+            description = string.format("**+%d %s** telah ditambahkan ke inventory.", amount, itemData.fullName),
             color = 3066993,
             fields = {
                 { name = "👤 Player", value = LocalPlayer.Name, inline = true },
-                { name = "🕒 Waktu", value = os.date("%H:%M:%S"), inline = true }
+                { name = "🐠 Fish", value = itemData.fullName, inline = true },
+                { name = "⚖️ Weight", value = itemData.weight, inline = true },
+                { name = "✨ Mutation", value = itemData.mutation, inline = true },
+                { name = "🕒 Waktu", value = os.date("%H:%M:%S"), inline = false }
             },
             footer = { text = "Inventory Notifier" }
         }
 
-        -- Ambil URL gambar dari konfigurasi
-        local imageUrl = CONFIG.FISH_IMAGES[itemName]
+        -- Ambil URL gambar dari konfigurasi menggunakan nama dasar
+        local imageUrl = CONFIG.FISH_IMAGES[itemData.baseName]
         if imageUrl and imageUrl ~= "" then
-            -- Ubah ke URL raw sebelum dikirim ke Discord
             local rawImageUrl = convertToRawGitHubUrl(imageUrl)
             embed.thumbnail = { url = rawImageUrl }
-            -- Baris embed.image telah dihapus sesuai permintaan
         else
-            print("[Notifier] Peringatan: Tidak ada URL gambar untuk item '" .. itemName .. "' di CONFIG.FISH_IMAGES.")
+            print("[Notifier] Peringatan: Tidak ada URL gambar untuk item '" .. itemData.baseName .. "' di CONFIG.FISH_IMAGES.")
         end
 
         local payload = { embeds = {embed} }
@@ -256,7 +257,7 @@ do
             if req then
                 req({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode(payload) })
                 lastWebhookTime = tick()
-                print("[Notifier] Sent notification for: " .. itemName)
+                print("[Notifier] Sent notification for: " .. itemData.fullName)
             end
         end)
     end
@@ -273,9 +274,38 @@ do
         local currentItemCounts = {}
         for _, tile in ipairs(invContainer:GetChildren()) do
             if tile.Name == "Tile" and tile:FindFirstChild("ItemName") then
-                local itemName = tile.ItemName.Text
-                if CONFIG.WHITELIST[itemName] then
-                    currentItemCounts[itemName] = (currentItemCounts[itemName] or 0) + 1
+                local fullName = tile.ItemName.Text
+                
+                -- Lakukan pengecekan parsial terhadap whitelist
+                for baseName, _ in pairs(CONFIG.WHITELIST) do
+                    if string.find(fullName, baseName) then
+                        -- Item ada di whitelist, kumpulkan data lengkap
+                        local weight = "N/A"
+                        if tile:FindFirstChild("WeightFrame") and tile.WeightFrame:FindFirstChild("Weight") then
+                            weight = tile.WeightFrame.Weight.Text
+                        end
+                        
+                        local mutation = "None"
+                        if tile:FindFirstChild("Variant") and tile.Variant:FindFirstChild("ItemName") then
+                            local mutationText = tile.Variant.ItemName.Text
+                            if mutationText ~= "Ghoulish" then
+                                mutation = mutationText
+                            end
+                        end
+
+                        local itemKey = fullName .. "_" .. weight .. "_" .. mutation
+                        
+                        currentItemCounts[itemKey] = {
+                            count = (currentItemCounts[itemKey] and currentItemCounts[itemKey].count or 0) + 1,
+                            data = {
+                                fullName = fullName,
+                                baseName = baseName,
+                                weight = weight,
+                                mutation = mutation
+                            }
+                        }
+                        break -- Hentikan loop jika sudah ketemu match
+                    end
                 end
             end
         end
@@ -287,10 +317,10 @@ do
             return
         end
 
-        for itemName, currentCount in pairs(currentItemCounts) do
-            local previousCount = trackedItemCounts[itemName] or 0
-            if currentCount > previousCount then
-                sendNotification(itemName, currentCount - previousCount)
+        for itemKey, currentItem in pairs(currentItemCounts) do
+            local previousCount = (trackedItemCounts[itemKey] and trackedItemCounts[itemKey].count) or 0
+            if currentItem.count > previousCount then
+                sendNotification(currentItem.data, currentItem.count - previousCount)
             end
         end
 
@@ -1762,61 +1792,6 @@ local maxRetryAttempts = 3
 local UNIFIED_WEBHOOK_URL = webhook2  -- Uses webhook2 from loadstring
 
 -- ====== UNIFIED WEBHOOK FUNCTION ====== 
--- ====== FISH WEIGHT AND MUTATION DETECTION ======
-local function getFishWeightAndMutation()
-    local weightText = ""
-    local mutationText = ""
-
-    pcall(function()
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        if not playerGui then return end
-
-        local inventory = playerGui:FindFirstChild("Inventory")
-        if not inventory then return end
-
-        local main = inventory:FindFirstChild("Main")
-        if not main then return end
-
-        local content = main:FindFirstChild("Content")
-        if not content then return end
-
-        local pages = content:FindFirstChild("Pages")
-        if not pages then return end
-
-        local inventoryPage = pages:FindFirstChild("Inventory")
-        if not inventoryPage then return end
-
-        local children = inventoryPage:GetChildren()
-        if #children >= 6 and children[6] then
-            local sixthChild = children[6]
-
-            -- Get weight
-            local weightFrame = sixthChild:FindFirstChild("WeightFrame")
-            if weightFrame then
-                local weight = weightFrame:FindFirstChild("Weight")
-                if weight and weight.Text then
-                    weightText = weight.Text
-                end
-            end
-
-            -- Get mutation
-            local variant = sixthChild:FindFirstChild("Variant")
-            if variant then
-                local itemName = variant:FindFirstChild("ItemName")
-                if itemName and itemName.Text then
-                    local mutText = itemName.Text
-                    -- Only include mutation if it's not empty or "Ghoulish"
-                    if mutText ~= "" and mutText ~= "Ghoulish" then
-                        mutationText = mutText
-                    end
-                end
-            end
-        end
-    end)
-
-    return weightText, mutationText
-end
-
 local function sendUnifiedWebhook(webhookType, data)
     -- Check if webhook URL is configured
     if not UNIFIED_WEBHOOK_URL or UNIFIED_WEBHOOK_URL == "" then
@@ -1846,9 +1821,6 @@ local function sendUnifiedWebhook(webhookType, data)
             footer = { text = 'Megalodon Watch - Auto Fish' }
         }
     elseif webhookType == "fish_found" then
-        -- Get weight and mutation data
-        local weight, mutation = getFishWeightAndMutation()
-
         embed = {
             title = "🎣 SECRET Fish Found",
             description = data.description or "Fish detected in inventory",
@@ -1860,17 +1832,6 @@ local function sendUnifiedWebhook(webhookType, data)
             },
             footer = { text = "Inventory Notifier • Auto Fish" }
         }
-
-        -- Add weight field if available
-        if weight and weight ~= "" then
-            table.insert(embed.fields, { name = "⚖️ Weight", value = weight, inline = true })
-        end
-
-        -- Add mutation field if available
-        if mutation and mutation ~= "" then
-            table.insert(embed.fields, { name = "🧬 Mutation", value = mutation, inline = true })
-        end
-
     elseif webhookType == "disconnect" then
         embed = {
             title = "⚠️ Player Disconnected",
