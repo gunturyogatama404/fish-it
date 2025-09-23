@@ -185,19 +185,27 @@ do
     local WEBHOOK_URL = webhook2
 
     local CONFIG = {
-        WEBHOOK_URL = WEBHOOK_URL, -- <--- Uses webhook2 from loadstring or fallback
+        WEBHOOK_URL = WEBHOOK_URL,
         WHITELIST = {
             ["Megalodon"] = true,
             ["Titanic Trout"] = true,
             ["Galleon"] = true,
             ["Sea Dragon"] = true,
-            ["Viperfish"] = true -- Contoh
+            ["Viperfish"] = true
         },
         COOLDOWN_SECONDS = 10,
-        -- Fish images mapping (Using rbxcdn for better Discord compatibility)
-        -- NOTE: This is now mostly a fallback. Images are fetched automatically.
+        
+        -- =======================================================================
+        -- PENTING: Ganti URL di bawah ini dengan URL gambar dari GitHub Anda!
+        -- =======================================================================
+        -- Anda BISA menggunakan link GitHub biasa (contoh: https://github.com/user/repo/blob/main/image.png)
+        -- Skrip akan otomatis mengubahnya ke format yang benar.
         FISH_IMAGES = {
-            ["Viperfish"] = "https://tr.rbxcdn.com/132331063285672/420/420/Image/Png"
+            ["Viperfish"] = "https://github.com/DarylLoudi/fish-it/blob/main/viper.png",
+            ["Megalodon"] = "PASTE_YOUR_GITHUB_URL_FOR_MEGALODON_HERE",
+            ["Titanic Trout"] = "", -- Salin URL Anda ke sini
+            ["Galleon"] = "", -- Salin URL Anda ke sini
+            ["Sea Dragon"] = "" -- Salin URL Anda ke sini
         }
     }
 
@@ -205,7 +213,18 @@ do
     local isInitialScan = true
     local lastWebhookTime = 0
 
-    local function sendNotification(itemName, amount, assetId)
+    -- Fungsi untuk mengubah link GitHub biasa menjadi link raw
+    local function convertToRawGitHubUrl(url)
+        if url and type(url) == "string" and url:match("github.com") and url:match("/blob/") then
+            local rawUrl = url:gsub("github.com", "raw.githubusercontent.com")
+            rawUrl = rawUrl:gsub("/blob/", "/")
+            return rawUrl
+        end
+        -- Kembalikan URL asli jika bukan format yang diharapkan
+        return url
+    end
+
+    local function sendNotification(itemName, amount)
         if not WEBHOOK_URL or WEBHOOK_URL == "PASTE_YOUR_WEBHOOK_URL_HERE" then return end
         if tick() - lastWebhookTime < CONFIG.COOLDOWN_SECONDS then return end
 
@@ -220,40 +239,15 @@ do
             footer = { text = "Inventory Notifier" }
         }
 
-        -- Coba dapatkan URL gambar
-        local imageUrl = CONFIG.FISH_IMAGES[itemName] -- Fallback ke config manual
-        if not imageUrl and assetId then
-            -- Cara baru: Gunakan API thumbnail v1 untuk mendapatkan URL gambar yang valid
-            local success, response = pcall(function()
-                local getImageUrl = "https://thumbnails.roblox.com/v1/assets?assetIds=" .. tostring(assetId) .. "&size=420x420&format=Png&isCircular=false"
-                local req = (syn and syn.request) or http_request
-                if req then
-                    return req({Url = getImageUrl, Method = "GET"})
-                else
-                    return nil
-                end
-            end)
-
-            if success and response and response.Body then
-                local successDecode, decoded = pcall(function() return HttpService:JSONDecode(response.Body) end)
-                if successDecode and decoded and decoded.data and #decoded.data > 0 then
-                    local thumbnailData = decoded.data[1]
-                    if thumbnailData.state == "Completed" and thumbnailData.imageUrl then
-                        imageUrl = thumbnailData.imageUrl
-                        print("[Notifier] Berhasil mendapatkan URL gambar untuk assetId: " .. assetId)
-                    else
-                        print("[Notifier] Gagal memuat thumbnail (state: " .. tostring(thumbnailData.state) .. "), assetId: " .. assetId)
-                    end
-                end
-            else
-                print("[Notifier] Gagal melakukan request ke API thumbnail Roblox.")
-            end
-        end
-
-        -- Tambahkan gambar ke embed jika URL ada
-        if imageUrl then
-            embed.thumbnail = { url = imageUrl }
-            embed.image = { url = imageUrl }
+        -- Ambil URL gambar dari konfigurasi
+        local imageUrl = CONFIG.FISH_IMAGES[itemName]
+        if imageUrl and imageUrl ~= "" then
+            -- Ubah ke URL raw sebelum dikirim ke Discord
+            local rawImageUrl = convertToRawGitHubUrl(imageUrl)
+            embed.thumbnail = { url = rawImageUrl }
+            embed.image = { url = rawImageUrl }
+        else
+            print("[Notifier] Peringatan: Tidak ada URL gambar untuk item '" .. itemName .. "' di CONFIG.FISH_IMAGES.")
         end
 
         local payload = { embeds = {embed} }
@@ -276,47 +270,31 @@ do
         invContainer = invContainer and invContainer:FindFirstChild("Inventory")
         if not invContainer then return end
 
-        local currentItemData = {}
+        local currentItemCounts = {}
         for _, tile in ipairs(invContainer:GetChildren()) do
             if tile.Name == "Tile" and tile:FindFirstChild("ItemName") then
                 local itemName = tile.ItemName.Text
                 if CONFIG.WHITELIST[itemName] then
-                    local amount = ((currentItemData[itemName] and currentItemData[itemName].amount) or 0) + 1
-                    local assetId = (currentItemData[itemName] and currentItemData[itemName].assetId) or nil
-
-                    -- Jika assetId belum ada, coba ekstrak dari tile (pencarian rekursif)
-                    if not assetId then
-                        local iconLabel = tile:FindFirstChildOfClass("ImageLabel", true) -- true untuk rekursif
-                        if iconLabel and iconLabel.Image then
-                            local id = string.match(iconLabel.Image, "%d+")
-                            if id then
-                                assetId = id
-                                print("[Notifier] Menemukan assetId: " .. id .. " untuk item: " .. itemName)
-                            end
-                        end
-                    end
-                    
-                    currentItemData[itemName] = { amount = amount, assetId = assetId }
+                    currentItemCounts[itemName] = (currentItemCounts[itemName] or 0) + 1
                 end
             end
         end
 
         if isInitialScan then
-            trackedItemCounts = currentItemData
+            trackedItemCounts = currentItemCounts
             isInitialScan = false
             print("[Notifier] Initial scan complete. Monitoring for new items.")
             return
         end
 
-        for itemName, data in pairs(currentItemData) do
-            local previousAmount = (trackedItemCounts[itemName] and trackedItemCounts[itemName].amount) or 0
-            if data.amount > previousAmount then
-                local newAmount = data.amount - previousAmount
-                sendNotification(itemName, newAmount, data.assetId)
+        for itemName, currentCount in pairs(currentItemCounts) do
+            local previousCount = trackedItemCounts[itemName] or 0
+            if currentCount > previousCount then
+                sendNotification(itemName, currentCount - previousCount)
             end
         end
 
-        trackedItemCounts = currentItemData
+        trackedItemCounts = currentItemCounts
     end
 end
 
