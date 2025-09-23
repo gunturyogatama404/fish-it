@@ -3106,7 +3106,7 @@ autoFishMainSlider = SecDelays:NewSlider("Auto Fish Delay", "Delay loop utama au
     setAutoFishMainDelay(value)
 end)
 
-autoSellSlider = SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik, min: 1)", 30, 34, function(value)
+autoSellSlider = SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik, min: 1)", 180, 1, function(value)
     setAutoSellDelay(value)
 end)
 
