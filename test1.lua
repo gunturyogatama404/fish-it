@@ -6,17 +6,14 @@ local function suppressAssetErrors()
 
     warn = function(...)
         local message = tostring(...)
-        -- Suppress known asset approval errors
         if string.find(message:lower(), "asset is not approved") or
            string.find(message:lower(), "failed to load sound") or
            string.find(message:lower(), "rbxassetid") then
-            -- Silently ignore these errors
             return
         end
         oldWarn(...)
     end
 
-    -- Also wrap error function for safety
     error = function(...)
         local message = tostring(...)
         if string.find(message:lower(), "asset is not approved") or
@@ -27,229 +24,265 @@ local function suppressAssetErrors()
         oldError(...)
     end
 end
-
--- Enable error suppression
 suppressAssetErrors()
 
 -- ====== AUTOMATIC PERFORMANCE OPTIMIZATION ======
--- Integrated from Low Graphic.lua for maximum FPS
 local function ultimatePerformance()
     local workspace = game:GetService("Workspace")
     local lighting = game:GetService("Lighting")
-    local runService = game:GetService("RunService")
-    local players = game:GetService("Players")
-
-    print("🚀 STARTING GRAPHICS OPTIMIZATION...")
-    print("⚡ Applying Low Graphic settings for maximum FPS...")
-
-    local objectsOptimized = 0
-    local effectsDisabled = 0
-
-    -- TERRAIN & CLOUDS REMOVAL
     pcall(function()
         local terrain = workspace:FindFirstChild("Terrain")
         if terrain then
-            -- Remove clouds completely
-            if terrain:FindFirstChild("Clouds") then
-                terrain.Clouds:Destroy()
-                print("✅ Removed clouds")
-            end
-
-            -- Water optimization
+            if terrain:FindFirstChild("Clouds") then terrain.Clouds:Destroy() end
             terrain.WaterWaveSize = 0
             terrain.WaterWaveSpeed = 0
             terrain.WaterReflectance = 0
             terrain.WaterTransparency = 0
         end
-    end)
-
-    -- LIGHTING OPTIMIZATION (Maximum Performance)
-    pcall(function()
         lighting.GlobalShadows = false
         lighting.FogEnd = 9e9
-        lighting.FogStart = 9e9
         lighting.Brightness = 0
         lighting.Technology = Enum.Technology.Compatibility
-        lighting.Ambient = Color3.new(1, 1, 1)
-        lighting.OutdoorAmbient = Color3.new(1, 1, 1)
-        lighting.ShadowSoftness = 0
-        lighting.ExposureCompensation = 0
-
-        -- Remove all lighting effects
         for _, effect in pairs(lighting:GetChildren()) do
-            if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or
-               effect:IsA("Sky") or effect:IsA("Clouds") then
-                pcall(function()
-                    effect:Destroy()
-                    effectsDisabled = effectsDisabled + 1
-                end)
-            end
-        end
-        print("✅ Lighting optimized - shadows disabled, fog removed")
-    end)
-
-    -- WORKSPACE OPTIMIZATION
-    local function optimizeObject(obj)
-        if obj:IsA("BasePart") then
-            obj.CastShadow = false
-            obj.Material = Enum.Material.Plastic
-            obj.Reflectance = 0
-            objectsOptimized = objectsOptimized + 1
-
-            -- Water parts specific
-            if obj.Material == Enum.Material.Water or obj.Name:lower():find("water") then
-                obj.Color = Color3.new(0, 0.8, 1)
-                obj.Material = Enum.Material.Plastic
-                obj.Transparency = 0.2
-                obj.Anchored = true
-            end
-
-        elseif obj:IsA("ParticleEmitter") or obj:IsA("Fire") or obj:IsA("Smoke") or
-               obj:IsA("Sparkles") or obj:IsA("PointLight") or obj:IsA("SpotLight") or
-               obj:IsA("SurfaceLight") or obj:IsA("Beam") then
-            obj.Enabled = false
-            effectsDisabled = effectsDisabled + 1
-
-        elseif obj:IsA("Decal") or obj:IsA("Texture") then
-            if obj.Name ~= "face" then
-                obj.Transparency = 1
-                objectsOptimized = objectsOptimized + 1
-            end
-
-        elseif obj:IsA("Sound") then
-            obj.Volume = 0
-            obj:Stop()
-            effectsDisabled = effectsDisabled + 1
-
-        elseif obj:IsA("Script") or obj:IsA("LocalScript") then
-            local name = obj.Name:lower()
-            if name:find("water") or name:find("wave") or name:find("cloud") or
-               name:find("particle") or name:find("effect") then
-                obj.Disabled = true
-                effectsDisabled = effectsDisabled + 1
-            end
-        end
-    end
-
-    -- Apply to existing objects
-    print("⚙️ Scanning workspace for optimization...")
-    for _, obj in pairs(workspace:GetDescendants()) do
-        optimizeObject(obj)
-    end
-    print("✅ Workspace scan complete - " .. objectsOptimized .. " objects optimized")
-
-    -- Apply to new objects
-    workspace.DescendantAdded:Connect(optimizeObject)
-
-    -- CHARACTER OPTIMIZATION
-    local function optimizeCharacter(character)
-        if not character then return end
-
-        for _, part in pairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CastShadow = false
-                part.Material = Enum.Material.Plastic
-                part.Reflectance = 0
-
-            elseif part:IsA("Accessory") then
-                local handle = part:FindFirstChild("Handle")
-                if handle then
-                    handle.CastShadow = false
-                    handle.Material = Enum.Material.Plastic
-                    local mesh = handle:FindFirstChildOfClass("SpecialMesh")
-                    if mesh then mesh.TextureId = "" end
-                end
-
-            elseif part:IsA("ParticleEmitter") or part:IsA("Fire") or
-                   part:IsA("Smoke") or part:IsA("Sparkles") then
-                part.Enabled = false
-            end
-        end
-    end
-
-    -- Apply to all players
-    for _, player in pairs(players:GetPlayers()) do
-        if player.Character then optimizeCharacter(player.Character) end
-        player.CharacterAdded:Connect(optimizeCharacter)
-    end
-    players.PlayerAdded:Connect(function(player)
-        player.CharacterAdded:Connect(optimizeCharacter)
-    end)
-
-    -- RENDERING OPTIMIZATION
-    pcall(function()
-        local camera = workspace.CurrentCamera
-        if camera then
-            for _, effect in pairs(camera:GetChildren()) do
-                if effect:IsA("PostEffect") then effect.Enabled = false end
+            if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or effect:IsA("Sky") or effect:IsA("Clouds") then
+                effect:Destroy()
             end
         end
     end)
-
-    -- GAME SETTINGS (Aggressive optimization)
-    pcall(function()
-        local gameSettings = UserSettings().GameSettings
-        gameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
-
-        -- Additional performance settings
-        local renderSettings = settings():GetService("RenderSettings")
-        renderSettings.QualityLevel = Enum.QualityLevel.Level01
-        renderSettings.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level04
-        renderSettings.EditQualityLevel = Enum.QualityLevel.Level01
-
-        print("✅ Graphics quality forced to minimum")
-    end)
-
-    -- ANIMATION CONNECTION CLEANUP
-    pcall(function()
-        for _, connection in pairs(getconnections(runService.Heartbeat)) do
-            pcall(function()
-                local func = connection.Function
-                local env = getfenv(func)
-                if env.script then
-                    local name = env.script.Name:lower()
-                    if name:find("water") or name:find("wave") or name:find("cloud") or
-                       name:find("particle") or name:find("effect") then
-                        connection:Disable()
-                    end
-                end
-            end)
-        end
-    end)
-
-    print("🚀 ULTIMATE PERFORMANCE ACTIVATED!")
-    print("📊 OPTIMIZATION SUMMARY:")
-    print("  ✅ Objects optimized: " .. objectsOptimized)
-    print("  ✅ Effects disabled: " .. effectsDisabled)
-    print("  ✅ Clouds removed")
-    print("  ✅ Water optimized")
-    print("  ✅ Shadows disabled")
-    print("  ✅ Graphics quality set to Level 1")
-    print("  ✅ All particle effects disabled")
-    print("🎣 Auto Fish ready with maximum FPS!")
-
-    -- Force immediate rendering update
-    pcall(function()
-        local camera = workspace.CurrentCamera
-        if camera then
-            camera.FieldOfView = camera.FieldOfView
-        end
-    end)
+    print("🚀 Graphics Optimized")
 end
-
--- Auto-execute performance optimization on script start
 ultimatePerformance()
 
--- Optional FPS monitor
-task.spawn(function()
-    while task.wait(5) do
-        local fps = workspace:GetRealPhysicsFPS()
-        if fps then
-            print("📊 Current FPS: " .. math.floor(fps))
-        end
-    end
-end)
+-- ====================================================================
+--                        MODUL-MODUL UTAMA
+-- ====================================================================
 
+--[[------------------------------------------------------------------
+    MODULE: Lightweight Background Inventory v2.0
+    Tujuan: Menjaga inventory tiles tetap ada dengan overhead minimal.
+--------------------------------------------------------------------]]
+local LightweightInventory = {}
+do
+    local Players = game:GetService("Players")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local LocalPlayer = Players.LocalPlayer
+
+    local inventoryController = nil
+    local originalDestroyTiles = nil
+    local isInventoryHooked = false
+    local isLoading = false
+
+    local function getInventoryController()
+        if inventoryController then return inventoryController end
+        local success, result = pcall(function()
+            local controllers = ReplicatedStorage:WaitForChild("Controllers", 5)
+            local invModule = controllers:WaitForChild("InventoryController", 5)
+            return require(invModule)
+        end)
+        if success then
+            inventoryController = result
+            return inventoryController
+        end
+        return nil
+    end
+
+    local function hookInventoryController()
+        if isInventoryHooked then return true end
+        local ctrl = getInventoryController()
+        if not ctrl then return false end
+        originalDestroyTiles = ctrl.DestroyTiles
+        ctrl.DestroyTiles = function() return end
+        isInventoryHooked = true
+        print("[Inv] Controller hooked. Tile destruction prevented.")
+        return true
+    end
+
+    local function refreshInventoryTiles(onCompleteCallback)
+        if isLoading then return end
+        isLoading = true
+        local ctrl = getInventoryController()
+        if ctrl and ctrl.InventoryStateChanged then
+            pcall(function() ctrl.InventoryStateChanged:Fire("Fish") end)
+        end
+        task.wait()
+        if onCompleteCallback then pcall(onCompleteCallback) end
+        isLoading = false
+    end
+
+    local function initialLoadInventoryTiles(onCompleteCallback)
+        if isLoading then return end
+        isLoading = true
+        local ctrl = getInventoryController()
+        if not ctrl then isLoading = false; return end
+
+        local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+        local inventoryGUI = playerGui:FindFirstChild("Inventory")
+        local mainFrame = inventoryGUI and inventoryGUI:FindFirstChild("Main")
+
+        if not mainFrame then isLoading = false; return end
+
+        local previousEnabled = inventoryGUI.Enabled
+        local previousVisible = mainFrame.Visible
+
+        inventoryGUI.Enabled = true
+        mainFrame.Visible = true
+        task.wait(0.2)
+
+        pcall(function()
+            if ctrl.SetPage then ctrl.SetPage(ctrl, "Items") end
+            if ctrl.SetCategory then ctrl.SetCategory(ctrl, "Fishes") end
+            if ctrl.InventoryStateChanged then ctrl.InventoryStateChanged:Fire("Fish") end
+        end)
+
+        task.wait(0.5)
+        inventoryGUI.Enabled = previousEnabled
+        mainFrame.Visible = previousVisible
+        print("[Inv] Initial load complete.")
+        if onCompleteCallback then pcall(onCompleteCallback) end
+        isLoading = false
+    end
+
+    function LightweightInventory.start(onRefreshCallback)
+        if isInventoryHooked then return end
+        print("[Inv] Starting Background Inventory v2.0...")
+        task.spawn(function()
+            if hookInventoryController() then
+                task.wait(1)
+                initialLoadInventoryTiles(onRefreshCallback)
+
+                pcall(function()
+                    local GuiControl = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("GuiControl"))
+                    local invGUI = LocalPlayer.PlayerGui:FindFirstChild("Inventory")
+                    GuiControl.GuiUnfocusedSignal:Connect(function(closedGui)
+                        if closedGui == invGUI then task.delay(0.5, function() refreshInventoryTiles(onRefreshCallback) end) end
+                    end)
+                    print("[Inv] Listening for manual-close.")
+                end)
+
+                pcall(function()
+                    local fishCaughtEvent = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/FishCaught")
+                    fishCaughtEvent.OnClientEvent:Connect(function()
+                        task.delay(1, function() refreshInventoryTiles(onRefreshCallback) end)
+                    end)
+                    print("[Inv] Listening for new fish.")
+                end)
+            end
+        end)
+    end
+end
+
+--[[------------------------------------------------------------------
+    MODULE: Discord Notifier
+    Tujuan: Mengirim notifikasi ke Discord untuk item whitelist.
+--------------------------------------------------------------------]]
+local DiscordNotifier = {}
+do
+    local HttpService = game:GetService("HttpService")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Use webhook2 from main.lua if available, otherwise use fallback
+    local WEBHOOK_URL = webhook2
+
+    local CONFIG = {
+        WEBHOOK_URL = WEBHOOK_URL, -- <--- Uses webhook2 from loadstring or fallback
+        WHITELIST = {
+            ["Megalodon"] = true,
+            ["Titanic Trout"] = true,
+            ["Galleon"] = true,
+            ["Sea Dragon"] = true,
+            ["Viperfish"] = true -- Contoh
+        },
+        COOLDOWN_SECONDS = 10,
+        -- Fish images mapping (Roblox Asset IDs converted to direct image URLs)
+        FISH_IMAGES = {
+            ["Viperfish"] = "https://assetdelivery.roblox.com/v1/asset/?id=132331063285672"
+        }
+    }
+
+    local trackedItemCounts = {}
+    local isInitialScan = true
+    local lastWebhookTime = 0
+
+    local function sendNotification(itemName, amount)
+        if not WEBHOOK_URL or WEBHOOK_URL == "PASTE_YOUR_WEBHOOK_URL_HERE" then return end
+        if tick() - lastWebhookTime < CONFIG.COOLDOWN_SECONDS then return end
+
+        local embed = {
+            title = "🎣 Item Langka Ditemukan!",
+            description = string.format("**+%d %s** telah ditambahkan ke inventory.", amount, itemName),
+            color = 3066993,
+            fields = {
+                { name = "👤 Player", value = LocalPlayer.Name, inline = true },
+                { name = "🕒 Waktu", value = os.date("%H:%M:%S"), inline = true }
+            },
+            footer = { text = "Inventory Notifier" }
+        }
+
+        -- Add image if available for this fish
+        if CONFIG.FISH_IMAGES[itemName] then
+            embed.image = {
+                url = CONFIG.FISH_IMAGES[itemName]
+            }
+        end
+
+        local payload = { embeds = {embed} }
+        pcall(function()
+            local req = (syn and syn.request) or http_request
+            if req then
+                req({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode(payload) })
+                lastWebhookTime = tick()
+                print("[Notifier] Sent notification for: " .. itemName)
+            end
+        end)
+    end
+
+    function DiscordNotifier.scanInventory()
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        local invContainer = playerGui and playerGui:FindFirstChild("Inventory")
+        invContainer = invContainer and invContainer:FindFirstChild("Main")
+        invContainer = invContainer and invContainer:FindFirstChild("Content")
+        invContainer = invContainer and invContainer:FindFirstChild("Pages")
+        invContainer = invContainer and invContainer:FindFirstChild("Inventory")
+        if not invContainer then return end
+
+        local currentItemCounts = {}
+        for _, tile in ipairs(invContainer:GetChildren()) do
+            if tile.Name == "Tile" and tile:FindFirstChild("ItemName") then
+                local itemName = tile.ItemName.Text
+                if CONFIG.WHITELIST[itemName] then
+                    currentItemCounts[itemName] = (currentItemCounts[itemName] or 0) + 1
+                end
+            end
+        end
+
+        if isInitialScan then
+            trackedItemCounts = currentItemCounts
+            isInitialScan = false
+            print("[Notifier] Initial scan complete. Monitoring for new items.")
+            return
+        end
+
+        for itemName, currentCount in pairs(currentItemCounts) do
+            local previousCount = trackedItemCounts[itemName] or 0
+            if currentCount > previousCount then
+                sendNotification(itemName, currentCount - previousCount)
+            end
+        end
+
+        trackedItemCounts = currentItemCounts
+    end
+end
+
+-- ====================================================================
+--                        INISIALISASI & SISA SCRIPT
+-- ====================================================================
+
+-- Memulai sistem inventory dan notifier setelah game siap
+task.wait(5)
+LightweightInventory.start(DiscordNotifier.scanInventory)
+
+-- Sisa script zfish v6.2.lua...
 local player = game.Players.LocalPlayer
 local replicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -263,13 +296,34 @@ local BestCaught = leaderstats:WaitForChild("Rarest Fish")
 local AllTimeCaught = leaderstats:WaitForChild("Caught")
 
 -- ====== FISHING STATS TRACKING VARIABLES ======
-local startTime = os.time()
+local startTime = os.time() -- Using os.time() for stable uptime calculation
 local sessionStats = {
     totalFish = 0,
     totalValue = 0,
     bestFish = {name = "None", value = 0},
     fishTypes = {}
 }
+
+-- ====== FPS TRACKING VARIABLES ====== 
+local RunService = game:GetService("RunService")
+local frameCount = 0
+local lastFPSUpdate = tick()
+local currentFPS = 0
+
+-- FPS Counter function
+local function updateFPS()
+    frameCount = frameCount + 1
+    local currentTime = tick()
+
+    if currentTime - lastFPSUpdate >= 1 then
+        currentFPS = frameCount
+        frameCount = 0
+        lastFPSUpdate = currentTime
+    end
+end
+
+-- Connect FPS counter to heartbeat
+RunService.Heartbeat:Connect(updateFPS)
 
 -- Database ikan lengkap
 local fishDatabase = {
@@ -279,8 +333,6 @@ local fishDatabase = {
 local isAutoFarmOn = false
 local isAutoSellOn = false
 local isAutoCatchOn = false
-local isUpgradeOn = false
-local isUpgradeBaitOn = false
 local isAutoWeatherOn = false
 local gpuSaverEnabled = false
 local isAutoMegalodonOn = false
@@ -346,7 +398,7 @@ local defaultConfig = {
     gpuSaver = false,
     chargeFishingDelay = 0.01,
     autoFishMainDelay = 0.9,
-    autoSellDelay = 5,
+    autoSellDelay = 35,
     autoCatchDelay = 0.2,
     weatherIdDelay = 3,
     weatherCycleDelay = 100
@@ -569,12 +621,12 @@ local function applyDelayConfig()
         return clamped
     end
 
-    chargeFishingDelay = applyField("chargeFishingDelay", 0.01, defaultConfig.chargeFishingDelay)
+    chargeFishingDelay = applyField("chargeFishingDelay", 0.1, defaultConfig.chargeFishingDelay)
     autoFishMainDelay = applyField("autoFishMainDelay", 0.1, defaultConfig.autoFishMainDelay)
-    autoSellDelay = applyField("autoSellDelay", 1, defaultConfig.autoSellDelay)
+    autoSellDelay = applyField("autoSellDelay", 36, defaultConfig.autoSellDelay)
     autoCatchDelay = applyField("autoCatchDelay", 0.1, defaultConfig.autoCatchDelay)
     weatherIdDelay = applyField("weatherIdDelay", 1, defaultConfig.weatherIdDelay)
-    weatherCycleDelay = applyField("weatherCycleDelay", 10, defaultConfig.weatherCycleDelay)
+    weatherCycleDelay = applyField("weatherCycleDelay", 35, defaultConfig.weatherCycleDelay)
 
     if updated then
         pcall(saveConfig)
@@ -689,7 +741,7 @@ local autoCatchSlider
 local weatherIdSlider
 local weatherCycleSlider
 
--- ====== FUNGSI UNTUK MENDAPATKAN COIN DAN LEVEL ======
+-- ====== FUNGSI UNTUK MENDAPATKAN COIN DAN LEVEL ====== 
 local function getCurrentCoins()
     local success, result = pcall(function()
         local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
@@ -733,7 +785,7 @@ local function getCurrentLevel()
     return success and result or "Lvl 0"
 end
 
--- ====== HELPER FUNCTIONS FOR WEB MONITOR ======
+-- ====== HELPER FUNCTIONS FOR WEB MONITOR ====== 
 local function getFishCaught()
     local success, fishCaught = pcall(function()
         if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then
@@ -784,9 +836,13 @@ local function getQuestText(labelName)
     return success and result or "Error fetching quest"
 end
 
--- ====== FISHING STATS FUNCTIONS ======
+-- ====== FISHING STATS FUNCTIONS ====== 
 -- Format waktu
 local function FormatTime(seconds)
+    -- Ensure we have a valid number
+    seconds = tonumber(seconds) or 0
+    seconds = math.max(0, math.floor(seconds))
+
     local hours = math.floor(seconds / 3600)
     local minutes = math.floor((seconds % 3600) / 60)
     local secs = seconds % 60
@@ -806,12 +862,12 @@ local function FormatNumber(num)
     return formatted
 end
 
--- ====== GPU SAVER VARIABLES ======
+-- ====== GPU SAVER VARIABLES ====== 
 local originalSettings = {}
 local whiteScreenGui = nil
 local connections = {}
 
--- ====== DELAY VARIABLES ======
+-- ====== DELAY VARIABLES ====== 
 local chargeFishingDelay = 0.01
 local autoFishMainDelay = 0.9
 local autoSellDelay = 5
@@ -838,8 +894,6 @@ local function getNetworkEvents()
             cancelFishingEvent = net:WaitForChild("RF/CancelFishingInputs", 10),
             equipEvent = net:WaitForChild("RE/EquipToolFromHotbar", 10),
             unequipEvent = net:WaitForChild("RE/UnequipToolFromHotbar", 10),
-            purchaseRodEvent = net:WaitForChild("RF/PurchaseFishingRod", 10),
-            purchaseBaitEvent = net:WaitForChild("RF/PurchaseBait", 10),
             WeatherEvent = net:WaitForChild("RF/PurchaseWeatherEvent", 10),
             fishCaughtEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/FishCaught", 10)
         }
@@ -868,12 +922,10 @@ local requestMinigameEvent = networkEvents.requestMinigameEvent
 local cancelFishingEvent = networkEvents.cancelFishingEvent
 local equipEvent = networkEvents.equipEvent
 local unequipEvent = networkEvents.unequipEvent
-local purchaseRodEvent = networkEvents.purchaseRodEvent
-local purchaseBaitEvent = networkEvents.purchaseBaitEvent
 local WeatherEvent = networkEvents.WeatherEvent
 local fishCaughtEvent = networkEvents.fishCaughtEvent
 
--- ====== SIMPLIFIED GPU SAVER WITH CENTER LAYOUT ======
+-- ====== SIMPLIFIED GPU SAVER WITH CENTER LAYOUT ====== 
 local function createWhiteScreen()
     if whiteScreenGui then return end
     
@@ -919,12 +971,25 @@ local function createWhiteScreen()
     sessionLabel.Font = Enum.Font.SourceSansBold
     sessionLabel.TextXAlignment = Enum.TextXAlignment.Center
     sessionLabel.Parent = frame
+
+    -- FPS Counter (centered)
+    local fpsLabel = Instance.new("TextLabel")
+    fpsLabel.Name = "FPSLabel"
+    fpsLabel.Size = UDim2.new(0, 400, 0, 40)
+    fpsLabel.Position = UDim2.new(0.5, -200, 0, 200)
+    fpsLabel.BackgroundTransparency = 1
+    fpsLabel.Text = "📊 FPS: " .. currentFPS
+    fpsLabel.TextColor3 = Color3.new(1, 1, 1)
+    fpsLabel.TextSize = 22
+    fpsLabel.Font = Enum.Font.SourceSansBold
+    fpsLabel.TextXAlignment = Enum.TextXAlignment.Center
+    fpsLabel.Parent = frame
     
     -- Fishing stats (centered)
     local fishStatsLabel = Instance.new("TextLabel")
     fishStatsLabel.Name = "FishStatsLabel"
     fishStatsLabel.Size = UDim2.new(0, 400, 0, 40)
-    fishStatsLabel.Position = UDim2.new(0.5, -200, 0, 200)
+    fishStatsLabel.Position = UDim2.new(0.5, -200, 0, 220)
     fishStatsLabel.BackgroundTransparency = 1
     fishStatsLabel.Text = "🎣 Fish Caught: " .. FormatNumber(sessionStats.totalFish)
     fishStatsLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -932,12 +997,12 @@ local function createWhiteScreen()
     fishStatsLabel.Font = Enum.Font.SourceSans
     fishStatsLabel.TextXAlignment = Enum.TextXAlignment.Center
     fishStatsLabel.Parent = frame
-    
+
 -- Coin display (mengganti earnings)
     local coinLabel = Instance.new("TextLabel")
     coinLabel.Name = "CoinLabel"
     coinLabel.Size = UDim2.new(0, 400, 0, 40)
-    coinLabel.Position = UDim2.new(0.5, -200, 0, 220)
+    coinLabel.Position = UDim2.new(0.5, -200, 0, 240)
     coinLabel.BackgroundTransparency = 1
     coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
     coinLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -950,7 +1015,7 @@ local function createWhiteScreen()
     local levelLabel = Instance.new("TextLabel")
     levelLabel.Name = "LevelLabel"
     levelLabel.Size = UDim2.new(0, 400, 0, 40)
-    levelLabel.Position = UDim2.new(0.5, -200, 0, 240)
+    levelLabel.Position = UDim2.new(0.5, -200, 0, 260)
     levelLabel.BackgroundTransparency = 1
     levelLabel.Text = "⭐ " .. getCurrentLevel()
     levelLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -962,7 +1027,7 @@ local function createWhiteScreen()
         local quest1Label = Instance.new("TextLabel")
     quest1Label.Name = "Quest1Label"
     quest1Label.Size = UDim2.new(0, 600, 0, 30)  -- Lebar lebih untuk 2 quests, height compact
-    quest1Label.Position = UDim2.new(0.5, -300, 0, 310)  -- Di bawah level
+    quest1Label.Position = UDim2.new(0.5, -300, 0, 330)  -- Di bawah level
     quest1Label.BackgroundTransparency = 1
     quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1")
     quest1Label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -975,7 +1040,7 @@ local function createWhiteScreen()
     local quest2Label = Instance.new("TextLabel")
     quest2Label.Name = "Quest2Label"
     quest2Label.Size = UDim2.new(0, 600, 0, 30)  -- Lebar lebih untuk 2 quests, height compact
-    quest2Label.Position = UDim2.new(0.5, -300, 0, 330)  -- Di bawah level
+    quest2Label.Position = UDim2.new(0.5, -300, 0, 350)  -- Di bawah level
     quest2Label.BackgroundTransparency = 1
     quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2")
     quest2Label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -988,7 +1053,7 @@ local function createWhiteScreen()
     local quest3Label = Instance.new("TextLabel")
     quest3Label.Name = "Quest3Label"
     quest3Label.Size = UDim2.new(0, 600, 0, 30)  -- Lebar lebih untuk 2 quests, height compact
-    quest3Label.Position = UDim2.new(0.5, -300, 0, 350)  -- Di bawah level
+    quest3Label.Position = UDim2.new(0.5, -300, 0, 370)  -- Di bawah level
     quest3Label.BackgroundTransparency = 1
     quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3")
     quest3Label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -1001,7 +1066,7 @@ local function createWhiteScreen()
     local quest4Label = Instance.new("TextLabel")
     quest4Label.Name = "Quest4Label"
     quest4Label.Size = UDim2.new(0, 600, 0, 30)  -- Lebar lebih untuk 2 quests, height compact
-    quest4Label.Position = UDim2.new(0.5, -300, 0, 370)  -- Di bawah level
+    quest4Label.Position = UDim2.new(0.5, -300, 0, 390)  -- Di bawah level
     quest4Label.BackgroundTransparency = 1
     quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4")
     quest4Label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
@@ -1014,18 +1079,32 @@ local function createWhiteScreen()
     -- Auto features status (centered)
     local statusLabel = Instance.new("TextLabel")
     statusLabel.Name = "StatusLabel"
-    statusLabel.Size = UDim2.new(0, 600, 0, 60)
-    statusLabel.Position = UDim2.new(0.5, -300, 0, 430)
+    statusLabel.Size = UDim2.new(0, 600, 0, 40)
+    statusLabel.Position = UDim2.new(0.5, -300, 0, 450)
     statusLabel.BackgroundTransparency = 1
     statusLabel.Text = "🤖 Auto Farm: " .. (isAutoFarmOn and "🟢 ON" or "🔴 OFF") .. 
-                      "  |  Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
-                      "  |  Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF")
+                      " | Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
+                      " | Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF")
     statusLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
     statusLabel.TextSize = 16
     statusLabel.Font = Enum.Font.SourceSans
     statusLabel.TextXAlignment = Enum.TextXAlignment.Center
     statusLabel.TextYAlignment = Enum.TextYAlignment.Center
     statusLabel.Parent = frame
+
+    local extraStatusLabel = Instance.new("TextLabel")
+    extraStatusLabel.Name = "ExtraStatusLabel"
+    extraStatusLabel.Size = UDim2.new(0, 600, 0, 40)
+    extraStatusLabel.Position = UDim2.new(0.5, -300, 0, 470)
+    extraStatusLabel.BackgroundTransparency = 1
+    extraStatusLabel.Text = "🦈 Auto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
+                          " | 🌤️ Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
+    extraStatusLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+    extraStatusLabel.TextSize = 16
+    extraStatusLabel.Font = Enum.Font.SourceSans
+    extraStatusLabel.TextXAlignment = Enum.TextXAlignment.Center
+    extraStatusLabel.TextYAlignment = Enum.TextYAlignment.Center
+    extraStatusLabel.Parent = frame
 
     -- Close button for Android/mobile users
     local closeButton = Instance.new("TextButton")
@@ -1037,31 +1116,18 @@ local function createWhiteScreen()
     closeButton.TextColor3 = Color3.new(1, 0, 0)
     closeButton.TextSize = 16
     closeButton.Font = Enum.Font.SourceSansBold
-    closeButton.TextXAlignment = Enum.TextXAlignment.Center
     closeButton.Parent = frame
 
     closeButton.MouseButton1Click:Connect(function()
         disableGPUSaver()
     end)
-    
-    -- FPS Counter (top right)
-    local fpsLabel = Instance.new("TextLabel")
-    fpsLabel.Size = UDim2.new(0, 200, 0, 50)
-    fpsLabel.Position = UDim2.new(1, -220, 0, 20)
-    fpsLabel.BackgroundTransparency = 1
-    fpsLabel.Text = "FPS: Calculating..."
-    fpsLabel.TextColor3 = Color3.new(0, 1, 0)
-    fpsLabel.TextSize = 18
-    fpsLabel.Font = Enum.Font.SourceSansBold
-    fpsLabel.TextXAlignment = Enum.TextXAlignment.Right
-    fpsLabel.Parent = frame
-    
--- ====== IMPROVED UPDATE SYSTEM ======
+
+    -- ====== IMPROVED UPDATE SYSTEM (from reference) ====== 
     task.spawn(function()
         local lastUpdate = tick()
         local frameCount = 0
         
-        connections.fpsConnection = RunService.RenderStepped:Connect(function()
+        connections.renderConnection = RunService.RenderStepped:Connect(function()
             frameCount = frameCount + 1
             local currentTime = tick()
             
@@ -1071,7 +1137,7 @@ local function createWhiteScreen()
                 -- Safe FPS update
                 pcall(function()
                     if fpsLabel and fpsLabel.Parent then
-                        fpsLabel.Text = string.format("FPS: %.0f", math.floor(fps))
+                        fpsLabel.Text = string.format("📊 FPS: %.0f", fps)
                     end
                 end)
                 
@@ -1091,83 +1157,45 @@ local function createWhiteScreen()
                     end
                 end)
                 
-                -- Safe earnings update
+                -- Safe coins update
                 pcall(function()
                     if coinLabel and coinLabel.Parent then
                         coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
                     end
                 end)
 
-                -- Safe earnings update
+                -- Safe level update
                 pcall(function()
                     if levelLabel and levelLabel.Parent then
                         levelLabel.Text = "⭐ " .. getCurrentLevel()
                     end
                 end)
-
-                -- Safe quest
-                pcall(function()
-                    if quest1Label and quest1Label.Parent then
-                        quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1")
-                    end
-                end)
-
-                pcall(function()
-                    if quest2Label and quest2Label.Parent then
-                        quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2")
-                    end
-                end)
                 
-                pcall(function()
-                    if quest3Label and quest3Label.Parent then
-                        quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3")
-                    end
-                end)
-
-                pcall(function()
-                    if quest4Label and quest4Label.Parent then
-                        quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4")
-                    end
-                end)
+                -- Safe quest updates
+                pcall(function() if quest1Label and quest1Label.Parent then quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1") end end)
+                pcall(function() if quest2Label and quest2Label.Parent then quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2") end end)
+                pcall(function() if quest3Label and quest3Label.Parent then quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3") end end)
+                pcall(function() if quest4Label and quest4Label.Parent then quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4") end end)
                 
                 -- Safe status update
                 pcall(function()
                     if statusLabel and statusLabel.Parent then
                         statusLabel.Text = "🤖 Auto Farm: " .. (isAutoFarmOn and "🟢 ON" or "🔴 OFF") .. 
-                                         "  |  Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
-                                         "  |  Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF") ..
-                                         "\nUpgrade Rod: " .. (isUpgradeOn and "🟢 ON" or "🔴 OFF") ..
-                                         "  |  Upgrade Bait: " .. (isUpgradeBaitOn and "🟢 ON" or "🔴 OFF") ..
-                                         "  |  Auto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
-                                         "  |  Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
+                                         " | Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
+                                         " | Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF")
+                    end
+                    if extraStatusLabel and extraStatusLabel.Parent then
+                        extraStatusLabel.Text = "🦈 Auto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
+                                              " | 🌤️ Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
                     end
                 end)
                 
                 -- Safe Total Caught & Best Caught update
                 pcall(function()
                     if titleLabel and titleLabel.Parent then
-                        local currentCaught = 0
-                        local currentBest = "None"
-                        
-                        if LocalPlayer.leaderstats then
-                            if LocalPlayer.leaderstats.Caught then
-                                currentCaught = tonumber(LocalPlayer.leaderstats.Caught.Value) or 0
-                            end
-                            if LocalPlayer.leaderstats["Rarest Fish"] then
-                                currentBest = tostring(LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
-                            end
-                        end
-                        
-                        titleLabel.Text = "🟢 " .. (LocalPlayer.Name or "Player") .. 
-                                        "\nTotal Caught: " .. FormatNumber(currentCaught) .. 
-                                        "\nBest Caught: " .. currentBest
-                    end
-                end)
-                
-                -- Safe last update time
-                pcall(function()
-                    if lastUpdateLabel and lastUpdateLabel.Parent then
-                        lastUpdateLabel.Text = "Last Update: " .. os.date("%H:%M:%S")
+                        local currentCaught = (LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught and LocalPlayer.leaderstats.Caught.Value) or 0
+                        local currentBest = (LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] and LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
+                        titleLabel.Text = "🟢 " .. LocalPlayer.Name .. "\nTotal Caught: " .. FormatNumber(currentCaught) .. "\nBest Caught: " .. currentBest
                     end
                 end)
                 
@@ -1205,9 +1233,9 @@ local function removeWhiteScreen()
         whiteScreenGui = nil
     end
     
-    if connections.fpsConnection then
-        connections.fpsConnection:Disconnect()
-        connections.fpsConnection = nil
+    if connections.renderConnection then
+        connections.renderConnection:Disconnect()
+        connections.renderConnection = nil
     end
     
     if connections.caughtConnection then
@@ -1244,7 +1272,7 @@ function enableGPUSaver()
             end
         end
         
-        setfpscap(5)
+        pcall(function() setfpscap(5) end) -- Limit FPS to 5
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
@@ -1278,7 +1306,7 @@ function disableGPUSaver()
             end
         end
         
-        setfpscap(0)
+        pcall(function() setfpscap(0) end) -- Remove FPS limit
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, true)
         workspace.CurrentCamera.FieldOfView = 70
     end)
@@ -1292,8 +1320,8 @@ function disableGPUSaver()
     end
 end
 
--- ====== FISH CAUGHT EVENT HANDLER ======
-local function setupFishTracking()
+-- ====== FISH CAUGHT EVENT HANDLER ====== 
+local function setupFishTracking() 
     print("Fish tracking active - monitoring catch count only")
     
     task.spawn(function()
@@ -1393,70 +1421,70 @@ local function enablePreset(presetKey, locationName)
         local steps = {}
 
         if config.activePreset and config.activePreset ~= "none" and config.activePreset ~= presetKey then
-            table.insert(steps, function()
-                if autoMegalodonToggle then
+            table.insert(steps, function() 
+                if autoMegalodonToggle then 
                     autoMegalodonToggle:UpdateToggle(nil, false)
                 end
             end)
-            table.insert(steps, function()
-                if autoWeatherToggle then
+            table.insert(steps, function() 
+                if autoWeatherToggle then 
                     autoWeatherToggle:UpdateToggle(nil, false)
                 end
             end)
-            table.insert(steps, function()
-                if autoCatchToggle then
+            table.insert(steps, function() 
+                if autoCatchToggle then 
                     autoCatchToggle:UpdateToggle(nil, false)
                 end
             end)
-            table.insert(steps, function()
-                if autoSellToggle then
+            table.insert(steps, function() 
+                if autoSellToggle then 
                     autoSellToggle:UpdateToggle(nil, false)
                 end
             end)
-            table.insert(steps, function()
-                if autoFarmToggle then
+            table.insert(steps, function() 
+                if autoFarmToggle then 
                     autoFarmToggle:UpdateToggle(nil, false)
                 end
             end)
         end
 
-        table.insert(steps, function()
-            if autoFarmToggle then
+        table.insert(steps, function() 
+            if autoFarmToggle then 
                 autoFarmToggle:UpdateToggle(nil, true)
             end
         end)
-        table.insert(steps, function()
-            if autoSellToggle then
+        table.insert(steps, function() 
+            if autoSellToggle then 
                 autoSellToggle:UpdateToggle(nil, true)
             end
         end)
-        table.insert(steps, function()
-            if autoCatchToggle then
+        table.insert(steps, function() 
+            if autoCatchToggle then 
                 autoCatchToggle:UpdateToggle(nil, true)
             end
         end)
 
         -- Only enable weather and megalodon for auto1 and auto2, not auto3
         if presetKey ~= "auto3" then
-            table.insert(steps, function()
-                if autoWeatherToggle then
+            table.insert(steps, function() 
+                if autoWeatherToggle then 
                     autoWeatherToggle:UpdateToggle(nil, true)
                 end
             end)
-            table.insert(steps, function()
-                if autoMegalodonToggle then
+            table.insert(steps, function() 
+                if autoMegalodonToggle then 
                     autoMegalodonToggle:UpdateToggle(nil, true)
                 end
             end)
         end
 
-        table.insert(steps, function()
+        table.insert(steps, function() 
             enableGPUSaver()
         end)
 
         -- Set custom delay for Kohana preset
         if presetKey == "auto3" then
-            table.insert(steps, function()
+            table.insert(steps, function() 
                 setAutoFishDelayForKohana()
             end)
         end
@@ -1501,40 +1529,40 @@ local function disablePreset(presetKey)
         end
 
         local steps = {
-            function()
-                if autoMegalodonToggle then
+            function() 
+                if autoMegalodonToggle then 
                     autoMegalodonToggle:UpdateToggle(nil, false)
                 end
             end,
-            function()
-                if autoWeatherToggle then
+            function() 
+                if autoWeatherToggle then 
                     autoWeatherToggle:UpdateToggle(nil, false)
                 end
             end,
-            function()
-                if autoCatchToggle then
+            function() 
+                if autoCatchToggle then 
                     autoCatchToggle:UpdateToggle(nil, false)
                 end
             end,
-            function()
-                if autoSellToggle then
+            function() 
+                if autoSellToggle then 
                     autoSellToggle:UpdateToggle(nil, false)
                 end
             end,
-            function()
-                if autoFarmToggle then
+            function() 
+                if autoFarmToggle then 
                     autoFarmToggle:UpdateToggle(nil, false)
                 end
             end,
-            function()
+            function() 
                 disableGPUSaver()
             end,
         }
 
         -- Reset delay for Kohana preset
         if presetKey == "auto3" then
-            table.insert(steps, function()
-                if autoFishMainSlider then
+            table.insert(steps, function() 
+                if autoFishMainSlider then 
                     autoFishMainSlider:Set(0.9)
                 else
                     setAutoFishMainDelay(0.9)
@@ -1561,15 +1589,11 @@ local function disablePreset(presetKey)
 end
 
 
--- ====== DAFTAR IDS ======
-local rodIDs = {79, 76, 85, 76, 78, 4, 80, 6, 7, 5}
-local baitIDs = {10, 2, 3, 6, 8, 15, 16}
+-- ====== DAFTAR IDS ====== 
 local WeatherIDs = {"Cloudy", "Storm","Wind"}
-local rodDatabase = {luck = 79,carbon = 76,grass = 85,demascus = 76,ice = 78,lucky = 4,midnight = 80,steampunk = 6,chrome = 7,astral = 5}
-local BaitDatabase = {topwaterbait = 10,luckbait = 2,midnightbait = 3,chromabait = 6,darkmatterbait = 8,corruptbait = 15,aetherbait = 16}
 
 
--- ====== CORE FUNCTIONS ======
+-- ====== CORE FUNCTIONS ====== 
 local function chargeFishingRod()
     pcall(function()
         if chargeEvent then
@@ -1616,69 +1640,8 @@ local function unequipRod()
     end)
 end
 
--- buy luck rod
-local function buyRod(rodDatabase)
-    if purchaseRodEvent then
-        pcall(function()
-            purchaseRodEvent:InvokeServer(rodDatabase)
-        end)
-    else
-        local success, err = pcall(function()
-            local replicatedStorage = game:GetService("ReplicatedStorage")
-            if replicatedStorage then
-                local directEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseFishingRod"]
-                if directEvent then
-                    task.wait(0.5) -- Add delay to prevent rate limiting
-                    directEvent:InvokeServer(rodDatabase)
-                end
-            end
-        end)
 
-        if not success then
-            -- Check if it's an asset or network error
-            if string.find(tostring(err):lower(), "asset is not approved") or
-               string.find(tostring(err):lower(), "failed to load") or
-               string.find(tostring(err):lower(), "network") then
-                -- Silently continue
-            else
-                warn("[Purchase Rod] Error: " .. tostring(err))
-            end
-        end
-    end
-end
-
--- buy bait
-local function buyBait(BaitDatabase)
-    if purchaseBaitEvent then
-        pcall(function()
-            purchaseBaitEvent:InvokeServer(BaitDatabase)
-        end)
-    else
-        local success, err = pcall(function()
-            local replicatedStorage = game:GetService("ReplicatedStorage")
-            if replicatedStorage then
-                local directEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseBait"]
-                if directEvent then
-                    task.wait(0.5) -- Add delay to prevent rate limiting
-                    directEvent:InvokeServer(BaitDatabase)
-                end
-            end
-        end)
-
-        if not success then
-            -- Check if it's an asset or network error
-            if string.find(tostring(err):lower(), "asset is not approved") or
-               string.find(tostring(err):lower(), "failed to load") or
-               string.find(tostring(err):lower(), "network") then
-                -- Silently continue
-            else
-                warn("[Purchase Bait] Error: " .. tostring(err))
-            end
-        end
-    end
-end
-
--- ====== MEGALODON HUNT FUNCTIONS ======
+-- ====== MEGALODON HUNT FUNCTIONS ====== 
 local function teleportToMegalodon(position, isEventTeleport)
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") then
         local humanoid = player.Character.Humanoid
@@ -1721,18 +1684,17 @@ local function disableMegalodonLock()
     end
 end
 
--- ====== MEGALODON WEBHOOK ======
+-- ====== MEGALODON WEBHOOK ====== 
 local lastWebhookTime = 0
 local WEBHOOK_COOLDOWN = 15 -- 15 seconds cooldown between webhooks to prevent rate limiting
 local webhookRetryDelay = 5 -- Base retry delay in seconds
 local maxRetryAttempts = 3
 
 -- ====== UNIFIED WEBHOOK CONFIGURATION ======
--- Set your Discord webhook URL here for all notifications (fish, megalodon, disconnect)
--- Example: "https://discord.com/api/webhooks/1234567890/abcdefghijklmnop"
-local UNIFIED_WEBHOOK_URL = webhook2  -- PASTE YOUR DISCORD WEBHOOK URL HERE
+-- Use webhook2 from main.lua if available, otherwise use empty fallback
+local UNIFIED_WEBHOOK_URL = webhook2  -- Uses webhook2 from loadstring
 
--- ====== UNIFIED WEBHOOK FUNCTION ======
+-- ====== UNIFIED WEBHOOK FUNCTION ====== 
 local function sendUnifiedWebhook(webhookType, data)
     -- Check if webhook URL is configured
     if not UNIFIED_WEBHOOK_URL or UNIFIED_WEBHOOK_URL == "" then
@@ -1768,7 +1730,7 @@ local function sendUnifiedWebhook(webhookType, data)
             color = 3066993, -- Blue-green
             fields = {
                 { name = "🕒 Waktu",  value = os.date("%H:%M:%S"), inline = true },
-                { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+                { name = "👤 Player", value = player.DisplayName or player.Name or "Unknown", inline = true },
                 { name = "📦 Total (whitelist)", value = tostring(data.totalWhitelistCount or 0) .. " fish", inline = true },
             },
             footer = { text = "Inventory Notifier • Auto Fish" }
@@ -1779,7 +1741,7 @@ local function sendUnifiedWebhook(webhookType, data)
             description = data.reason or "Player has disconnected from the server",
             color = 16776960, -- Yellow
             fields = {
-                { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+                { name = "👤 Player", value = player.DisplayName or player.Name or "Unknown", inline = true },
                 { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
                 { name = "🔌 Reason", value = data.reason or "Unknown", inline = false }
             },
@@ -1889,7 +1851,7 @@ local function autoDetectMegalodon()
         for _, child in ipairs(workspace:GetChildren()) do
             if string.lower(child.Name) == "props" then
                 if debugMode then print("[Megalodon Debug] Checking root Props folder: " .. child.Name) end
-                
+
                 local megalodonHunt = child:FindFirstChild("Megalodon Hunt") or
                                     child:FindFirstChild("megalodon hunt") or
                                     child:FindFirstChild("Megalodon_Hunt") or
@@ -1982,7 +1944,7 @@ local function setAutoMegalodon(state)
 end
 
 
--- ====== ENHANCED TOGGLE FUNCTIONS ======
+-- ====== ENHANCED TOGGLE FUNCTIONS ====== 
 local function setAutoFarm(state)
     isAutoFarmOn = state
     updateConfigField("autoFarm", state)
@@ -2003,15 +1965,7 @@ local function setSell(state)
     print("💰 Auto Sell: " .. (state and "ENABLED" or "DISABLED"))
 end
 
-local function setUpgrade(state)
-    isUpgradeOn = state
-    print("⬆️ Auto Upgrade Rod: " .. (state and "ENABLED" or "DISABLED"))
-end
 
-local function setUpgradeBait(state)
-    isUpgradeBaitOn = state
-    print("⬆️ Auto Upgrade Bait: " .. (state and "ENABLED" or "DISABLED"))
-end
 
 local function setAutoCatch(state)
     isAutoCatchOn = state
@@ -2035,7 +1989,7 @@ local function setAutoFishDelayForKohana()
 end
 
 
--- ====== ENHANCED MOBILE UI LIBRARY ======
+-- ====== ENHANCED MOBILE UI LIBRARY ====== 
 local Library = {}
 do
     -- Get screen size for responsive design
@@ -2225,6 +2179,22 @@ do
         titleLabel.TextYAlignment = Enum.TextYAlignment.Center
         titleLabel.Parent = topBar
 
+        -- Minimize button
+        local minimizeButton = Instance.new("TextButton")
+        minimizeButton.Name = "MinimizeButton"
+        minimizeButton.Size = UDim2.new(0, 30, 0, 30)
+        minimizeButton.Position = UDim2.new(1, -70, 0.5, -15)
+        minimizeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        minimizeButton.Text = "−"
+        minimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        minimizeButton.TextSize = 18
+        minimizeButton.Font = Enum.Font.GothamBold
+        minimizeButton.Parent = topBar
+
+        local minimizeCorner = Instance.new("UICorner")
+        minimizeCorner.CornerRadius = UDim.new(0, 6)
+        minimizeCorner.Parent = minimizeButton
+
         -- Close button
         local closeButton = Instance.new("TextButton")
         closeButton.Name = "CloseButton"
@@ -2295,6 +2265,11 @@ do
             _currentTab = nil,
             _tabScrollFrame = tabScrollFrame,
             _closeButton = closeButton,
+            _minimizeButton = minimizeButton,
+            _contentFrame = contentFrame,
+            _tabContainer = tabContainer,
+            _isMinimized = false,
+            _originalHeight = responsive.windowHeight,
         }
 
         -- Enhanced drag system
@@ -2302,8 +2277,8 @@ do
         local dragStart, startPos
 
         local function beginDrag(input)
-            if input.Position.X > closeButton.AbsolutePosition.X then
-                return -- Don't drag if clicking close button
+            if input.Position.X > minimizeButton.AbsolutePosition.X then
+                return -- Don't drag if clicking minimize or close button
             end
 
             dragging = true
@@ -2350,6 +2325,19 @@ do
             closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
         end)
 
+        -- Minimize button functionality
+        minimizeButton.MouseButton1Click:Connect(function()
+            window:MinimizeUI()
+        end)
+
+        minimizeButton.MouseEnter:Connect(function()
+            minimizeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        end)
+
+        minimizeButton.MouseLeave:Connect(function()
+            minimizeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        end)
+
         local function highlightTab(tabName)
             for name, button in pairs(window._tabButtons) do
                 if name == tabName then
@@ -2394,11 +2382,35 @@ do
             return self._screenGui.Enabled
         end
 
+        function window:MinimizeUI(force)
+            if typeof(force) == "boolean" then
+                self._isMinimized = force
+            else
+                self._isMinimized = not self._isMinimized
+            end
+
+            if self._isMinimized then
+                -- Minimize: hide content and resize to just title bar
+                self._contentFrame.Visible = false
+                self._tabContainer.Visible = false
+                self._mainFrame.Size = UDim2.new(0, self._mainFrame.Size.X.Offset, 0, 45)
+                self._minimizeButton.Text = "+"
+            else
+                -- Restore: show content and restore original size
+                self._contentFrame.Visible = true
+                self._tabContainer.Visible = true
+                self._mainFrame.Size = UDim2.new(0, self._mainFrame.Size.X.Offset, 0, self._originalHeight)
+                self._minimizeButton.Text = "−"
+            end
+
+            return self._isMinimized
+        end
+
         function window:NewTab(tabName)
             local responsive = getResponsiveSize()
 
             local tabButton = Instance.new("TextButton")
-            tabButton.Name = ("Tab_%s"):format(tabName)
+            tabButton.Name = ("Tab_%s"):format(tabName:gsub("%s", ""))
             tabButton.Size = UDim2.new(0, math.max(100, #tabName * 8 + 20), 0, 32)
             tabButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
             tabButton.TextColor3 = Color3.fromRGB(180, 180, 180)
@@ -2769,7 +2781,7 @@ do
                     end
 
                     return {
-                        Set = function(_, value)
+                        Set = function(_, value) 
                             setSelection(value, true)
                         end
                     }
@@ -2842,6 +2854,20 @@ do
                         textBox.Text = tostring(value)
                     end
 
+                    -- Auto-save on text change with debounce
+                    local lastChanged = 0
+                    local debounceTime = 0.5 -- seconds
+                    textBox.Changed:Connect(function(property)
+                        if property == "Text" then
+                            lastChanged = tick()
+                            task.delay(debounceTime, function()
+                                if tick() - lastChanged >= debounceTime then
+                                    commitValue(textBox.Text)
+                                end
+                            end)
+                        end
+                    end)
+
                     textBox.FocusLost:Connect(function()
                         commitValue(textBox.Text)
                     end)
@@ -2853,7 +2879,7 @@ do
                     end)
 
                     return {
-                        Set = function(_, value)
+                        Set = function(_, value) 
                             commitValue(value)
                         end
                     }
@@ -2937,7 +2963,7 @@ do
                     end)
 
                     return {
-                        Set = function(_, keyCode)
+                        Set = function(_, keyCode) 
                             bindKeybind(keyCode)
                         end
                     }
@@ -2968,11 +2994,17 @@ do
         end
     end
 
+    function Library:MinimizeUI(force)
+        if self._lastWindow then
+            return self._lastWindow:MinimizeUI(force)
+        end
+    end
+
 end
 
 local Window  = Library.CreateLib("🎣 Auto Fish v6.2 Enhanced")
 
--- TAB: Auto
+--TAB: Auto
 local TabAuto      = Window:NewTab("Auto Features")
 local SecMain      = TabAuto:NewSection("Main Features")
 local SecOther     = TabAuto:NewSection("Other Features")
@@ -3014,19 +3046,13 @@ autoPreset3Toggle = SecMain:NewToggle("Auto 3 (Auto Kohana)", "Enable core auto 
     end
 end)
 
-SecOther:NewToggle("Auto Upgrade Rod", "Auto upgrade rod", function(state)
-    setUpgrade(state)
-end)
 
-SecOther:NewToggle("Auto Upgrade Bait", "Auto upgrade bait", function(state)
-    setUpgradeBait(state)
-end)
 
 autoWeatherToggle = SecOther:NewToggle("Auto Weather", "Auto weather events", function(state)
     setAutoWeather(state)
 end)
 
-chargeFishingSlider = SecDelays:NewSlider("Charge Rod Delay", "Delay setelah charge fishing rod (detik, min: 0.01)", 10, 0.01, function(value)
+chargeFishingSlider = SecDelays:NewSlider("Charge Rod Delay", "Delay setelah charge fishing rod (detik, min: 0.01)", 10, 0.1, function(value)
     setChargeFishingDelay(value)
 end)
 
@@ -3034,7 +3060,7 @@ autoFishMainSlider = SecDelays:NewSlider("Auto Fish Delay", "Delay loop utama au
     setAutoFishMainDelay(value)
 end)
 
-autoSellSlider = SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik, min: 1)", 30, 1, function(value)
+autoSellSlider = SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik, min: 1)", 30, 34, function(value)
     setAutoSellDelay(value)
 end)
 
@@ -3046,7 +3072,7 @@ weatherIdSlider = SecDelays:NewSlider("Weather ID Delay", "Delay antar weather I
     setWeatherIdDelay(value)
 end)
 
-weatherCycleSlider = SecDelays:NewSlider("Weather Cycle Delay", "Delay siklus weather (detik, min: 10)", 600, 10, function(value)
+weatherCycleSlider = SecDelays:NewSlider("Weather Cycle Delay", "Delay siklus weather (detik, min: 10)", 600, 30, function(value)
     setWeatherCycleDelay(value)
 end)
 
@@ -3098,71 +3124,6 @@ SecTP:NewDropdown("Pilih Lokasi", "Teleport instan ke lokasi", tpNames, function
     end
 end)
 
-local TabShop = Window:NewTab("Shop")
-local SecShop = TabShop:NewSection("Fishing Rods")
-local SecBait = TabShop:NewSection("Bait")
-
-SecShop:NewButton("Luck Rod - 300", "Purchase Luck Rod", function()
-    buyRod(rodDatabase.luck)
-end)
-
-SecShop:NewButton("Carbon Rod - 900", "Purchase Carbon Rod", function()
-    buyRod(rodDatabase.carbon)
-end)
-
-SecShop:NewButton("Grass Rod - 1500", "Purchase Grass Rod", function()
-    buyRod(rodDatabase.grass)
-end)
-
-SecShop:NewButton("Demascus Rod - 3000", "Purchase Demascus Rod", function()
-    buyRod(rodDatabase.demascus)
-end)
-
-SecShop:NewButton("Ice Rod - 5000", "Purchase Ice Rod", function()
-    buyRod(rodDatabase.ice)
-end)
-
-SecShop:NewButton("Lucky Rod - 15k", "Purchase Lucky Rod", function()
-    buyRod(rodDatabase.lucky)
-end)
-
-SecShop:NewButton("Midnight Rod - 50k", "Purchase Midnight Rod", function()
-    buyRod(rodDatabase.midnight)
-end)
-
-SecShop:NewButton("Steampunk Rod - 215k", "Purchase Steampunk Rod", function()
-    buyRod(rodDatabase.steampunk)
-end)
-
-SecShop:NewButton("Chrome Rod - 437k", "Purchase Chrome Rod", function()
-    buyRod(rodDatabase.chrome)
-end)
-
-SecShop:NewButton("Astral Rod - 1m", "Purchase Astral Rod", function()
-    buyRod(rodDatabase.astral)
-end)
-
-SecBait:NewButton("TopWater Bait", "Buy Bait", function()
-    buyBait(BaitDatabase.topwaterbait)
-end)
-SecBait:NewButton("Luck Bait 1k", "Buy Bait", function()
-    buyBait(BaitDatabase.luckbait)
-end)
-SecBait:NewButton("Midnight Bait 3k", "Buy Bait", function()
-    buyBait(BaitDatabase.midnightbait)
-end)
-SecBait:NewButton("Chroma Bait 290k", "Buy Bait", function()
-    buyBait(BaitDatabase.chromabait)
-end)
-SecBait:NewButton("DarkMatter Bait 630k", "Buy Bait", function()
-    buyBait(BaitDatabase.darkmatterbait)
-end)
-SecBait:NewButton("Corrupt Bait 1.15m", "Buy Bait", function()
-    buyBait(BaitDatabase.corruptbait)
-end)
-SecBait:NewButton("Aether Bait 3.7m", "Buy Bait", function()
-    buyBait(BaitDatabase.aetherbait)
-end)
 
 autoMegalodonToggle = SecOther:NewToggle("Auto Megalodon Hunt", "Auto teleport to Megalodon events", function(state)
     setAutoMegalodon(state)
@@ -3212,7 +3173,7 @@ end
 task.defer(applyLoadedConfig)
 
 
--- ====== PERFORMANCE TAB ======
+-- ====== PERFORMANCE TAB ====== 
 local TabPerformance = Window:NewTab("Performance")
 local SecGPU = TabPerformance:NewSection("GPU Saver Mode")
 
@@ -3242,11 +3203,11 @@ end)
 
 -- The "Advanced Modules" tab and its contents have been removed as per instructions.
 
--- ====== UI CONTROLS ======
+-- ====== UI CONTROLS ====== 
 local TabUI = Window:NewTab("UI Controls")
 local SecUI = TabUI:NewSection("Interface Controls")
 
--- ====== MINIMIZE SYSTEM ======
+-- ====== MINIMIZE SYSTEM ====== 
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 
@@ -3279,7 +3240,7 @@ statusFrame.BorderSizePixel = 0
 statusFrame.Parent = MiniBtn
 
 local statusGradient = Instance.new("UIGradient")
-statusGradient.Color = ColorSequence.new{
+statusGradient.Color = ColorSequence.new{ 
     ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 0)),
     ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
 }
@@ -3466,7 +3427,8 @@ task.spawn(function()
     print("✅ Custom minimize button added successfully!")
 end)
 
--- ====== AUTO LOOPS WITH ENHANCED LOGIC ======
+
+-- ====== AUTO LOOPS WITH ENHANCED LOGIC ====== 
 
 -- Enhanced Auto Farm Loop (combines equip + fishing) with asset error protection
 task.spawn(function()
@@ -3521,23 +3483,6 @@ task.spawn(function()
     end
 end)
 
--- Auto Upgrade Rod Loop
-task.spawn(function()
-    while true do
-        if isUpgradeOn then
-            for _, id in ipairs(rodIDs) do
-                if not isUpgradeOn then break end
-                pcall(function()
-                    if purchaseRodEvent then
-                        purchaseRodEvent:InvokeServer(id)
-                    end
-                end)
-                task.wait(2)
-            end
-        end
-        task.wait(0.1)
-    end
-end)
 
 task.spawn(function()
     while true do
@@ -3545,23 +3490,6 @@ task.spawn(function()
     end
 end)
 
--- Auto Upgrade Bait Loop
-task.spawn(function()
-    while true do
-        if isUpgradeBaitOn then
-            for _, id in ipairs(baitIDs) do
-                if not isUpgradeBaitOn then break end
-                pcall(function()
-                    if purchaseBaitEvent then
-                        purchaseBaitEvent:InvokeServer(id)
-                    end
-                end)
-                task.wait(2)
-            end
-        end
-        task.wait(0.1)
-    end
-end)
 
 -- Auto Weather Loop
 task.spawn(function()
@@ -3624,17 +3552,7 @@ task.spawn(function()
 end)
 
 
--- The "Inventory Whitelist Notifier" and "Disconnect Notifier" sections have been removed as per instructions.
+-- The "Disconnect Notifier" section has been removed due to compatibility issues.
 
--- ============ SCRIPT INITIALIZATION ============
+-- ============ SCRIPT INITIALIZATION ============ 
 print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
-
-
-
--- ========== INTEGRATED MODULES ==========
-
--- The "Enhanced Background Inventory Keeper" module has been removed as per instructions.
-
--- The "Web Monitor Client" module has been removed as per instructions.
-
--- Initialization and main loops for removed modules have been deleted as per instructions.
