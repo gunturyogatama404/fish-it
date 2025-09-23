@@ -220,11 +220,34 @@ do
             footer = { text = "Inventory Notifier" }
         }
 
-        -- Coba dapatkan URL gambar dari config, jika tidak ada, buat dari assetId
-        local imageUrl = CONFIG.FISH_IMAGES[itemName]
+        -- Coba dapatkan URL gambar
+        local imageUrl = CONFIG.FISH_IMAGES[itemName] -- Fallback ke config manual
         if not imageUrl and assetId then
-            -- Menggunakan API thumbnail Roblox yang lebih modern dan andal
-            imageUrl = "https://www.roblox.com/asset-thumbnail/image?assetId=" .. tostring(assetId) .. "&width=420&height=420&format=png"
+            -- Cara baru: Gunakan API thumbnail v1 untuk mendapatkan URL gambar yang valid
+            local success, response = pcall(function()
+                local getImageUrl = "https://thumbnails.roblox.com/v1/assets?assetIds=" .. tostring(assetId) .. "&size=420x420&format=Png&isCircular=false"
+                local req = (syn and syn.request) or http_request
+                if req then
+                    return req({Url = getImageUrl, Method = "GET"})
+                else
+                    return nil
+                end
+            end)
+
+            if success and response and response.Body then
+                local successDecode, decoded = pcall(function() return HttpService:JSONDecode(response.Body) end)
+                if successDecode and decoded and decoded.data and #decoded.data > 0 then
+                    local thumbnailData = decoded.data[1]
+                    if thumbnailData.state == "Completed" and thumbnailData.imageUrl then
+                        imageUrl = thumbnailData.imageUrl
+                        print("[Notifier] Berhasil mendapatkan URL gambar untuk assetId: " .. assetId)
+                    else
+                        print("[Notifier] Gagal memuat thumbnail (state: " .. tostring(thumbnailData.state) .. "), assetId: " .. assetId)
+                    end
+                end
+            else
+                print("[Notifier] Gagal melakukan request ke API thumbnail Roblox.")
+            end
         end
 
         -- Tambahkan gambar ke embed jika URL ada
@@ -261,13 +284,14 @@ do
                     local amount = ((currentItemData[itemName] and currentItemData[itemName].amount) or 0) + 1
                     local assetId = (currentItemData[itemName] and currentItemData[itemName].assetId) or nil
 
-                    -- Jika assetId belum ada, coba ekstrak dari tile
+                    -- Jika assetId belum ada, coba ekstrak dari tile (pencarian rekursif)
                     if not assetId then
-                        local iconLabel = tile:FindFirstChildOfClass("ImageLabel")
+                        local iconLabel = tile:FindFirstChildOfClass("ImageLabel", true) -- true untuk rekursif
                         if iconLabel and iconLabel.Image then
                             local id = string.match(iconLabel.Image, "%d+")
                             if id then
                                 assetId = id
+                                print("[Notifier] Menemukan assetId: " .. id .. " untuk item: " .. itemName)
                             end
                         end
                     end
