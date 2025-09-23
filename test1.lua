@@ -245,7 +245,7 @@ do
             -- Ubah ke URL raw sebelum dikirim ke Discord
             local rawImageUrl = convertToRawGitHubUrl(imageUrl)
             embed.thumbnail = { url = rawImageUrl }
-            embed.image = { url = rawImageUrl }
+            -- Baris embed.image telah dihapus sesuai permintaan
         else
             print("[Notifier] Peringatan: Tidak ada URL gambar untuk item '" .. itemName .. "' di CONFIG.FISH_IMAGES.")
         end
