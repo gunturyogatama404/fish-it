@@ -2068,6 +2068,9 @@ local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
 -- Fungsi untuk mengirim status koneksi ke webhook khusus
 local function sendConnectionStatusWebhook(status, reason)
+    print("🔍 [DEBUG] sendConnectionStatusWebhook called with status: " .. tostring(status))
+    print("🔍 [DEBUG] CONNECTION_WEBHOOK_URL exists: " .. tostring(CONNECTION_WEBHOOK_URL ~= ""))
+
     -- Check if webhook URL is configured
     if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" then
         warn('[Connection Status] Webhook URL not configured! Please set CONNECTION_WEBHOOK_URL variable.')
@@ -2092,16 +2095,17 @@ local function sendConnectionStatusWebhook(status, reason)
         }
     elseif status == "disconnected" then
         embed = {
-            title = "🔴 Player Disconnected",
-            description = reason or "Player has disconnected from the server",
+            title = "🔴 [WEBHOOK3] Player Disconnected",
+            description = "[NEW SYSTEM] " .. (reason or "Player has disconnected from the server"),
             color = 16711680, -- Red
             fields = {
                 { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
                 { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
                 { name = "🔌 Reason", value = reason or "Unknown", inline = false },
-                { name = "⏱️ Session Duration", value = FormatTime(os.time() - startTime), inline = true }
+                { name = "⏱️ Session Duration", value = FormatTime(os.time() - startTime), inline = true },
+                { name = "🔍 Debug", value = "Using webhook3 system", inline = true }
             },
-            footer = { text = "Connection Monitor • Auto Fish Script" },
+            footer = { text = "WEBHOOK3 Connection Status • xfish claude.lua" },
             timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
         }
     else
@@ -2140,7 +2144,8 @@ local function sendConnectionStatusWebhook(status, reason)
             end)
 
             if success then
-                print('[Connection Status] ' .. status .. ' notification sent successfully on attempt ' .. attempt)
+                print('🔍 [WEBHOOK3 SUCCESS] ' .. status .. ' notification sent to WEBHOOK3 on attempt ' .. attempt)
+                print('🔍 [WEBHOOK3 SUCCESS] Footer: WEBHOOK3 Connection Status • xfish claude.lua')
                 break
             else
                 warn('[Connection Status] ' .. status .. ' attempt ' .. attempt .. ' failed: ' .. tostring(err))
@@ -2157,6 +2162,9 @@ end
 local function sendDisconnectWebhook(username, reason)
     if hasSentDisconnectWebhook then return end
     hasSentDisconnectWebhook = true
+
+    print("🔍 [DEBUG] Disconnect webhook called with reason: " .. tostring(reason))
+    print("🔍 [DEBUG] Using CONNECTION_WEBHOOK_URL: " .. (CONNECTION_WEBHOOK_URL ~= "" and "CONFIGURED" or "NOT CONFIGURED"))
 
     -- Send only to dedicated connection status webhook (webhook3)
     sendConnectionStatusWebhook("disconnected", reason)
