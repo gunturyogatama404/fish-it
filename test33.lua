@@ -2066,6 +2066,98 @@ local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifi
 local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
 local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
+-- ====== RECONNECT DETECTION SYSTEM ======
+local lastSessionId = nil
+local lastDisconnectTime = nil
+local RECONNECT_THRESHOLD = 60  -- seconds, if reconnect within this time = quick reconnect
+
+-- Load previous session data (if available)
+local function loadSessionData()
+    local success, result = pcall(function()
+        if readfile and isfile then
+            local sessionFile = CONFIG_FOLDER .. "/last_session_" .. LocalPlayer.UserId .. ".json"
+            if isfile(sessionFile) then
+                local content = readfile(sessionFile)
+                local data = HttpService:JSONDecode(content)
+                return data.sessionId, data.disconnectTime
+            end
+        end
+        return nil, nil
+    end)
+
+    if success then
+        return result
+    else
+        return nil, nil
+    end
+end
+
+-- Save session data
+local function saveSessionData(sessionId, disconnectTime)
+    if not writefile or not ensureConfigFolder() then return end
+
+    local sessionFile = CONFIG_FOLDER .. "/last_session_" .. LocalPlayer.UserId .. ".json"
+    local sessionData = {
+        sessionId = sessionId,
+        disconnectTime = disconnectTime,
+        playerName = LocalPlayer.Name,
+        userId = LocalPlayer.UserId
+    }
+
+    local success = pcall(function()
+        local encoded = HttpService:JSONEncode(sessionData)
+        writefile(sessionFile, encoded)
+    end)
+
+    if success then
+        print("[Reconnect] Session data saved")
+    end
+end
+
+-- Initialize reconnect detection
+local function initializeReconnectDetection()
+    local currentSessionId = game.JobId
+    local currentTime = os.time()
+
+    -- Load previous session data
+    lastSessionId, lastDisconnectTime = loadSessionData()
+
+    if lastSessionId and lastDisconnectTime then
+        local timeDiff = currentTime - lastDisconnectTime
+
+        if currentSessionId == lastSessionId then
+            -- Same server session
+            if timeDiff <= RECONNECT_THRESHOLD then
+                -- Quick reconnect detected
+                sendConnectionStatusWebhook("reconnected", "Quick reconnect detected (Session: " .. string.sub(currentSessionId, 1, 8) .. "..., Time: " .. timeDiff .. "s)")
+                print("[Reconnect] Quick reconnect detected after " .. timeDiff .. " seconds")
+            else
+                -- Slow reconnect to same server
+                sendConnectionStatusWebhook("reconnected", "Reconnected to same server (Session: " .. string.sub(currentSessionId, 1, 8) .. "..., Time: " .. FormatTime(timeDiff) .. ")")
+                print("[Reconnect] Slow reconnect to same server after " .. FormatTime(timeDiff))
+            end
+        else
+            -- Different server session
+            if timeDiff <= RECONNECT_THRESHOLD * 2 then  -- Extended window for server changes
+                sendConnectionStatusWebhook("reconnected", "Reconnected to different server (New Session: " .. string.sub(currentSessionId, 1, 8) .. "..., Time: " .. timeDiff .. "s)")
+                print("[Reconnect] Reconnected to different server after " .. timeDiff .. " seconds")
+            else
+                -- Fresh connection after long time
+                sendConnectionStatusWebhook("connected", "Fresh connection after extended offline period (Time: " .. FormatTime(timeDiff) .. ")")
+                print("[Reconnect] Fresh connection after " .. FormatTime(timeDiff))
+            end
+        end
+    else
+        -- No previous session data = fresh start
+        sendConnectionStatusWebhook("connected")
+        print("[Reconnect] Fresh start - no previous session data")
+    end
+
+    -- Save current session as the new baseline
+    lastSessionId = currentSessionId
+    lastDisconnectTime = nil  -- Reset disconnect time since we're connected
+end
+
 -- Fungsi untuk mengirim status koneksi ke webhook khusus
 local function sendConnectionStatusWebhook(status, reason)
     -- Check if webhook URL is configured
@@ -2088,6 +2180,20 @@ local function sendConnectionStatusWebhook(status, reason)
                 { name = "📱 Status", value = "Auto Fish Active", inline = false }
             },
             footer = { text = "Connection Monitor • Auto Fish Script" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+        }
+    elseif status == "reconnected" then
+        embed = {
+            title = "🔄 Player Reconnected",
+            description = reason or "Player has successfully reconnected to the server",
+            color = 3066993, -- Blue-green
+            fields = {
+                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
+                { name = "🔄 Reconnect Info", value = reason or "Reconnection detected", inline = false },
+                { name = "📱 Status", value = "Auto Fish Resumed", inline = true }
+            },
+            footer = { text = "Reconnect Monitor • Auto Fish Script" },
             timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
         }
     elseif status == "disconnected" then
@@ -2157,6 +2263,9 @@ end
 local function sendDisconnectWebhook(username, reason)
     if hasSentDisconnectWebhook then return end
     hasSentDisconnectWebhook = true
+
+    -- Save session data before disconnect for reconnect detection
+    saveSessionData(game.JobId, os.time())
 
     -- Send only to dedicated connection status webhook (webhook3)
     sendConnectionStatusWebhook("disconnected", reason)
@@ -2240,7 +2349,7 @@ task.spawn(function()
     -- Wait a bit to ensure all services are loaded
     task.wait(2)
 
-    sendConnectionStatusWebhook("connected")
+    initializeReconnectDetection()
     print("✅ Auto Fish script fully initialized and connected!")
 end)
 
