@@ -2152,30 +2152,43 @@ local function sendConnectionStatusWebhook(status, reason)
         -- Add content field with mentions for disconnect notifications
         payload.content = "<@" .. DISCORD_USER_ID .. "> 🔴 **ALERT: Player telah DISCONNECT!** 🚨"
 
-        -- Add allowed_mentions to ensure tags work properly
-        payload.allowed_mentions = {
-            users = {DISCORD_USER_ID}  -- Allow specific user mention
-        }
-
-        print("[Connection Status] DEBUG - Disconnect payload with tags:")
-        print("[Connection Status] - Content: " .. payload.content)
-        print("[Connection Status] - User ID: " .. DISCORD_USER_ID)
-
     elseif status == "reconnected" then
         -- Add content field with mentions for reconnect notifications
         payload.content = "<@" .. DISCORD_USER_ID .. "> 🟡 **Player telah RECONNECT!** ✅"
 
-        -- Add allowed_mentions to ensure tags work properly
+    elseif status == "connected" then
+        -- No tag for normal connection, but add user info in embed
+        payload.content = ""
+    end
+
+    -- Always add allowed_mentions for any status that has content with user mention
+    if payload.content and payload.content ~= "" then
+        -- Ensure DISCORD_USER_ID is string and valid
+        local userIdStr = tostring(DISCORD_USER_ID)
+
         payload.allowed_mentions = {
-            users = {DISCORD_USER_ID}  -- Allow specific user mention
+            users = {userIdStr}
         }
 
-        print("[Connection Status] DEBUG - Reconnect payload with tags:")
+        print("[Connection Status] DEBUG - Notification with tag:")
+        print("[Connection Status] - Status: " .. status)
         print("[Connection Status] - Content: " .. payload.content)
-        print("[Connection Status] - User ID: " .. DISCORD_USER_ID)
+        print("[Connection Status] - User ID: " .. userIdStr)
+        print("[Connection Status] - Allowed mentions set for user: " .. userIdStr)
+
+        -- Validate the mention format
+        if string.find(payload.content, "<@" .. userIdStr .. ">") then
+            print("[Connection Status] - ✅ Mention format validated")
+        else
+            print("[Connection Status] - ❌ Mention format validation failed!")
+        end
     end
 
     local body = HttpService:JSONEncode(payload)
+
+    -- DEBUG: Print full payload before sending
+    print("[Connection Status] DEBUG - Full payload JSON:")
+    print(body)
 
     -- Send webhook with retry logic
     task.spawn(function()
@@ -2490,8 +2503,14 @@ local function testReconnectNotification()
     sendConnectionStatusWebhook("reconnected", "TEST: Manual reconnect test - Tag system check")
 end
 
--- Uncomment line di bawah untuk test notifications:
--- task.spawn(function() task.wait(5); testDisconnectNotification(); task.wait(5); testReconnectNotification() end)
+-- ENABLE untuk test notifications (comment kembali setelah testing):
+task.spawn(function()
+    task.wait(5)
+    print("[TEST] Starting tag tests in 5 seconds...")
+    testDisconnectNotification()
+    task.wait(3)
+    testReconnectNotification()
+end)
 
 
 -- ====== ENHANCED TOGGLE FUNCTIONS ====== 
