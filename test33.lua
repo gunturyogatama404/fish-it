@@ -54,6 +54,26 @@ end
 ultimatePerformance()
 
 -- ====================================================================
+--                        WEBHOOK CONFIGURATION
+-- ====================================================================
+--[[
+IMPORTANT: Configure your webhooks before running this script!
+
+Required webhook variables (set these in your main.lua or loadstring):
+- webhook2: Main webhook for fish notifications and general alerts
+- webhook3: Dedicated webhook for connection status (Connect/Disconnect)
+
+Example usage in your main.lua:
+webhook2 = "https://discord.com/api/webhooks/YOUR_MAIN_WEBHOOK_URL"
+webhook3 = "https://discord.com/api/webhooks/YOUR_CONNECTION_WEBHOOK_URL"
+
+Connection Status Features:
+✅ Sends "Player Connected" when script starts successfully
+❌ Sends "Player Disconnected" with detailed reason when issues occur
+📊 Includes session duration, ping monitoring, and freeze detection
+--]]
+
+-- ====================================================================
 --                        MODUL-MODUL UTAMA
 -- ====================================================================
 
@@ -2044,18 +2064,113 @@ local function setAutoMegalodon(state)
     print("🦈 Auto Megalodon Hunt: " .. (state and "ENABLED" or "DISABLED"))
 end
 
--- ====== DISCONNECT DETECTION SYSTEM ======
+-- ====== CONNECTION STATUS WEBHOOK SYSTEM ======
+-- Webhook khusus untuk status connect/disconnect
+local CONNECTION_WEBHOOK_URL = webhook3 or ""  -- URL webhook khusus untuk status koneksi
+
 local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
 local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
 local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
+
+-- Fungsi untuk mengirim status koneksi ke webhook khusus
+local function sendConnectionStatusWebhook(status, reason)
+    -- Check if webhook URL is configured
+    if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" then
+        warn('[Connection Status] Webhook URL not configured! Please set CONNECTION_WEBHOOK_URL variable.')
+        return
+    end
+
+    local embed = {}
+
+    if status == "connected" then
+        embed = {
+            title = "🟢 Player Connected",
+            description = "Auto Fish script has been successfully started",
+            color = 65280, -- Green
+            fields = {
+                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
+                { name = "🎮 Game", value = "🐠 Fish It", inline = true },
+                { name = "📱 Status", value = "Auto Fish Active", inline = false }
+            },
+            footer = { text = "Connection Monitor • Auto Fish Script" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+        }
+    elseif status == "disconnected" then
+        embed = {
+            title = "🔴 Player Disconnected",
+            description = reason or "Player has disconnected from the server",
+            color = 16711680, -- Red
+            fields = {
+                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
+                { name = "🔌 Reason", value = reason or "Unknown", inline = false },
+                { name = "⏱️ Session Duration", value = FormatTime(os.time() - startTime), inline = true }
+            },
+            footer = { text = "Connection Monitor • Auto Fish Script" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+        }
+    else
+        warn('[Connection Status] Unknown status type: ' .. tostring(status))
+        return
+    end
+
+    local body = HttpService:JSONEncode({ embeds = {embed} })
+
+    -- Send webhook with retry logic
+    task.spawn(function()
+        local attempt = 1
+        local maxAttempts = 3
+        local success = false
+
+        while attempt <= maxAttempts and not success do
+            local retryDelay = 2 * attempt -- Progressive delay
+
+            if attempt > 1 then
+                print('[Connection Status] Retry attempt ' .. attempt .. ' after ' .. retryDelay .. ' seconds...')
+                task.wait(retryDelay)
+            end
+
+            success, err = pcall(function()
+                if syn and syn.request then
+                    syn.request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif http_request then
+                    http_request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif fluxus and fluxus.request then
+                    fluxus.request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif request then
+                    request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                else
+                    error("Executor does not support HTTP requests")
+                end
+            end)
+
+            if success then
+                print('[Connection Status] ' .. status .. ' notification sent successfully on attempt ' .. attempt)
+                break
+            else
+                warn('[Connection Status] ' .. status .. ' attempt ' .. attempt .. ' failed: ' .. tostring(err))
+                attempt = attempt + 1
+            end
+        end
+
+        if not success then
+            warn('[Connection Status] All ' .. status .. ' attempts failed')
+        end
+    end)
+end
 
 local function sendDisconnectWebhook(username, reason)
     if hasSentDisconnectWebhook then return end
     hasSentDisconnectWebhook = true
 
+    -- Send to both webhooks
     sendUnifiedWebhook("disconnect", {
         reason = reason or "Unknown"
     })
+
+    -- Send to dedicated connection status webhook
+    sendConnectionStatusWebhook("disconnected", reason)
 end
 
 local function setupDisconnectNotifier()
@@ -2130,6 +2245,17 @@ end
 
 -- Initialize disconnect notifier
 setupDisconnectNotifier()
+
+-- Send connection status notification when script starts
+task.spawn(function()
+    -- Wait a bit to ensure all services are loaded
+    task.wait(2)
+
+    print("📡 Sending connection status notification...")
+    sendConnectionStatusWebhook("connected")
+
+    print("✅ Auto Fish script fully initialized and connected!")
+end)
 
 
 -- ====== ENHANCED TOGGLE FUNCTIONS ====== 
