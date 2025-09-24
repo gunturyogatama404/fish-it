@@ -1916,263 +1916,6 @@ local sendMegalodonEventWebhook = function(status, data)
     end
 end
 
--- ====== DISCONNECT/RECONNECT TRACKING SYSTEM ======
-local disconnectTracker = {
-    sessionStartTime = os.time(),
-    lastHeartbeat = tick(),
-    disconnectTime = nil,
-    wasDisconnected = false,
-    reconnectCheckInterval = 30, -- Check every 30 seconds
-    disconnectThreshold = 120, -- Consider disconnected after 2 minutes of no heartbeat
-    reconnectTimeout = 600, -- 10 minutes timeout for reconnect detection
-    scriptExecutionMarker = "AF_ScriptActive_" .. LocalPlayer.UserId,
-    lastConfigSave = 0
-}
-
--- Create a persistent marker that survives disconnection
-local function createSessionMarker()
-    if writefile and ensureConfigFolder() then
-        local markerData = {
-            sessionStart = disconnectTracker.sessionStartTime,
-            lastUpdate = os.time(),
-            playerId = LocalPlayer.UserId,
-            playerName = LocalPlayer.Name,
-            scriptVersion = "xfish_claude_v6.2"
-        }
-
-        pcall(function()
-            local encoded = HttpService:JSONEncode(markerData)
-            writefile(CONFIG_FOLDER .. "/" .. disconnectTracker.scriptExecutionMarker .. ".json", encoded)
-        end)
-    end
-end
-
--- Check if this is a reconnect by looking for previous session marker
-local function checkForReconnect()
-    if not readfile or not isfile then
-        print("[Debug] File functions not available")
-        return false
-    end
-
-    local markerFile = CONFIG_FOLDER .. "/" .. disconnectTracker.scriptExecutionMarker .. ".json"
-    print("[Debug] Checking marker file: " .. markerFile)
-
-    local success, content = pcall(function()
-        if isfile(markerFile) then
-            return readfile(markerFile)
-        end
-        return nil
-    end)
-
-    print("[Debug] File exists:", success and content ~= nil)
-    if success and content and content ~= "" then
-        print("[Debug] Marker content:", content)
-
-        local ok, decoded = pcall(function()
-            return HttpService:JSONDecode(content)
-        end)
-
-        if ok and type(decoded) == "table" then
-            local currentTime = os.time()
-            local lastUpdate = decoded.lastUpdate or 0
-            local timeSinceLastUpdate = currentTime - lastUpdate
-
-            print("[Debug] Current time:", os.date("%H:%M:%S", currentTime))
-            print("[Debug] Last update:", os.date("%H:%M:%S", lastUpdate))
-            print("[Debug] Time since last update:", timeSinceLastUpdate, "seconds")
-
-            -- Relaxed timing: between 30 seconds to 20 minutes
-            if timeSinceLastUpdate >= 30 and timeSinceLastUpdate <= 1200 then
-                print("[Debug] RECONNECT DETECTED! Duration:", timeSinceLastUpdate)
-                local reconnectData = {
-                    reason = "Player reconnected to the server",
-                    disconnectDuration = timeSinceLastUpdate,
-                    lastSession = lastUpdate,
-                    currentSession = currentTime
-                }
-                return true, reconnectData
-            else
-                print("[Debug] Time outside reconnect window (30s-20min)")
-            end
-        else
-            print("[Debug] Failed to decode marker JSON")
-        end
-    else
-        print("[Debug] No marker file content found")
-    end
-
-    return false, nil
-end
-
--- Enhanced sendUnifiedWebhook with reconnect support
-local originalSendUnifiedWebhook = sendUnifiedWebhook
-sendUnifiedWebhook = function(webhookType, data)
-    -- Add reconnect webhook type
-    if webhookType == "reconnect" then
-        local embed = {
-            title = "🔄 Player Reconnected",
-            description = data.reason or "Player has successfully reconnected to the server",
-            color = 65280, -- Green
-            fields = {
-                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
-                { name = "🕒 Reconnect Time", value = os.date("%H:%M:%S"), inline = true },
-                { name = "⏱️ Disconnect Duration", value = string.format("%.0f seconds", data.disconnectDuration or 0), inline = true },
-                { name = "🔄 Status", value = "Script auto-executed successfully", inline = false }
-            },
-            footer = { text = "Reconnect Notifier • Auto Fish Script" }
-        }
-
-        if not UNIFIED_WEBHOOK_URL or UNIFIED_WEBHOOK_URL == "" then
-            warn('[Webhook] URL not configured! Please set UNIFIED_WEBHOOK_URL variable.')
-            return
-        end
-
-        local currentTime = tick()
-        if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then
-            print('[Webhook] Cooldown active, skipping reconnect notification...')
-            return
-        end
-
-        local body = HttpService:JSONEncode({ embeds = {embed} })
-
-        task.spawn(function()
-            local attempt = 1
-            local success = false
-
-            while attempt <= maxRetryAttempts and not success do
-                local currentRetryDelay = webhookRetryDelay * (2 ^ (attempt - 1))
-
-                if attempt > 1 then
-                    print('[Webhook] Retry attempt ' .. attempt .. ' after ' .. currentRetryDelay .. ' seconds...')
-                    task.wait(currentRetryDelay)
-                end
-
-                success, err = pcall(function()
-                    if syn and syn.request then
-                        syn.request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                    elseif http_request then
-                        http_request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                    elseif fluxus and fluxus.request then
-                        fluxus.request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                    elseif request then
-                        request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                    else
-                        error("Executor tidak support HTTP requests")
-                    end
-                end)
-
-                if success then
-                    lastWebhookTime = tick()
-                    print('[Webhook] Reconnect notification sent successfully on attempt ' .. attempt)
-                    break
-                else
-                    warn('[Webhook] Reconnect attempt ' .. attempt .. ' failed: ' .. tostring(err))
-                    attempt = attempt + 1
-                end
-            end
-
-            if not success then
-                warn('[Webhook] All reconnect notification attempts failed')
-            end
-        end)
-        return
-    end
-
-    -- Call original function for other webhook types
-    return originalSendUnifiedWebhook(webhookType, data)
-end
-
--- Heartbeat system to detect disconnection
-local function startDisconnectMonitoring()
-    -- Check for reconnect on script start
-    local isReconnect, reconnectData = checkForReconnect()
-    if isReconnect and reconnectData then
-        print("[Disconnect Monitor] Reconnect detected! Sending notification...")
-        sendUnifiedWebhook("reconnect", reconnectData)
-    end
-
-    -- Create initial session marker
-    createSessionMarker()
-
-    -- Main disconnect monitoring loop
-    task.spawn(function()
-        while true do
-            local currentTime = tick()
-            local timeSinceLastBeat = currentTime - disconnectTracker.lastHeartbeat
-
-            -- Update heartbeat every few seconds
-            disconnectTracker.lastHeartbeat = currentTime
-
-            -- Update session marker periodically (every 30 seconds)
-            if currentTime - disconnectTracker.lastConfigSave >= 30 then
-                createSessionMarker()
-                disconnectTracker.lastConfigSave = currentTime
-            end
-
-            task.wait(disconnectTracker.reconnectCheckInterval)
-        end
-    end)
-
-    -- Monitor for actual disconnection using game events
-    local function handleDisconnect(reason)
-        if disconnectTracker.wasDisconnected then return end
-
-        disconnectTracker.wasDisconnected = true
-        disconnectTracker.disconnectTime = os.time()
-
-        print("[Disconnect Monitor] Player disconnected: " .. (reason or "Unknown reason"))
-
-        -- Force update marker immediately before disconnect
-        createSessionMarker()
-
-        local disconnectData = {
-            reason = reason or "Unknown disconnection",
-            sessionDuration = os.time() - disconnectTracker.sessionStartTime,
-            disconnectTime = os.time()
-        }
-
-        sendUnifiedWebhook("disconnect", disconnectData)
-    end
-
-    -- Better disconnect detection - monitor game closing
-    game:BindToClose(function()
-        print("[Debug] Game closing detected!")
-        handleDisconnect("Game client closed")
-        wait(2) -- Give time for webhook to send
-    end)
-
-    -- Connect to game disconnect events
-    game:GetService("GuiService").ErrorMessageChanged:Connect(function()
-        handleDisconnect("Game error or kick")
-    end)
-
-    -- Monitor network connectivity
-    local lastNetworkCheck = tick()
-    task.spawn(function()
-        while true do
-            pcall(function()
-                local success = pcall(function()
-                    game:GetService("HttpService"):GetAsync("https://httpbin.org/status/200", false)
-                end)
-
-                if not success then
-                    local currentTime = tick()
-                    if currentTime - lastNetworkCheck > disconnectTracker.disconnectThreshold then
-                        handleDisconnect("Network connectivity lost")
-                    end
-                else
-                    lastNetworkCheck = tick()
-                end
-            end)
-            task.wait(30)
-        end
-    end)
-end
-
--- Initialize disconnect monitoring
-startDisconnectMonitoring()
-print("[Disconnect Monitor] System initialized - monitoring for disconnect/reconnect events")
-
 local function autoDetectMegalodon()
     local eventFound = false
     local eventPosition = nil
@@ -2300,6 +2043,93 @@ local function setAutoMegalodon(state)
     end
     print("🦈 Auto Megalodon Hunt: " .. (state and "ENABLED" or "DISABLED"))
 end
+
+-- ====== DISCONNECT DETECTION SYSTEM ======
+local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
+local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
+local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
+
+local function sendDisconnectWebhook(username, reason)
+    if hasSentDisconnectWebhook then return end
+    hasSentDisconnectWebhook = true
+
+    sendUnifiedWebhook("disconnect", {
+        reason = reason or "Unknown"
+    })
+end
+
+local function setupDisconnectNotifier()
+    local username = LocalPlayer.Name
+    local GuiService = game:GetService("GuiService")
+
+    -- Monitor error messages for disconnect reasons
+    GuiService.ErrorMessageChanged:Connect(function(message)
+        local lowerMessage = string.lower(message)
+        local reason = "Unknown"
+
+        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") then
+            reason = "Connection Lost: " .. message
+        elseif lowerMessage:find("kick") or lowerMessage:find("banned") then
+            reason = "Kicked: " .. message
+        elseif lowerMessage:find("timeout") then
+            reason = "Timeout: " .. message
+        elseif lowerMessage:find("error") then
+            reason = "General Error: " .. message
+        else
+            return -- Don't send webhook for unrelated errors
+        end
+
+        task.spawn(function()
+            sendDisconnectWebhook(username, reason)
+        end)
+    end)
+
+    -- Monitor for player removal
+    Players.PlayerRemoving:Connect(function(removedPlayer)
+        if removedPlayer == LocalPlayer and not hasSentDisconnectWebhook then
+            task.spawn(function()
+                sendDisconnectWebhook(username, "Disconnected (Player Removed)")
+            end)
+        end
+    end)
+
+    -- Monitor network ping for connection issues
+    task.spawn(function()
+        while true do
+            local success, ping = pcall(function()
+                return LocalPlayer:GetNetworkPing() * 1000 -- Convert to milliseconds
+            end)
+
+            if not success then
+                task.spawn(function()
+                    sendDisconnectWebhook(username, "Connection Lost (Ping Failed)")
+                end)
+                break -- Stop monitoring after sending notification
+            elseif ping > PING_THRESHOLD then
+                task.spawn(function()
+                    sendDisconnectWebhook(username, "High Ping Detected (" .. math.floor(ping) .. "ms)")
+                end)
+                break -- Stop monitoring after sending notification
+            end
+
+            task.wait(5) -- Check every 5 seconds
+        end
+    end)
+
+    -- Monitor for game freezes using Stepped delta
+    RunService.Stepped:Connect(function(_, deltaTime)
+        if deltaTime > FREEZE_THRESHOLD then
+            task.spawn(function()
+                sendDisconnectWebhook(username, "Game Freeze Detected (Delta: " .. string.format("%.2f", deltaTime) .. "s)")
+            end)
+        end
+    end)
+
+    print("🚨 Advanced disconnect notifier setup complete")
+end
+
+-- Initialize disconnect notifier
+setupDisconnectNotifier()
 
 
 -- ====== ENHANCED TOGGLE FUNCTIONS ====== 
@@ -3686,107 +3516,6 @@ end)
 
 SecUI:NewButton("Minimize UI", "Hide the interface", function()
     minimizeUI()
-end)
-
--- ====== DEBUG SECTION ======
-local SecDebug = TabUI:NewSection("Debug & Testing")
-
-SecDebug:NewButton("Debug Disconnect System", "Check system status & files", function()
-    print("\n=== DISCONNECT SYSTEM DEBUG ===")
-    print("[Debug] Session Start Time:", os.date("%H:%M:%S", disconnectTracker.sessionStartTime))
-    print("[Debug] Current Time:", os.date("%H:%M:%S", os.time()))
-    print("[Debug] Config Folder:", CONFIG_FOLDER)
-    print("[Debug] Marker File:", disconnectTracker.scriptExecutionMarker .. ".json")
-
-    -- Check if functions are available
-    print("[Debug] readfile available:", readfile ~= nil)
-    print("[Debug] writefile available:", writefile ~= nil)
-    print("[Debug] isfile available:", isfile ~= nil)
-
-    -- Check marker file status
-    if isfile and ensureConfigFolder() then
-        local markerFile = CONFIG_FOLDER .. "/" .. disconnectTracker.scriptExecutionMarker .. ".json"
-        print("[Debug] Full marker path:", markerFile)
-
-        if isfile(markerFile) then
-            local success, content = pcall(function()
-                return readfile(markerFile)
-            end)
-
-            if success and content then
-                print("[Debug] Marker content:", content)
-                local ok, decoded = pcall(function()
-                    return HttpService:JSONDecode(content)
-                end)
-
-                if ok and decoded then
-                    print("[Debug] Last marker time:", os.date("%H:%M:%S", decoded.lastUpdate))
-                    print("[Debug] Time since last update:", os.time() - decoded.lastUpdate, "seconds")
-                    print("[Debug] Player ID:", decoded.playerId)
-                    print("[Debug] Player Name:", decoded.playerName)
-                else
-                    print("[Debug] Failed to decode marker JSON")
-                end
-            else
-                print("[Debug] Failed to read marker file")
-            end
-        else
-            print("[Debug] Marker file does not exist")
-        end
-    else
-        print("[Debug] File system not available or config folder failed")
-    end
-
-    print("=== END DEBUG ===\n")
-end)
-
-SecDebug:NewButton("Test Disconnect Webhook", "Send test disconnect notification", function()
-    local testData = {
-        reason = "Manual test disconnect",
-        sessionDuration = os.time() - disconnectTracker.sessionStartTime,
-        disconnectTime = os.time()
-    }
-
-    sendUnifiedWebhook("disconnect", testData)
-    print("[TEST] Disconnect webhook sent!")
-end)
-
-SecDebug:NewButton("Test Reconnect Webhook", "Send test reconnect notification", function()
-    local testData = {
-        reason = "Manual test reconnect",
-        disconnectDuration = 180, -- 3 minutes
-        lastSession = os.time() - 180,
-        currentSession = os.time()
-    }
-
-    sendUnifiedWebhook("reconnect", testData)
-    print("[TEST] Reconnect webhook sent!")
-end)
-
-SecDebug:NewButton("Force Create Marker", "Manually create session marker file", function()
-    createSessionMarker()
-    print("[TEST] Session marker created/updated!")
-end)
-
-SecDebug:NewButton("Simulate Old Marker", "Create marker with 5min old timestamp", function()
-    if writefile and ensureConfigFolder() then
-        local oldMarkerData = {
-            sessionStart = os.time() - 300, -- 5 minutes ago
-            lastUpdate = os.time() - 300,   -- 5 minutes ago
-            playerId = LocalPlayer.UserId,
-            playerName = LocalPlayer.Name,
-            scriptVersion = "xfish_claude_v6.2"
-        }
-
-        pcall(function()
-            local encoded = HttpService:JSONEncode(oldMarkerData)
-            writefile(CONFIG_FOLDER .. "/" .. disconnectTracker.scriptExecutionMarker .. ".json", encoded)
-        end)
-
-        print("[TEST] Old marker created! Now restart script to test reconnect detection.")
-    else
-        print("[TEST] File system not available")
-    end
 end)
 
 -- Custom minimize button
