@@ -2067,7 +2067,7 @@ local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
 local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
-local DISCORD_USER_ID = id  -- Ganti dengan User ID Discord yang ingin di-tag
+local DISCORD_USER_ID = discordid  -- Ganti dengan User ID Discord yang ingin di-tag
 
 -- QUEUE SYSTEM untuk multiple accounts (mencegah rate limiting)
 local webhookQueue = {}
@@ -3671,25 +3671,89 @@ task.defer(function()
 end)
 
 local TabTeleport = Window:NewTab("Teleport")
-local SecTP = TabTeleport:NewSection("Quick Teleport")
+local SecTP = TabTeleport:NewSection("All Locations")
 
+-- Function to safely teleport
+local function teleportTo(locationName, cframe)
+    pcall(function()
+        local character = game.Players.LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            character.HumanoidRootPart.CFrame = cframe
+            print("[Teleport] ✅ Successfully teleported to: " .. locationName)
+        else
+            warn("[Teleport] ❌ Character or HumanoidRootPart not found!")
+        end
+    end)
+end
+
+-- Create individual teleport buttons for better UX
+SecTP:NewButton("🏠 Spawn", "Return to spawn area", function()
+    teleportTo("Spawn", CFrame.new(45.2788086, 252.562927, 2987.10913, 1, 0, 0, 0, 1, 0, 0, 0, 1))
+end)
+
+-- Popular fishing locations section
+local SecPopular = TabTeleport:NewSection("Popular Fishing Spots")
+
+SecPopular:NewButton("🌋 Kohana Volcano", "Active volcano area with rare fish", function()
+    teleportTo("Kohana Volcano", CFrame.new(-572.879456, 22.4521465, 148.355331, -0.995764792, -6.67705606e-08, 0.0919371247, -5.74611505e-08, 1, 1.03905414e-07, -0.0919371247, 9.81825394e-08, -0.995764792))
+end)
+
+SecPopular:NewButton("🗿 Sisyphus Statue", "Deep sea location near the ancient statue", function()
+    teleportTo("Sisyphus Statue", CFrame.new(-3728.21606, -135.074417, -1012.12744, -0.977224171, 7.74980258e-09, -0.212209702, 1.566994e-08, 1, -3.5640408e-08, 0.212209702, -3.81539813e-08, -0.977224171))
+end)
+
+SecPopular:NewButton("🏝️ Crater Island", "Isolated crater island with unique catches", function()
+    teleportTo("Crater Island", CFrame.new(1016.49072, 20.0919304, 5069.27295, 0.838976264, 3.30379857e-09, -0.544168055, 2.63538391e-09, 1, 1.01344115e-08, 0.544168055, -9.93662219e-09, 0.838976264))
+end)
+
+-- Deep sea locations section
+local SecDeep = TabTeleport:NewSection("Deep Sea Areas")
+
+SecDeep:NewButton("🌊 Esoteric Depths", "Deepest area with mysterious fish", function()
+    teleportTo("Esoteric Depths", CFrame.new(3248.37109, -1301.53027, 1403.82727, -0.920208454, 7.76270355e-08, 0.391428679, 4.56261056e-08, 1, -9.10549289e-08, -0.391428679, -6.5930152e-08, -0.920208454))
+end)
+
+SecDeep:NewButton("🪸 Coral Reefs", "Colorful reef system", function()
+    teleportTo("Coral Reefs", CFrame.new(-3114.78198, 1.32066584, 2237.52295, -0.304758579, 1.6556676e-08, -0.952429652, -8.50574935e-08, 1, 4.46003305e-08, 0.952429652, 9.46036067e-08, -0.304758579))
+end)
+
+-- Special locations section
+local SecSpecial = TabTeleport:NewSection("Special Areas")
+
+SecSpecial:NewButton("🏝️ Lost Isle", "Mysterious lost island", function()
+    teleportTo("Lost Isle", CFrame.new(-3618.15698, 240.836655, -1317.45801, 1, 0, 0, 0, 1, 0, 0, 0, 1))
+end)
+
+SecSpecial:NewButton("🌴 Tropical Grove", "Lush tropical area", function()
+    teleportTo("Tropical Grove", CFrame.new(-2095.34106, 197.199997, 3718.08008))
+end)
+
+SecSpecial:NewButton("💎 Treasure Room", "Hidden treasure chamber", function()
+    teleportTo("Treasure Room", CFrame.new(-3606.34985, -266.57373, -1580.97339, 0.998743415, 1.12141152e-13, -0.0501160324, -1.56847693e-13, 1, -8.88127842e-13, 0.0501160324, 8.94872392e-13, 0.998743415))
+end)
+
+-- Utility locations section
+local SecUtility = TabTeleport:NewSection("Utility Locations")
+
+SecUtility:NewButton("🌤️ Weather Machine", "Control weather patterns", function()
+    teleportTo("Weather Machine", CFrame.new(-1488.51196, 83.1732635, 1876.30298, 1, 0, 0, 0, 1, 0, 0, 0, 1))
+end)
+
+SecUtility:NewButton("🏘️ Kohana Village", "Main village area", function()
+    teleportTo("Kohana", CFrame.new(-663.904236, 3.04580712, 718.796875, -0.100799225, -2.14183729e-08, -0.994906783, -1.12300391e-08, 1, -2.03902459e-08, 0.994906783, 9.11752096e-09, -0.100799225))
+end)
+
+-- Quick dropdown for legacy support
+local SecQuick = TabTeleport:NewSection("Quick Select (Legacy)")
 local tpNames = {}
 for _, loc in ipairs(teleportLocations) do
     table.insert(tpNames, loc.Name)
 end
 
-SecTP:NewDropdown("Pilih Lokasi", "Teleport instan ke lokasi", tpNames, function(chosen)
+SecQuick:NewDropdown("Location Selector", "Choose location from dropdown", tpNames, function(chosen)
     for _, location in ipairs(teleportLocations) do
         if location.Name == chosen then
-            pcall(function()
-                local rootPart = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if rootPart then
-                    rootPart.CFrame = location.CFrame
-                    print("[Auto Fish] Teleported to: " .. chosen)
-                else
-                    warn("[Auto Fish] Character or HumanoidRootPart not found")
-                end
-            end)
+            teleportTo(chosen, location.CFrame)
             break
         end
     end
