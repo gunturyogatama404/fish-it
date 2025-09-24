@@ -2504,6 +2504,7 @@ local function testReconnectNotification()
 end
 
 -- ENABLE untuk test notifications (comment kembali setelah testing):
+--[[ DISABLED - Remove test notifications
 task.spawn(function()
     task.wait(5)
     print("[TEST] Starting tag tests in 5 seconds...")
@@ -2511,6 +2512,7 @@ task.spawn(function()
     task.wait(3)
     testReconnectNotification()
 end)
+--]]
 
 
 -- ====== ENHANCED TOGGLE FUNCTIONS ====== 
