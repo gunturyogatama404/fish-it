@@ -1949,9 +1949,14 @@ end
 
 -- Check if this is a reconnect by looking for previous session marker
 local function checkForReconnect()
-    if not readfile or not isfile then return false end
+    if not readfile or not isfile then
+        print("[Debug] File functions not available")
+        return false
+    end
 
     local markerFile = CONFIG_FOLDER .. "/" .. disconnectTracker.scriptExecutionMarker .. ".json"
+    print("[Debug] Checking marker file: " .. markerFile)
+
     local success, content = pcall(function()
         if isfile(markerFile) then
             return readfile(markerFile)
@@ -1959,24 +1964,41 @@ local function checkForReconnect()
         return nil
     end)
 
+    print("[Debug] File exists:", success and content ~= nil)
     if success and content and content ~= "" then
+        print("[Debug] Marker content:", content)
+
         local ok, decoded = pcall(function()
             return HttpService:JSONDecode(content)
         end)
 
         if ok and type(decoded) == "table" then
-            local timeSinceLastUpdate = os.time() - (decoded.lastUpdate or 0)
-            -- If last update was between 2-10 minutes ago, likely a reconnect
-            if timeSinceLastUpdate >= 120 and timeSinceLastUpdate <= 600 then
+            local currentTime = os.time()
+            local lastUpdate = decoded.lastUpdate or 0
+            local timeSinceLastUpdate = currentTime - lastUpdate
+
+            print("[Debug] Current time:", os.date("%H:%M:%S", currentTime))
+            print("[Debug] Last update:", os.date("%H:%M:%S", lastUpdate))
+            print("[Debug] Time since last update:", timeSinceLastUpdate, "seconds")
+
+            -- Relaxed timing: between 30 seconds to 20 minutes
+            if timeSinceLastUpdate >= 30 and timeSinceLastUpdate <= 1200 then
+                print("[Debug] RECONNECT DETECTED! Duration:", timeSinceLastUpdate)
                 local reconnectData = {
                     reason = "Player reconnected to the server",
                     disconnectDuration = timeSinceLastUpdate,
-                    lastSession = decoded.lastUpdate,
-                    currentSession = os.time()
+                    lastSession = lastUpdate,
+                    currentSession = currentTime
                 }
                 return true, reconnectData
+            else
+                print("[Debug] Time outside reconnect window (30s-20min)")
             end
+        else
+            print("[Debug] Failed to decode marker JSON")
         end
+    else
+        print("[Debug] No marker file content found")
     end
 
     return false, nil
@@ -2100,6 +2122,9 @@ local function startDisconnectMonitoring()
 
         print("[Disconnect Monitor] Player disconnected: " .. (reason or "Unknown reason"))
 
+        -- Force update marker immediately before disconnect
+        createSessionMarker()
+
         local disconnectData = {
             reason = reason or "Unknown disconnection",
             sessionDuration = os.time() - disconnectTracker.sessionStartTime,
@@ -2108,6 +2133,13 @@ local function startDisconnectMonitoring()
 
         sendUnifiedWebhook("disconnect", disconnectData)
     end
+
+    -- Better disconnect detection - monitor game closing
+    game:BindToClose(function()
+        print("[Debug] Game closing detected!")
+        handleDisconnect("Game client closed")
+        wait(2) -- Give time for webhook to send
+    end)
 
     -- Connect to game disconnect events
     game:GetService("GuiService").ErrorMessageChanged:Connect(function()
@@ -3654,6 +3686,107 @@ end)
 
 SecUI:NewButton("Minimize UI", "Hide the interface", function()
     minimizeUI()
+end)
+
+-- ====== DEBUG SECTION ======
+local SecDebug = TabUI:NewSection("Debug & Testing")
+
+SecDebug:NewButton("Debug Disconnect System", "Check system status & files", function()
+    print("\n=== DISCONNECT SYSTEM DEBUG ===")
+    print("[Debug] Session Start Time:", os.date("%H:%M:%S", disconnectTracker.sessionStartTime))
+    print("[Debug] Current Time:", os.date("%H:%M:%S", os.time()))
+    print("[Debug] Config Folder:", CONFIG_FOLDER)
+    print("[Debug] Marker File:", disconnectTracker.scriptExecutionMarker .. ".json")
+
+    -- Check if functions are available
+    print("[Debug] readfile available:", readfile ~= nil)
+    print("[Debug] writefile available:", writefile ~= nil)
+    print("[Debug] isfile available:", isfile ~= nil)
+
+    -- Check marker file status
+    if isfile and ensureConfigFolder() then
+        local markerFile = CONFIG_FOLDER .. "/" .. disconnectTracker.scriptExecutionMarker .. ".json"
+        print("[Debug] Full marker path:", markerFile)
+
+        if isfile(markerFile) then
+            local success, content = pcall(function()
+                return readfile(markerFile)
+            end)
+
+            if success and content then
+                print("[Debug] Marker content:", content)
+                local ok, decoded = pcall(function()
+                    return HttpService:JSONDecode(content)
+                end)
+
+                if ok and decoded then
+                    print("[Debug] Last marker time:", os.date("%H:%M:%S", decoded.lastUpdate))
+                    print("[Debug] Time since last update:", os.time() - decoded.lastUpdate, "seconds")
+                    print("[Debug] Player ID:", decoded.playerId)
+                    print("[Debug] Player Name:", decoded.playerName)
+                else
+                    print("[Debug] Failed to decode marker JSON")
+                end
+            else
+                print("[Debug] Failed to read marker file")
+            end
+        else
+            print("[Debug] Marker file does not exist")
+        end
+    else
+        print("[Debug] File system not available or config folder failed")
+    end
+
+    print("=== END DEBUG ===\n")
+end)
+
+SecDebug:NewButton("Test Disconnect Webhook", "Send test disconnect notification", function()
+    local testData = {
+        reason = "Manual test disconnect",
+        sessionDuration = os.time() - disconnectTracker.sessionStartTime,
+        disconnectTime = os.time()
+    }
+
+    sendUnifiedWebhook("disconnect", testData)
+    print("[TEST] Disconnect webhook sent!")
+end)
+
+SecDebug:NewButton("Test Reconnect Webhook", "Send test reconnect notification", function()
+    local testData = {
+        reason = "Manual test reconnect",
+        disconnectDuration = 180, -- 3 minutes
+        lastSession = os.time() - 180,
+        currentSession = os.time()
+    }
+
+    sendUnifiedWebhook("reconnect", testData)
+    print("[TEST] Reconnect webhook sent!")
+end)
+
+SecDebug:NewButton("Force Create Marker", "Manually create session marker file", function()
+    createSessionMarker()
+    print("[TEST] Session marker created/updated!")
+end)
+
+SecDebug:NewButton("Simulate Old Marker", "Create marker with 5min old timestamp", function()
+    if writefile and ensureConfigFolder() then
+        local oldMarkerData = {
+            sessionStart = os.time() - 300, -- 5 minutes ago
+            lastUpdate = os.time() - 300,   -- 5 minutes ago
+            playerId = LocalPlayer.UserId,
+            playerName = LocalPlayer.Name,
+            scriptVersion = "xfish_claude_v6.2"
+        }
+
+        pcall(function()
+            local encoded = HttpService:JSONEncode(oldMarkerData)
+            writefile(CONFIG_FOLDER .. "/" .. disconnectTracker.scriptExecutionMarker .. ".json", encoded)
+        end)
+
+        print("[TEST] Old marker created! Now restart script to test reconnect detection.")
+    else
+        print("[TEST] File system not available")
+    end
 end)
 
 -- Custom minimize button
