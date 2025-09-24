@@ -2076,6 +2076,8 @@ local function loadSessionData()
     local success, sessionId, disconnectTime = pcall(function()
         if readfile and isfile then
             local sessionFile = CONFIG_FOLDER .. "/last_session_" .. LocalPlayer.UserId .. ".json"
+            print("[Reconnect] CONFIG_FOLDER: " .. tostring(CONFIG_FOLDER))
+            print("[Reconnect] LocalPlayer.UserId: " .. tostring(LocalPlayer.UserId))
             print("[Reconnect] Checking session file: " .. sessionFile)
 
             if isfile(sessionFile) then
@@ -2325,6 +2327,15 @@ local function sendConnectionStatusWebhook(status, reason)
     end)
 end
 
+-- Send connection status notification when script starts
+task.spawn(function()
+    -- Wait a bit to ensure all services are loaded
+    task.wait(2)
+
+    initializeReconnectDetection()
+    print("✅ Auto Fish script fully initialized and connected!")
+end)
+
 local function sendDisconnectWebhook(username, reason)
     if hasSentDisconnectWebhook then return end
     hasSentDisconnectWebhook = true
@@ -2408,15 +2419,6 @@ end
 
 -- Initialize disconnect notifier
 setupDisconnectNotifier()
-
--- Send connection status notification when script starts
-task.spawn(function()
-    -- Wait a bit to ensure all services are loaded
-    task.wait(2)
-
-    initializeReconnectDetection()
-    print("✅ Auto Fish script fully initialized and connected!")
-end)
 
 
 -- ====== ENHANCED TOGGLE FUNCTIONS ====== 
