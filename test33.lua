@@ -2083,7 +2083,7 @@ local function loadSessionData()
                 print("[Reconnect] Session file found, content length: " .. #content)
 
                 local data = HttpService:JSONDecode(content)
-                print("[Reconnect] Loaded session data - SessionID: " .. string.sub(tostring(data.sessionId), 1, 8) .. "..., DisconnectTime: " .. tostring(data.disconnectTime))
+                print("[Reconnect] Loaded session data - SessionID: " .. string.sub(tostring(data.sessionId or "unknown"), 1, 8) .. "..., DisconnectTime: " .. tostring(data.disconnectTime))
 
                 return data.sessionId, data.disconnectTime
             else
@@ -2123,7 +2123,7 @@ local function saveSessionData(sessionId, disconnectTime)
         userId = LocalPlayer.UserId
     }
 
-    print("[Reconnect] Saving session data - SessionID: " .. string.sub(tostring(sessionId), 1, 8) .. "..., DisconnectTime: " .. tostring(disconnectTime))
+    print("[Reconnect] Saving session data - SessionID: " .. string.sub(tostring(sessionId or "unknown"), 1, 8) .. "..., DisconnectTime: " .. tostring(disconnectTime))
 
     local success, err = pcall(function()
         local encoded = HttpService:JSONEncode(sessionData)
@@ -2143,12 +2143,12 @@ local function initializeReconnectDetection()
     local currentTime = os.time()
 
     print("[Reconnect] Initializing reconnect detection...")
-    print("[Reconnect] Current SessionID: " .. string.sub(tostring(currentSessionId), 1, 8) .. "...")
+    print("[Reconnect] Current SessionID: " .. string.sub(tostring(currentSessionId or "unknown"), 1, 8) .. "...")
     print("[Reconnect] Current Time: " .. tostring(currentTime))
 
     -- Load previous session data
     lastSessionId, lastDisconnectTime = loadSessionData()
-    print("[Reconnect] Loaded - lastSessionId: " .. tostring(lastSessionId and string.sub(tostring(lastSessionId), 1, 8) .. "..." or "nil") .. ", lastDisconnectTime: " .. tostring(lastDisconnectTime or "nil"))
+    print("[Reconnect] Loaded - lastSessionId: " .. tostring(lastSessionId and string.sub(tostring(lastSessionId or "unknown"), 1, 8) .. "..." or "nil") .. ", lastDisconnectTime: " .. tostring(lastDisconnectTime or "nil"))
 
     if lastSessionId and lastDisconnectTime then
         local timeDiff = currentTime - lastDisconnectTime
@@ -2160,8 +2160,9 @@ local function initializeReconnectDetection()
             if timeDiff <= RECONNECT_THRESHOLD then
                 -- Quick reconnect detected
                 print("[Reconnect] Quick reconnect detected - sending webhook")
+                local sessionPreview = string.sub(tostring(currentSessionId or "unknown"), 1, 8)
                 local success, err = pcall(function()
-                    sendConnectionStatusWebhook("reconnected", "Quick reconnect detected (Session: " .. string.sub(currentSessionId, 1, 8) .. "..., Time: " .. timeDiff .. "s)")
+                    sendConnectionStatusWebhook("reconnected", "Quick reconnect detected (Session: " .. sessionPreview .. "..., Time: " .. tostring(timeDiff) .. "s)")
                 end)
                 if not success then
                     print("[Reconnect] Error sending quick reconnect webhook: " .. tostring(err))
@@ -2169,8 +2170,9 @@ local function initializeReconnectDetection()
             else
                 -- Slow reconnect to same server
                 print("[Reconnect] Slow reconnect detected - sending webhook")
+                local sessionPreview = string.sub(tostring(currentSessionId or "unknown"), 1, 8)
                 local success, err = pcall(function()
-                    sendConnectionStatusWebhook("reconnected", "Reconnected to same server (Session: " .. string.sub(currentSessionId, 1, 8) .. "..., Time: " .. timeDiff .. "s)")
+                    sendConnectionStatusWebhook("reconnected", "Reconnected to same server (Session: " .. sessionPreview .. "..., Time: " .. tostring(timeDiff) .. "s)")
                 end)
                 if not success then
                     print("[Reconnect] Error sending slow reconnect webhook: " .. tostring(err))
@@ -2181,8 +2183,9 @@ local function initializeReconnectDetection()
             print("[Reconnect] Different server detected!")
             if timeDiff <= RECONNECT_THRESHOLD * 2 then  -- Extended window for server changes
                 print("[Reconnect] Server change reconnect detected - sending webhook")
+                local sessionPreview = string.sub(tostring(currentSessionId or "unknown"), 1, 8)
                 local success, err = pcall(function()
-                    sendConnectionStatusWebhook("reconnected", "Reconnected to different server (New Session: " .. string.sub(currentSessionId, 1, 8) .. "..., Time: " .. timeDiff .. "s)")
+                    sendConnectionStatusWebhook("reconnected", "Reconnected to different server (New Session: " .. sessionPreview .. "..., Time: " .. tostring(timeDiff) .. "s)")
                 end)
                 if not success then
                     print("[Reconnect] Error sending server change webhook: " .. tostring(err))
@@ -2191,7 +2194,7 @@ local function initializeReconnectDetection()
                 -- Fresh connection after long time
                 print("[Reconnect] Fresh connection after long period - sending webhook")
                 local success, err = pcall(function()
-                    sendConnectionStatusWebhook("connected", "Fresh connection after extended offline period (Time: " .. timeDiff .. "s)")
+                    sendConnectionStatusWebhook("connected", "Fresh connection after extended offline period (Time: " .. tostring(timeDiff) .. "s)")
                 end)
                 if not success then
                     print("[Reconnect] Error sending fresh connection webhook: " .. tostring(err))
