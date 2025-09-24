@@ -2127,7 +2127,7 @@ local function sendConnectionStatusWebhook(status, reason)
     elseif status == "disconnected" then
         embed = {
             title = "🔴 Player Disconnected",
-            description = (reason or "Player has disconnected from the server") .. "\n\n<@" .. DISCORD_USER_ID .. "> **Player telah disconnect!**",
+            description = reason or "Player has disconnected from the server",
             color = 16711680, -- Red
             fields = {
                 { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
@@ -2145,7 +2145,26 @@ local function sendConnectionStatusWebhook(status, reason)
         return
     end
 
-    local body = HttpService:JSONEncode({ embeds = {embed} })
+    -- Prepare payload with mentions for disconnect status
+    local payload = { embeds = {embed} }
+
+    if status == "disconnected" then
+        -- Add content field with mentions for disconnect notifications
+        payload.content = "@everyone <@" .. DISCORD_USER_ID .. "> 🚨 **ALERT: Player telah DISCONNECT!** 🚨"
+
+        -- Add allowed_mentions to ensure tags work properly
+        payload.allowed_mentions = {
+            parse = {"everyone"},  -- Allow @everyone
+            users = {DISCORD_USER_ID}  -- Allow specific user mention
+        }
+
+        print("[Connection Status] DEBUG - Disconnect payload with tags:")
+        print("[Connection Status] - Content: " .. payload.content)
+        print("[Connection Status] - User ID: " .. DISCORD_USER_ID)
+        print("[Connection Status] - Allowed mentions: everyone + user")
+    end
+
+    local body = HttpService:JSONEncode(payload)
 
     -- Send webhook with retry logic
     task.spawn(function()
@@ -2448,6 +2467,15 @@ end
 
 -- Initialize disconnect notifier
 setupDisconnectNotifier()
+
+-- TEST FUNCTION untuk testing disconnect notification (hapus setelah testing)
+local function testDisconnectNotification()
+    print("[TEST] Testing disconnect notification with tags...")
+    sendConnectionStatusWebhook("disconnected", "TEST: Manual disconnect test - Tag system check")
+end
+
+-- Uncomment line di bawah untuk test disconnect notification:
+-- task.spawn(function() task.wait(10); testDisconnectNotification() end)
 
 
 -- ====== ENHANCED TOGGLE FUNCTIONS ====== 
