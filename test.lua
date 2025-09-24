@@ -54,6 +54,32 @@ end
 ultimatePerformance()
 
 -- ====================================================================
+--                        WEBHOOK CONFIGURATION
+-- ====================================================================
+--[[
+IMPORTANT: Configure your webhooks before running this script!
+
+Required webhook variables (set these in your main.lua or loadstring):
+- webhook2: Main webhook for fish notifications and general alerts
+- webhook3: Dedicated webhook for connection status (Connect/Disconnect)
+
+Example usage in your main.lua:
+webhook2 = "https://discord.com/api/webhooks/YOUR_MAIN_WEBHOOK_URL"
+webhook3 = "https://discord.com/api/webhooks/YOUR_CONNECTION_WEBHOOK_URL"
+
+Webhook Usage:
+- webhook2: Fish notifications, megalodon alerts
+- webhook3: Connection status only (Connect/Disconnect)
+
+Connection Status Features:
+✅ Sends "Player Connected" when script starts successfully
+❌ Sends "Player Disconnected" with detailed reason when issues occur
+📊 Includes session duration, ping monitoring, and freeze detection
+
+Note: Disconnect notifications are sent ONLY to webhook3 (not webhook2)
+--]]
+
+-- ====================================================================
 --                        MODUL-MODUL UTAMA
 -- ====================================================================
 
@@ -1836,18 +1862,6 @@ local function sendUnifiedWebhook(webhookType, data)
             },
             footer = { text = "Inventory Notifier • Auto Fish" }
         }
-    elseif webhookType == "disconnect" then
-        embed = {
-            title = "⚠️ Player Disconnected",
-            description = data.reason or "Player has disconnected from the server",
-            color = 16776960, -- Yellow
-            fields = {
-                { name = "👤 Player", value = player.DisplayName or player.Name or "Unknown", inline = true },
-                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
-                { name = "🔌 Reason", value = data.reason or "Unknown", inline = false }
-            },
-            footer = { text = "Disconnect Notifier • Auto Fish Script" }
-        }
     else
         warn('[Webhook] Unknown webhook type: ' .. tostring(webhookType))
         return
@@ -2043,6 +2057,462 @@ local function setAutoMegalodon(state)
     end
     print("🦈 Auto Megalodon Hunt: " .. (state and "ENABLED" or "DISABLED"))
 end
+
+-- ====== CONNECTION STATUS WEBHOOK SYSTEM ======
+-- Webhook khusus untuk status connect/disconnect
+local CONNECTION_WEBHOOK_URL = webhook3 or ""  -- URL webhook khusus untuk status koneksi
+
+local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
+local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
+local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
+
+-- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
+local DISCORD_USER_ID = id  -- Ganti dengan User ID Discord yang ingin di-tag
+
+-- QUEUE SYSTEM untuk multiple accounts (mencegah rate limiting)
+local webhookQueue = {}
+local isProcessingQueue = false
+local WEBHOOK_DELAY = 2  -- seconds between webhook sends
+local lastWebhookSent = 0
+
+-- ====== RECONNECT DETECTION SYSTEM ======
+local lastSessionId = nil
+local lastDisconnectTime = nil
+local RECONNECT_THRESHOLD = 60  -- seconds, if reconnect within this time = quick reconnect
+local NEW_SESSION_THRESHOLD = 60  -- seconds, if offline > 1 minute = treat as new connection
+
+-- Fungsi untuk mengirim status koneksi ke webhook khusus
+local function sendConnectionStatusWebhook(status, reason)
+    print("[Connection Status] Attempting to send webhook - Status: " .. tostring(status) .. ", Reason: " .. tostring(reason or "none"))
+
+    -- Check if webhook URL is configured
+    if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" then
+        warn('[Connection Status] Webhook URL not configured! Please set CONNECTION_WEBHOOK_URL variable.')
+        print("[Connection Status] Current webhook3 value: " .. tostring(webhook3 or "nil"))
+        return
+    end
+
+    print("[Connection Status] Webhook URL configured, proceeding to send...")
+
+    local embed = {}
+
+    if status == "connected" then
+        embed = {
+            title = "🟢 Player Connected",
+            description = "Auto Fish script has been successfully started",
+            color = 65280, -- Green
+            fields = {
+                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
+                { name = "🎮 Game", value = "🐠 Fish It", inline = true },
+                { name = "📱 Status", value = "Auto Fish Active", inline = false }
+            },
+            footer = { text = "Connection Monitor • Auto Fish Script" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+        }
+    elseif status == "reconnected" then
+        embed = {
+            title = "🔄 Player Reconnected",
+            description = reason or "Player has successfully reconnected to the server",
+            color = 3066993, -- Blue-green
+            fields = {
+                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
+                { name = "🔄 Reconnect Info", value = reason or "Reconnection detected", inline = false },
+                { name = "📱 Status", value = "Auto Fish Resumed", inline = true }
+            },
+            footer = { text = "Reconnect Monitor • Auto Fish Script" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+        }
+    elseif status == "disconnected" then
+        embed = {
+            title = "🔴 Player Disconnected",
+            description = reason or "Player has disconnected from the server",
+            color = 16711680, -- Red
+            fields = {
+                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
+                { name = "🔌 Reason", value = reason or "Unknown", inline = false },
+                { name = "⏱️ Session Duration", value = FormatTime(os.time() - startTime), inline = true },
+                { name = "📱 Game", value = "🐠 Fish It", inline = true },
+                { name = "🆔 User ID", value = tostring(LocalPlayer.UserId), inline = true }
+            },
+            footer = { text = "Disconnect Alert • Auto Fish Script" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+        }
+    else
+        warn('[Connection Status] Unknown status type: ' .. tostring(status))
+        return
+    end
+
+    -- Prepare payload with mentions for disconnect and reconnect status
+    local payload = { embeds = {embed} }
+
+    if status == "disconnected" then
+        -- Add content field with mentions for disconnect notifications
+        payload.content = "<@" .. DISCORD_USER_ID .. "> 🔴 **ALERT: Player telah DISCONNECT!** 🚨"
+
+    elseif status == "reconnected" then
+        -- Add content field with mentions for reconnect notifications
+        payload.content = "<@" .. DISCORD_USER_ID .. "> 🟡 **Player telah RECONNECT!** ✅"
+
+    elseif status == "connected" then
+        -- No tag for normal connection, but add user info in embed
+        payload.content = ""
+    end
+
+    -- Always add allowed_mentions for any status that has content with user mention
+    if payload.content and payload.content ~= "" then
+        -- Ensure DISCORD_USER_ID is string and valid
+        local userIdStr = tostring(DISCORD_USER_ID)
+
+        payload.allowed_mentions = {
+            users = {userIdStr}
+        }
+
+        print("[Connection Status] DEBUG - Notification with tag:")
+        print("[Connection Status] - Status: " .. status)
+        print("[Connection Status] - Content: " .. payload.content)
+        print("[Connection Status] - User ID: " .. userIdStr)
+        print("[Connection Status] - Allowed mentions set for user: " .. userIdStr)
+
+        -- Validate the mention format
+        if string.find(payload.content, "<@" .. userIdStr .. ">") then
+            print("[Connection Status] - ✅ Mention format validated")
+        else
+            print("[Connection Status] - ❌ Mention format validation failed!")
+        end
+    end
+
+    local body = HttpService:JSONEncode(payload)
+
+    -- DEBUG: Print full payload before sending
+    print("[Connection Status] DEBUG - Full payload JSON:")
+    print(body)
+
+    -- Send webhook with retry logic
+    task.spawn(function()
+        local attempt = 1
+        local maxAttempts = 3
+        local success = false
+
+        while attempt <= maxAttempts and not success do
+            local retryDelay = 2 * attempt -- Progressive delay
+
+            if attempt > 1 then
+                print('[Connection Status] Retry attempt ' .. attempt .. ' after ' .. retryDelay .. ' seconds...')
+                task.wait(retryDelay)
+            end
+
+            success, err = pcall(function()
+                if syn and syn.request then
+                    syn.request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif http_request then
+                    http_request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif fluxus and fluxus.request then
+                    fluxus.request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif request then
+                    request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                else
+                    error("Executor does not support HTTP requests")
+                end
+            end)
+
+            if success then
+                print('[Connection Status] ' .. status .. ' notification sent successfully on attempt ' .. attempt)
+                break
+            else
+                warn('[Connection Status] ' .. status .. ' attempt ' .. attempt .. ' failed: ' .. tostring(err))
+                attempt = attempt + 1
+            end
+        end
+
+        if not success then
+            warn('[Connection Status] All ' .. status .. ' attempts failed')
+        end
+    end)
+end
+
+-- Load previous session data (if available)
+local function loadSessionData()
+    local success, sessionId, disconnectTime = pcall(function()
+        if readfile and isfile then
+            local sessionFile = CONFIG_FOLDER .. "/last_session_" .. LocalPlayer.UserId .. ".json"
+            print("[Reconnect] CONFIG_FOLDER: " .. tostring(CONFIG_FOLDER))
+            print("[Reconnect] LocalPlayer.UserId: " .. tostring(LocalPlayer.UserId))
+            print("[Reconnect] Checking session file: " .. sessionFile)
+
+            if isfile(sessionFile) then
+                local content = readfile(sessionFile)
+                print("[Reconnect] Session file found, content length: " .. #content)
+
+                local data = HttpService:JSONDecode(content)
+                print("[Reconnect] Loaded session data - SessionID: " .. string.sub(tostring(data.sessionId or "unknown"), 1, 8) .. "..., DisconnectTime: " .. tostring(data.disconnectTime))
+
+                return data.sessionId, data.disconnectTime
+            else
+                print("[Reconnect] No session file found")
+            end
+        else
+            print("[Reconnect] File operations not available")
+        end
+        return nil, nil
+    end)
+
+    if success then
+        return sessionId, disconnectTime
+    else
+        print("[Reconnect] Error loading session data: " .. tostring(sessionId))
+        return nil, nil
+    end
+end
+
+-- Save session data
+local function saveSessionData(sessionId, disconnectTime)
+    if not writefile then
+        print("[Reconnect] writefile not available")
+        return
+    end
+
+    if not ensureConfigFolder() then
+        print("[Reconnect] Failed to create config folder")
+        return
+    end
+
+    local sessionFile = CONFIG_FOLDER .. "/last_session_" .. LocalPlayer.UserId .. ".json"
+    local sessionData = {
+        sessionId = sessionId,
+        disconnectTime = disconnectTime,
+        playerName = LocalPlayer.Name,
+        userId = LocalPlayer.UserId
+    }
+
+    print("[Reconnect] Saving session data - SessionID: " .. string.sub(tostring(sessionId or "unknown"), 1, 8) .. "..., DisconnectTime: " .. tostring(disconnectTime))
+
+    local success, err = pcall(function()
+        local encoded = HttpService:JSONEncode(sessionData)
+        writefile(sessionFile, encoded)
+    end)
+
+    if success then
+        print("[Reconnect] Session data saved to: " .. sessionFile)
+    else
+        print("[Reconnect] Failed to save session data: " .. tostring(err))
+    end
+end
+
+-- Initialize reconnect detection
+local function initializeReconnectDetection()
+    -- Verify that the webhook function is available
+    if not sendConnectionStatusWebhook or type(sendConnectionStatusWebhook) ~= "function" then
+        warn("[Reconnect] ERROR: sendConnectionStatusWebhook function not available!")
+        warn("[Reconnect] Aborting reconnect detection initialization")
+        return
+    end
+
+    local currentSessionId = game.JobId
+    local currentTime = os.time()
+
+    print("[Reconnect] Initializing reconnect detection...")
+    print("[Reconnect] Current SessionID: " .. string.sub(tostring(currentSessionId or "unknown"), 1, 8) .. "...")
+    print("[Reconnect] Current Time: " .. tostring(currentTime))
+
+    -- Load previous session data
+    lastSessionId, lastDisconnectTime = loadSessionData()
+    print("[Reconnect] Loaded - lastSessionId: " .. tostring(lastSessionId and string.sub(tostring(lastSessionId or "unknown"), 1, 8) .. "..." or "nil") .. ", lastDisconnectTime: " .. tostring(lastDisconnectTime or "nil"))
+
+    if lastSessionId and lastDisconnectTime then
+        local timeDiff = currentTime - lastDisconnectTime
+        print("[Reconnect] Time difference: " .. timeDiff .. " seconds")
+
+        -- NEW LOGIC: If offline > 1 minute, treat as new session
+        if timeDiff > NEW_SESSION_THRESHOLD then
+            print("[Reconnect] Offline > 1 minute (" .. timeDiff .. "s) - treating as new connection")
+            local success, err = pcall(function()
+                sendConnectionStatusWebhook("connected", "New connection after " .. math.floor(timeDiff/60) .. " minute(s) offline")
+            end)
+            if not success then
+                print("[Reconnect] Error sending new connection webhook: " .. tostring(err))
+            end
+        else
+            -- Within 1 minute threshold - check reconnect type
+            if currentSessionId == lastSessionId then
+                -- Same server session
+                print("[Reconnect] Same server detected!")
+                print("[Reconnect] Quick reconnect detected - sending webhook")
+                local sessionPreview = string.sub(tostring(currentSessionId or "unknown"), 1, 8)
+                local success, err = pcall(function()
+                    sendConnectionStatusWebhook("reconnected", "Quick reconnect detected (Session: " .. sessionPreview .. "..., Time: " .. tostring(timeDiff) .. "s)")
+                end)
+                if not success then
+                    print("[Reconnect] Error sending quick reconnect webhook: " .. tostring(err))
+                end
+            else
+                -- Different server session within threshold
+                print("[Reconnect] Different server detected!")
+                print("[Reconnect] Server change reconnect detected - sending webhook")
+                local sessionPreview = string.sub(tostring(currentSessionId or "unknown"), 1, 8)
+                local success, err = pcall(function()
+                    sendConnectionStatusWebhook("reconnected", "Reconnected to different server (New Session: " .. sessionPreview .. "..., Time: " .. tostring(timeDiff) .. "s)")
+                end)
+                if not success then
+                    print("[Reconnect] Error sending server change webhook: " .. tostring(err))
+                end
+            end
+        end
+    else
+        -- No previous session data = fresh start
+        print("[Reconnect] No previous session data found - fresh start")
+        local success, err = pcall(function()
+            sendConnectionStatusWebhook("connected")
+        end)
+        if not success then
+            print("[Reconnect] Error sending fresh start webhook: " .. tostring(err))
+        end
+    end
+
+    -- Save current session as the new baseline
+    lastSessionId = currentSessionId
+    lastDisconnectTime = nil  -- Reset disconnect time since we're connected
+    print("[Reconnect] Initialization complete!")
+end
+
+-- Send connection status notification when script starts
+task.spawn(function()
+    -- Wait a bit to ensure all services are loaded
+    print("[Reconnect] Starting initialization after 2 second delay...")
+    task.wait(2)
+
+    -- Debug: Check if function exists
+    print("[Reconnect] Function check - sendConnectionStatusWebhook exists: " .. tostring(sendConnectionStatusWebhook ~= nil))
+    print("[Reconnect] Function check - sendConnectionStatusWebhook type: " .. tostring(type(sendConnectionStatusWebhook)))
+
+    initializeReconnectDetection()
+    print("✅ Auto Fish script fully initialized and connected!")
+end)
+
+local function sendDisconnectWebhook(username, reason)
+    if hasSentDisconnectWebhook then return end
+    hasSentDisconnectWebhook = true
+
+    -- Save session data before disconnect for reconnect detection
+    saveSessionData(game.JobId, os.time())
+
+    -- Send only to dedicated connection status webhook (webhook3)
+    sendConnectionStatusWebhook("disconnected", reason)
+end
+
+local function setupDisconnectNotifier()
+    local username = LocalPlayer.Name
+    local GuiService = game:GetService("GuiService")
+
+    -- Monitor error messages for disconnect reasons
+    GuiService.ErrorMessageChanged:Connect(function(message)
+        local lowerMessage = string.lower(message)
+        local reason = "Unknown"
+
+        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") then
+            reason = "Connection Lost: " .. message
+        elseif lowerMessage:find("kick") or lowerMessage:find("banned") then
+            reason = "Kicked: " .. message
+        elseif lowerMessage:find("timeout") then
+            reason = "Timeout: " .. message
+        elseif lowerMessage:find("error") then
+            reason = "General Error: " .. message
+        else
+            return -- Don't send webhook for unrelated errors
+        end
+
+        task.spawn(function()
+            sendDisconnectWebhook(username, reason)
+        end)
+    end)
+
+    -- Monitor for player removal
+    Players.PlayerRemoving:Connect(function(removedPlayer)
+        if removedPlayer == LocalPlayer and not hasSentDisconnectWebhook then
+            task.spawn(function()
+                sendDisconnectWebhook(username, "Disconnected (Player Removed)")
+            end)
+        end
+    end)
+
+    -- Monitor network ping for connection issues
+    task.spawn(function()
+        local consecutiveFailures = 0
+        local maxConsecutiveFailures = 3  -- Fail 3 times before disconnect
+
+        while true do
+            local success, ping = pcall(function()
+                return LocalPlayer:GetNetworkPing() * 1000 -- Convert to milliseconds
+            end)
+
+            if not success then
+                consecutiveFailures = consecutiveFailures + 1
+                print("[Disconnect Monitor] Ping check failed (" .. consecutiveFailures .. "/" .. maxConsecutiveFailures .. ")")
+
+                if consecutiveFailures >= maxConsecutiveFailures then
+                    task.spawn(function()
+                        sendDisconnectWebhook(username, "Connection Lost - Multiple ping failures detected")
+                    end)
+                    break -- Stop monitoring after sending notification
+                end
+            else
+                -- Reset failure counter on successful ping
+                if consecutiveFailures > 0 then
+                    consecutiveFailures = 0
+                    print("[Disconnect Monitor] Connection recovered")
+                end
+
+                if ping > PING_THRESHOLD then
+                    print("[Disconnect Monitor] High ping detected: " .. math.floor(ping) .. "ms")
+                    task.spawn(function()
+                        sendDisconnectWebhook(username, "High Ping Detected (" .. math.floor(ping) .. "ms) - Possible connection issue")
+                    end)
+                    break -- Stop monitoring after sending notification
+                end
+            end
+
+            task.wait(10) -- Check every 10 seconds (reduced frequency for better performance)
+        end
+    end)
+
+    -- Monitor for game freezes using Stepped delta
+    RunService.Stepped:Connect(function(_, deltaTime)
+        if deltaTime > FREEZE_THRESHOLD then
+            task.spawn(function()
+                sendDisconnectWebhook(username, "Game Freeze Detected (Delta: " .. string.format("%.2f", deltaTime) .. "s)")
+            end)
+        end
+    end)
+
+    print("🚨 Advanced disconnect notifier setup complete")
+end
+
+-- Initialize disconnect notifier
+setupDisconnectNotifier()
+
+-- TEST FUNCTIONS untuk testing notification dengan tags (hapus setelah testing)
+local function testDisconnectNotification()
+    print("[TEST] Testing disconnect notification with tags...")
+    sendConnectionStatusWebhook("disconnected", "TEST: Manual disconnect test - Tag system check")
+end
+
+local function testReconnectNotification()
+    print("[TEST] Testing reconnect notification with tags...")
+    sendConnectionStatusWebhook("reconnected", "TEST: Manual reconnect test - Tag system check")
+end
+
+-- ENABLE untuk test notifications (comment kembali setelah testing):
+--[[ DISABLED - Remove test notifications
+task.spawn(function()
+    task.wait(5)
+    print("[TEST] Starting tag tests in 5 seconds...")
+    testDisconnectNotification()
+    task.wait(3)
+    testReconnectNotification()
+end)
+--]]
 
 
 -- ====== ENHANCED TOGGLE FUNCTIONS ====== 
