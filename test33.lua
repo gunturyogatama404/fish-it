@@ -2160,28 +2160,53 @@ local function initializeReconnectDetection()
             if timeDiff <= RECONNECT_THRESHOLD then
                 -- Quick reconnect detected
                 print("[Reconnect] Quick reconnect detected - sending webhook")
-                sendConnectionStatusWebhook("reconnected", "Quick reconnect detected (Session: " .. string.sub(currentSessionId, 1, 8) .. "..., Time: " .. timeDiff .. "s)")
+                local success, err = pcall(function()
+                    sendConnectionStatusWebhook("reconnected", "Quick reconnect detected (Session: " .. string.sub(currentSessionId, 1, 8) .. "..., Time: " .. timeDiff .. "s)")
+                end)
+                if not success then
+                    print("[Reconnect] Error sending quick reconnect webhook: " .. tostring(err))
+                end
             else
                 -- Slow reconnect to same server
                 print("[Reconnect] Slow reconnect detected - sending webhook")
-                sendConnectionStatusWebhook("reconnected", "Reconnected to same server (Session: " .. string.sub(currentSessionId, 1, 8) .. "..., Time: " .. FormatTime(timeDiff) .. ")")
+                local success, err = pcall(function()
+                    sendConnectionStatusWebhook("reconnected", "Reconnected to same server (Session: " .. string.sub(currentSessionId, 1, 8) .. "..., Time: " .. timeDiff .. "s)")
+                end)
+                if not success then
+                    print("[Reconnect] Error sending slow reconnect webhook: " .. tostring(err))
+                end
             end
         else
             -- Different server session
             print("[Reconnect] Different server detected!")
             if timeDiff <= RECONNECT_THRESHOLD * 2 then  -- Extended window for server changes
                 print("[Reconnect] Server change reconnect detected - sending webhook")
-                sendConnectionStatusWebhook("reconnected", "Reconnected to different server (New Session: " .. string.sub(currentSessionId, 1, 8) .. "..., Time: " .. timeDiff .. "s)")
+                local success, err = pcall(function()
+                    sendConnectionStatusWebhook("reconnected", "Reconnected to different server (New Session: " .. string.sub(currentSessionId, 1, 8) .. "..., Time: " .. timeDiff .. "s)")
+                end)
+                if not success then
+                    print("[Reconnect] Error sending server change webhook: " .. tostring(err))
+                end
             else
                 -- Fresh connection after long time
                 print("[Reconnect] Fresh connection after long period - sending webhook")
-                sendConnectionStatusWebhook("connected", "Fresh connection after extended offline period (Time: " .. FormatTime(timeDiff) .. ")")
+                local success, err = pcall(function()
+                    sendConnectionStatusWebhook("connected", "Fresh connection after extended offline period (Time: " .. timeDiff .. "s)")
+                end)
+                if not success then
+                    print("[Reconnect] Error sending fresh connection webhook: " .. tostring(err))
+                end
             end
         end
     else
         -- No previous session data = fresh start
         print("[Reconnect] No previous session data found - fresh start")
-        sendConnectionStatusWebhook("connected")
+        local success, err = pcall(function()
+            sendConnectionStatusWebhook("connected")
+        end)
+        if not success then
+            print("[Reconnect] Error sending fresh start webhook: " .. tostring(err))
+        end
     end
 
     -- Save current session as the new baseline
@@ -2192,11 +2217,16 @@ end
 
 -- Fungsi untuk mengirim status koneksi ke webhook khusus
 local function sendConnectionStatusWebhook(status, reason)
+    print("[Connection Status] Attempting to send webhook - Status: " .. tostring(status) .. ", Reason: " .. tostring(reason or "none"))
+
     -- Check if webhook URL is configured
     if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" then
         warn('[Connection Status] Webhook URL not configured! Please set CONNECTION_WEBHOOK_URL variable.')
+        print("[Connection Status] Current webhook3 value: " .. tostring(webhook3 or "nil"))
         return
     end
+
+    print("[Connection Status] Webhook URL configured, proceeding to send...")
 
     local embed = {}
 
