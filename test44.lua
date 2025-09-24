@@ -2248,6 +2248,13 @@ end
 
 -- Initialize reconnect detection
 local function initializeReconnectDetection()
+    -- Verify that the webhook function is available
+    if not sendConnectionStatusWebhook or type(sendConnectionStatusWebhook) ~= "function" then
+        warn("[Reconnect] ERROR: sendConnectionStatusWebhook function not available!")
+        warn("[Reconnect] Aborting reconnect detection initialization")
+        return
+    end
+
     local currentSessionId = game.JobId
     local currentTime = os.time()
 
@@ -2330,7 +2337,12 @@ end
 -- Send connection status notification when script starts
 task.spawn(function()
     -- Wait a bit to ensure all services are loaded
+    print("[Reconnect] Starting initialization after 2 second delay...")
     task.wait(2)
+
+    -- Debug: Check if function exists
+    print("[Reconnect] Function check - sendConnectionStatusWebhook exists: " .. tostring(sendConnectionStatusWebhook ~= nil))
+    print("[Reconnect] Function check - sendConnectionStatusWebhook type: " .. tostring(type(sendConnectionStatusWebhook)))
 
     initializeReconnectDetection()
     print("✅ Auto Fish script fully initialized and connected!")
