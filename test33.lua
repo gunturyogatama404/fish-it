@@ -2164,12 +2164,7 @@ local function sendDisconnectWebhook(username, reason)
     if hasSentDisconnectWebhook then return end
     hasSentDisconnectWebhook = true
 
-    -- Send to both webhooks
-    sendUnifiedWebhook("disconnect", {
-        reason = reason or "Unknown"
-    })
-
-    -- Send to dedicated connection status webhook
+    -- Send only to dedicated connection status webhook (webhook3)
     sendConnectionStatusWebhook("disconnected", reason)
 end
 
