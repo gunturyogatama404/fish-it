@@ -67,10 +67,16 @@ Example usage in your main.lua:
 webhook2 = "https://discord.com/api/webhooks/YOUR_MAIN_WEBHOOK_URL"
 webhook3 = "https://discord.com/api/webhooks/YOUR_CONNECTION_WEBHOOK_URL"
 
+Webhook Usage:
+- webhook2: Fish notifications, megalodon alerts
+- webhook3: Connection status only (Connect/Disconnect)
+
 Connection Status Features:
 ✅ Sends "Player Connected" when script starts successfully
 ❌ Sends "Player Disconnected" with detailed reason when issues occur
 📊 Includes session duration, ping monitoring, and freeze detection
+
+Note: Disconnect notifications are sent ONLY to webhook3 (not webhook2)
 --]]
 
 -- ====================================================================
@@ -1855,18 +1861,6 @@ local function sendUnifiedWebhook(webhookType, data)
                 { name = "📦 Total (whitelist)", value = tostring(data.totalWhitelistCount or 0) .. " fish", inline = true },
             },
             footer = { text = "Inventory Notifier • Auto Fish" }
-        }
-    elseif webhookType == "disconnect" then
-        embed = {
-            title = "⚠️ Player Disconnected",
-            description = data.reason or "Player has disconnected from the server",
-            color = 16776960, -- Yellow
-            fields = {
-                { name = "👤 Player", value = player.DisplayName or player.Name or "Unknown", inline = true },
-                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
-                { name = "🔌 Reason", value = data.reason or "Unknown", inline = false }
-            },
-            footer = { text = "Disconnect Notifier • Auto Fish Script" }
         }
     else
         warn('[Webhook] Unknown webhook type: ' .. tostring(webhookType))
