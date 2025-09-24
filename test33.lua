@@ -188,10 +188,13 @@ do
         WEBHOOK_URL = WEBHOOK_URL,
         WHITELIST = {
             ["Megalodon"] = true,
-            ["Titanic Trout"] = true,
-            ["Galleon"] = true,
-            ["Sea Dragon"] = true,
-            ["Viperfish"] = true
+            ["Blob Shark"] = true,
+            ["Plasma Shark"] = true,
+            ["Frostborn Shark"] = true,
+            ["Giant Squid"] = true,
+            ["Ghost Shark"] = true,
+            ["Robot Kraken"] = true,
+            ["Thin Armor Shark"] = true
         },
         COOLDOWN_SECONDS = 1,
         
@@ -201,11 +204,12 @@ do
         -- Anda BISA menggunakan link GitHub biasa (contoh: https://github.com/user/repo/blob/main/image.png)
         -- Skrip akan otomatis mengubahnya ke format yang benar.
         FISH_IMAGES = {
-            ["Viperfish"] = "https://github.com/DarylLoudi/fish-it/blob/main/viper.png",
-            ["Megalodon"] = "PASTE_YOUR_GITHUB_URL_FOR_MEGALODON_HERE",
-            ["Titanic Trout"] = "", -- Salin URL Anda ke sini
-            ["Galleon"] = "", -- Salin URL Anda ke sini
-            ["Sea Dragon"] = "" -- Salin URL Anda ke sini
+            ["Megalodon"] = "https://github.com/DarylLoudi/fish-it/blob/main/Megalodon.png",
+            ["Blob Shark"] = "https://github.com/DarylLoudi/fish-it/blob/main/blob.png",
+            ["Frostborn Shark"] = "https://github.com/DarylLoudi/fish-it/blob/main/frost.png",
+            ["Giant Squid"] = "https://github.com/DarylLoudi/fish-it/blob/main/gsquid.png",
+            ["Ghost Shark"] = "https://github.com/DarylLoudi/fish-it/blob/main/ghost.png",
+            ["Robot Kraken"] = "https://github.com/DarylLoudi/fish-it/blob/main/kraken.png"
         }
     }
 
@@ -1911,6 +1915,231 @@ local sendMegalodonEventWebhook = function(status, data)
         sendUnifiedWebhook("megalodon_missing", data)
     end
 end
+
+-- ====== DISCONNECT/RECONNECT TRACKING SYSTEM ======
+local disconnectTracker = {
+    sessionStartTime = os.time(),
+    lastHeartbeat = tick(),
+    disconnectTime = nil,
+    wasDisconnected = false,
+    reconnectCheckInterval = 30, -- Check every 30 seconds
+    disconnectThreshold = 120, -- Consider disconnected after 2 minutes of no heartbeat
+    reconnectTimeout = 600, -- 10 minutes timeout for reconnect detection
+    scriptExecutionMarker = "AF_ScriptActive_" .. LocalPlayer.UserId,
+    lastConfigSave = 0
+}
+
+-- Create a persistent marker that survives disconnection
+local function createSessionMarker()
+    if writefile and ensureConfigFolder() then
+        local markerData = {
+            sessionStart = disconnectTracker.sessionStartTime,
+            lastUpdate = os.time(),
+            playerId = LocalPlayer.UserId,
+            playerName = LocalPlayer.Name,
+            scriptVersion = "xfish_claude_v6.2"
+        }
+
+        pcall(function()
+            local encoded = HttpService:JSONEncode(markerData)
+            writefile(CONFIG_FOLDER .. "/" .. disconnectTracker.scriptExecutionMarker .. ".json", encoded)
+        end)
+    end
+end
+
+-- Check if this is a reconnect by looking for previous session marker
+local function checkForReconnect()
+    if not readfile or not isfile then return false end
+
+    local markerFile = CONFIG_FOLDER .. "/" .. disconnectTracker.scriptExecutionMarker .. ".json"
+    local success, content = pcall(function()
+        if isfile(markerFile) then
+            return readfile(markerFile)
+        end
+        return nil
+    end)
+
+    if success and content and content ~= "" then
+        local ok, decoded = pcall(function()
+            return HttpService:JSONDecode(content)
+        end)
+
+        if ok and type(decoded) == "table" then
+            local timeSinceLastUpdate = os.time() - (decoded.lastUpdate or 0)
+            -- If last update was between 2-10 minutes ago, likely a reconnect
+            if timeSinceLastUpdate >= 120 and timeSinceLastUpdate <= 600 then
+                local reconnectData = {
+                    reason = "Player reconnected to the server",
+                    disconnectDuration = timeSinceLastUpdate,
+                    lastSession = decoded.lastUpdate,
+                    currentSession = os.time()
+                }
+                return true, reconnectData
+            end
+        end
+    end
+
+    return false, nil
+end
+
+-- Enhanced sendUnifiedWebhook with reconnect support
+local originalSendUnifiedWebhook = sendUnifiedWebhook
+sendUnifiedWebhook = function(webhookType, data)
+    -- Add reconnect webhook type
+    if webhookType == "reconnect" then
+        local embed = {
+            title = "🔄 Player Reconnected",
+            description = data.reason or "Player has successfully reconnected to the server",
+            color = 65280, -- Green
+            fields = {
+                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+                { name = "🕒 Reconnect Time", value = os.date("%H:%M:%S"), inline = true },
+                { name = "⏱️ Disconnect Duration", value = string.format("%.0f seconds", data.disconnectDuration or 0), inline = true },
+                { name = "🔄 Status", value = "Script auto-executed successfully", inline = false }
+            },
+            footer = { text = "Reconnect Notifier • Auto Fish Script" }
+        }
+
+        if not UNIFIED_WEBHOOK_URL or UNIFIED_WEBHOOK_URL == "" then
+            warn('[Webhook] URL not configured! Please set UNIFIED_WEBHOOK_URL variable.')
+            return
+        end
+
+        local currentTime = tick()
+        if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then
+            print('[Webhook] Cooldown active, skipping reconnect notification...')
+            return
+        end
+
+        local body = HttpService:JSONEncode({ embeds = {embed} })
+
+        task.spawn(function()
+            local attempt = 1
+            local success = false
+
+            while attempt <= maxRetryAttempts and not success do
+                local currentRetryDelay = webhookRetryDelay * (2 ^ (attempt - 1))
+
+                if attempt > 1 then
+                    print('[Webhook] Retry attempt ' .. attempt .. ' after ' .. currentRetryDelay .. ' seconds...')
+                    task.wait(currentRetryDelay)
+                end
+
+                success, err = pcall(function()
+                    if syn and syn.request then
+                        syn.request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    elseif http_request then
+                        http_request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    elseif fluxus and fluxus.request then
+                        fluxus.request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    elseif request then
+                        request({ Url=UNIFIED_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    else
+                        error("Executor tidak support HTTP requests")
+                    end
+                end)
+
+                if success then
+                    lastWebhookTime = tick()
+                    print('[Webhook] Reconnect notification sent successfully on attempt ' .. attempt)
+                    break
+                else
+                    warn('[Webhook] Reconnect attempt ' .. attempt .. ' failed: ' .. tostring(err))
+                    attempt = attempt + 1
+                end
+            end
+
+            if not success then
+                warn('[Webhook] All reconnect notification attempts failed')
+            end
+        end)
+        return
+    end
+
+    -- Call original function for other webhook types
+    return originalSendUnifiedWebhook(webhookType, data)
+end
+
+-- Heartbeat system to detect disconnection
+local function startDisconnectMonitoring()
+    -- Check for reconnect on script start
+    local isReconnect, reconnectData = checkForReconnect()
+    if isReconnect and reconnectData then
+        print("[Disconnect Monitor] Reconnect detected! Sending notification...")
+        sendUnifiedWebhook("reconnect", reconnectData)
+    end
+
+    -- Create initial session marker
+    createSessionMarker()
+
+    -- Main disconnect monitoring loop
+    task.spawn(function()
+        while true do
+            local currentTime = tick()
+            local timeSinceLastBeat = currentTime - disconnectTracker.lastHeartbeat
+
+            -- Update heartbeat every few seconds
+            disconnectTracker.lastHeartbeat = currentTime
+
+            -- Update session marker periodically (every 30 seconds)
+            if currentTime - disconnectTracker.lastConfigSave >= 30 then
+                createSessionMarker()
+                disconnectTracker.lastConfigSave = currentTime
+            end
+
+            task.wait(disconnectTracker.reconnectCheckInterval)
+        end
+    end)
+
+    -- Monitor for actual disconnection using game events
+    local function handleDisconnect(reason)
+        if disconnectTracker.wasDisconnected then return end
+
+        disconnectTracker.wasDisconnected = true
+        disconnectTracker.disconnectTime = os.time()
+
+        print("[Disconnect Monitor] Player disconnected: " .. (reason or "Unknown reason"))
+
+        local disconnectData = {
+            reason = reason or "Unknown disconnection",
+            sessionDuration = os.time() - disconnectTracker.sessionStartTime,
+            disconnectTime = os.time()
+        }
+
+        sendUnifiedWebhook("disconnect", disconnectData)
+    end
+
+    -- Connect to game disconnect events
+    game:GetService("GuiService").ErrorMessageChanged:Connect(function()
+        handleDisconnect("Game error or kick")
+    end)
+
+    -- Monitor network connectivity
+    local lastNetworkCheck = tick()
+    task.spawn(function()
+        while true do
+            pcall(function()
+                local success = pcall(function()
+                    game:GetService("HttpService"):GetAsync("https://httpbin.org/status/200", false)
+                end)
+
+                if not success then
+                    local currentTime = tick()
+                    if currentTime - lastNetworkCheck > disconnectTracker.disconnectThreshold then
+                        handleDisconnect("Network connectivity lost")
+                    end
+                else
+                    lastNetworkCheck = tick()
+                end
+            end)
+            task.wait(30)
+        end
+    end)
+end
+
+-- Initialize disconnect monitoring
+startDisconnectMonitoring()
+print("[Disconnect Monitor] System initialized - monitoring for disconnect/reconnect events")
 
 local function autoDetectMegalodon()
     local eventFound = false
