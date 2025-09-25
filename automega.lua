@@ -547,24 +547,26 @@ end
 local function sendMegalodonEventWebhook(statusType)
     if not webhook2 or webhook2 == "" then return end
     
-    local title = "[Megalodon] Status Update"
-    local description = "An unknown status update occurred."
-    
-    if statusType == "hopping" then
-        title = "[Megalodon] Event Ended"
-        description = "Event has ended on the current server. Hopping to find a new one..."
-    end
-
     local embed = {
-        title = title,
-        description = description,
-        color = 16711680, -- Red
         fields = {
             { name = "👤 Player", value = (LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown"), inline = true },
             { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true }
         },
         footer = { text = "Megalodon Monitor" }
     }
+
+    if statusType == "hopping" then
+        embed.title = "[Megalodon] Event Ended"
+        embed.description = "Event has ended on the current server. Hopping to find a new one..."
+        embed.color = 16711680 -- Red
+    elseif statusType == "found" then
+        embed.title = "[Megalodon] Event Found!"
+        embed.description = "Successfully found a server with an active Megalodon event. Auto-farming will now commence."
+        embed.color = 3066993 -- Green
+        table.insert(embed.fields, { name = "🌐 Server ID", value = game.JobId, inline = false })
+    else
+        return -- Do not send for unknown types
+    end
     
     local payload = { embeds = {embed} }
     pcall(function()
@@ -654,6 +656,7 @@ local function performInitialMegalodonCheck()
 
     if eventFound then
         print("[Megalodon] ✅ Megalodon event detected in this server!")
+        sendMegalodonEventWebhook("found") -- Send success webhook
         setupMegalodonMonitor(targetPropsFolder) -- Activate the monitor
         return true
     else
