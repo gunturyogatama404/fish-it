@@ -432,6 +432,8 @@ local isAutoPreset3On = false
 local megalodonEventActive = false
 local megalodonMissingAlertSent = false
 local megalodonEventStartedAt = 0
+local megalodonEventEndAlertSent = false
+local megalodonPreEventFarmState = nil
 
 local HttpService = game:GetService("HttpService")
 
@@ -1811,6 +1813,42 @@ local function disableMegalodonLock()
     end
 end
 
+local function formatDuration(seconds)
+    if not seconds or seconds <= 0 then
+        return "Unavailable"
+    end
+
+    seconds = math.floor(seconds)
+    local hours = math.floor(seconds / 3600)
+    local minutes = math.floor((seconds % 3600) / 60)
+    local remainingSeconds = seconds % 60
+
+    if hours > 0 then
+        return string.format("%dh %dm %ds", hours, minutes, remainingSeconds)
+    elseif minutes > 0 then
+        return string.format("%dm %ds", minutes, remainingSeconds)
+    else
+        return string.format("%ds", remainingSeconds)
+    end
+end
+
+local function resumeFarmingAfterMegalodon(previousAutoFarmState)
+    task.spawn(function()
+        local shouldResume = previousAutoFarmState
+        if shouldResume == nil then
+            shouldResume = config.autoFarm
+        end
+
+        if shouldResume then
+            if not isAutoFarmOn then
+                setAutoFarm(true)
+            else
+                equipRod()
+            end
+        end
+    end)
+end
+
 -- ====== MEGALODON WEBHOOK ====== 
 local lastWebhookTime = 0
 local WEBHOOK_COOLDOWN = 15 -- 15 seconds cooldown between webhooks to prevent rate limiting
@@ -1850,6 +1888,26 @@ local function sendUnifiedWebhook(webhookType, data)
             },
             footer = { text = 'Megalodon Watch - Auto Fish' }
         }
+    elseif webhookType == "megalodon_ended" then
+        local endedAt = data and data.endedAt or os.time()
+        local startedAt = data and data.startedAt or 0
+        local duration = data and data.duration
+        if (not duration or duration <= 0) and startedAt > 0 then
+            duration = math.max(0, endedAt - startedAt)
+        end
+
+        embed = {
+            title = '[Megalodon] Event Ended',
+            description = 'Megalodon Hunt props removed. Resuming farming routine.',
+            color = 3447003, -- Blue
+            fields = {
+                { name = "Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+                { name = "Ended At", value = os.date("%H:%M:%S", endedAt), inline = true },
+                { name = "Duration", value = formatDuration(duration), inline = true },
+            },
+            footer = { text = 'Megalodon Watch - Auto Fish' }
+        }
+
     elseif webhookType == "fish_found" then
         embed = {
             title = "🎣 SECRET Fish Found",
@@ -1861,17 +1919,6 @@ local function sendUnifiedWebhook(webhookType, data)
                 { name = "📦 Total (whitelist)", value = tostring(data.totalWhitelistCount or 0) .. " fish", inline = true },
             },
             footer = { text = "Inventory Notifier • Auto Fish" }
-        }
-    elseif webhookType == "megalodon_ended" then
-        embed = {
-            title = "🎉 [Megalodon] Event Berakhir",
-            description = "Event Megalodon Hunt telah selesai di server ini.",
-            color = 16776960, -- Yellow
-            fields = {
-                { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
-                { name = "🕒 Waktu Berakhir", value = os.date("%H:%M:%S"), inline = true }
-            },
-            footer = { text = "Megalodon Watch - Auto Fish" }
         }
     else
         warn('[Webhook] Unknown webhook type: ' .. tostring(webhookType))
@@ -1938,6 +1985,8 @@ end
 local sendMegalodonEventWebhook = function(status, data)
     if status == "missing" then
         sendUnifiedWebhook("megalodon_missing", data)
+    elseif status == "ended" then
+        sendUnifiedWebhook("megalodon_ended", data)
     end
 end
 
@@ -2009,73 +2058,7 @@ local function autoDetectMegalodon()
                             break
                         end
                     end
--- ====== AUTO MEGALODON EVENT HANDLER ======
-task.spawn(function()
-    while task.wait(30) do -- Check every 30 seconds
-        if isAutoMegalodonOn then
-            local eventFound, eventPosition = autoDetectMegalodon()
-
-            if eventFound then
-                -- Event is active
-                if not megalodonEventActive then
-                    print("[Megalodon] Event detected.")
-                    megalodonEventActive = true
-                    megalodonMissingAlertSent = false -- Reset alert status
                 end
-                
-                if not hasTeleportedToMegalodon then
-                    print("[Megalodon] Teleporting to event...")
-                    teleportToMegalodon(eventPosition, true)
-                end
-            else
-                -- Event is not active
-                if megalodonEventActive then
-                    -- Event just ended
-                    print("[Megalodon] Event has ended. Sending notification.")
-                    sendUnifiedWebhook("megalodon_ended", {})
-                    
-                    if megalodonSavedPosition then
-                        print("[Megalodon] Returning to saved position.")
-                        pcall(function()
-                            disableMegalodonLock()
-                            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                                player.Character.HumanoidRootPart.CFrame = CFrame.new(megalodonSavedPosition)
-                            end
-                            megalodonSavedPosition = nil
-                        end)
-                    end
-                else
-                    -- No event was active, and no event is found now.
-                    if not megalodonMissingAlertSent then
-                        print("[Megalodon] No event found on this server. Sending alert.")
-                        sendUnifiedWebhook("megalodon_missing", {})
-                        megalodonMissingAlertSent = true -- Prevent spamming
-                    end
-                end
-                
-                -- Reset state since event is not found
-                megalodonEventActive = false
-                hasTeleportedToMegalodon = false
-                disableMegalodonLock()
-            end
-        else
-            -- Auto Megalodon is turned off, reset everything
-            if megalodonEventActive and megalodonSavedPosition then
-                pcall(function()
-                    disableMegalodonLock()
-                    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                        player.Character.HumanoidRootPart.CFrame = CFrame.new(megalodonSavedPosition)
-                    end
-                    megalodonSavedPosition = nil
-                end)
-            end
-            megalodonEventActive = false
-            hasTeleportedToMegalodon = false
-            megalodonMissingAlertSent = false
-            disableMegalodonLock()
-        end
-    end
-end)                end
                 if eventFound then break end
             end
         end
@@ -2086,6 +2069,8 @@ end)                end
         if not megalodonEventActive then
             megalodonEventActive = true
             megalodonMissingAlertSent = false
+            megalodonEventEndAlertSent = false
+            megalodonPreEventFarmState = isAutoFarmOn
             megalodonEventStartedAt = os.time()
         end
 
@@ -2095,22 +2080,40 @@ end)                end
             disableMegalodonLock()
         end
     else
-        -- Handle event end
+        -- Handle event end or missing props
         local wasActive = megalodonEventActive
         if wasActive then
             megalodonEventActive = false
         end
 
-        -- Return to saved position when event ends
         if hasTeleportedToMegalodon and megalodonSavedPosition then
             teleportToMegalodon(megalodonSavedPosition, false)
             megalodonSavedPosition = nil
             hasTeleportedToMegalodon = false
+            disableMegalodonLock()
+        end
 
-            if wasActive and not megalodonMissingAlertSent then
+        if wasActive then
+            if not megalodonEventEndAlertSent then
+                megalodonEventEndAlertSent = true
                 megalodonMissingAlertSent = true
-                megalodonEventStartedAt = 0
+
+                local eventEndedAt = os.time()
+                local duration = nil
+                if megalodonEventStartedAt and megalodonEventStartedAt > 0 then
+                    duration = math.max(0, eventEndedAt - megalodonEventStartedAt)
+                end
+
+                sendMegalodonEventWebhook("ended", {
+                    endedAt = eventEndedAt,
+                    startedAt = megalodonEventStartedAt,
+                    duration = duration,
+                })
             end
+
+            megalodonEventStartedAt = 0
+            resumeFarmingAfterMegalodon(megalodonPreEventFarmState)
+            megalodonPreEventFarmState = nil
         elseif not megalodonMissingAlertSent then
             -- Send webhook about missing event only once per session
             megalodonMissingAlertSent = true
@@ -2131,6 +2134,8 @@ local function setAutoMegalodon(state)
         megalodonEventActive = false
         megalodonMissingAlertSent = false
         megalodonEventStartedAt = 0
+        megalodonEventEndAlertSent = false
+        megalodonPreEventFarmState = nil
     end
     print("🦈 Auto Megalodon Hunt: " .. (state and "ENABLED" or "DISABLED"))
 end
