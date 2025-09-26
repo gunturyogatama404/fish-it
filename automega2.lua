@@ -50,16 +50,18 @@ local MAX_TELEPORT_FAILURES = 5 -- Maximum consecutive teleport failures before 
 local ERROR_771_RETRY_DELAY = 10 -- seconds to wait after Error 771 before retrying
 local MAX_ERROR_771_COUNT = 3 -- Maximum Error 771 occurrences before server refresh
 
--- Server hop variables
-local hopAttempts = 0
-local isHopping = false
-local totalHopsThisSession = 0
-local megalodonSearchStartTime = os.time()
-local lastServerRefresh = 0
-local teleportFailureCount = 0
-local error771Count = 0
-local emergencyFallbackActivated = false
-local lastError771Time = 0
+-- Consolidated server hop variables
+local serverHopData = {
+    hopAttempts = 0,
+    isHopping = false,
+    serverHopData.totalHopsThisSession = 0,
+    megalodonSearchStartTime = os.time(),
+    lastServerRefresh = 0,
+    teleportFailureCount = 0,
+    error771Count = 0,
+    serverHopData.emergencyFallbackActivated = false,
+    lastError771Time = 0
+}
 
 -- Make sure the environment supports file writing/reading
 local hasFileSupport = writefile and readfile and isfile
@@ -173,7 +175,7 @@ local function fetchAndCacheNewServers()
 
         local jsonString = HttpService:JSONEncode(cacheData)
         writefile(CACHE_FILE, jsonString)
-        lastServerRefresh = os.time()
+        serverHopData.lastServerRefresh = os.time()
         print("[Server Hop] Enhanced server cache successfully updated. Next refresh in " .. math.floor(SERVER_REFRESH_INTERVAL/60) .. " minutes.")
         return true
     else
@@ -214,11 +216,11 @@ end
 -- Function to handle specific error types with appropriate delays
 local function handleTeleportError(errorType, errorMessage)
     if errorType == "error_771" then
-        error771Count = error771Count + 1
-        lastError771Time = os.time()
-        warn("[Server Hop] Error 771 detected (" .. error771Count .. "/" .. MAX_ERROR_771_COUNT .. "): " .. tostring(errorMessage))
+        serverHopData.error771Count = serverHopData.error771Count + 1
+        serverHopData.lastError771Time = os.time()
+        warn("[Server Hop] Error 771 detected (" .. serverHopData.error771Count .. "/" .. MAX_ERROR_771_COUNT .. "): " .. tostring(errorMessage))
 
-        if error771Count >= MAX_ERROR_771_COUNT then
+        if serverHopData.error771Count >= MAX_ERROR_771_COUNT then
             warn("[Server Hop] Maximum Error 771 occurrences reached. Forcing server list refresh...")
             -- Clear cache to force fresh server list
             if hasFileSupport and isfile(CACHE_FILE) then
@@ -233,7 +235,7 @@ local function handleTeleportError(errorType, errorMessage)
                     writefile(CACHE_FILE, HttpService:JSONEncode(emptyCache))
                 end)
             end
-            error771Count = 0 -- Reset counter
+            serverHopData.error771Count = 0 -- Reset counter
             return ERROR_771_RETRY_DELAY * 2 -- Double delay after cache clear
         end
 
@@ -369,7 +371,7 @@ local function getAndUseCachedServer()
     if not validateServerAvailability(targetJobId) then
         warn("[Server Hop] Server validation failed, trying next server...")
         usedServers[targetJobId] = os.time() -- Mark as used to avoid retry
-        teleportFailureCount = teleportFailureCount + 1
+        serverHopData.teleportFailureCount = serverHopData.teleportFailureCount + 1
 
         -- Update cache and try next server
         local updatedCacheData = {
@@ -447,7 +449,7 @@ local function getAndUseCachedServer()
     end
 
     if not tpSuccess then
-        teleportFailureCount = teleportFailureCount + 1
+        serverHopData.teleportFailureCount = serverHopData.teleportFailureCount + 1
 
         -- Detect specific error type
         local errorType = detectTeleportError(message)
@@ -471,17 +473,17 @@ local function getAndUseCachedServer()
         end
 
         -- Check if we need emergency fallback
-        if teleportFailureCount >= MAX_TELEPORT_FAILURES then
+        if serverHopData.teleportFailureCount >= MAX_TELEPORT_FAILURES then
             warn("[Server Hop] Maximum teleport failures reached! Activating emergency fallback...")
-            emergencyFallbackActivated = true
+            serverHopData.emergencyFallbackActivated = true
             return "emergency_fallback"
         end
 
         return false -- Return false so we can try the next server
     else
         print("[Server Hop] Teleport initiated successfully.")
-        teleportFailureCount = 0 -- Reset failure count on success
-        error771Count = 0 -- Reset Error 771 count on successful teleport
+        serverHopData.teleportFailureCount = 0 -- Reset failure count on success
+        serverHopData.error771Count = 0 -- Reset Error 771 count on successful teleport
     end
 
     return true
@@ -489,32 +491,32 @@ end
 
 -- Main hop function with enhanced retry logic
 local function hopToNewServer()
-    if isHopping then
+    if serverHopData.isHopping then
         print("[Server Hop] Already hopping, skipping...")
         return
     end
 
-    isHopping = true
-    hopAttempts = hopAttempts + 1
-    totalHopsThisSession = totalHopsThisSession + 1
+    serverHopData.isHopping = true
+    serverHopData.hopAttempts = serverHopData.hopAttempts + 1
+    serverHopData.serverHopData.totalHopsThisSession = serverHopData.serverHopData.totalHopsThisSession + 1
 
-    if hopAttempts > MAX_HOP_ATTEMPTS then
-        local searchDuration = os.time() - megalodonSearchStartTime
+    if serverHopData.hopAttempts > MAX_HOP_ATTEMPTS then
+        local searchDuration = os.time() - serverHopData.megalodonSearchStartTime
         warn("[Server Hop] Maximum hop attempts reached (" .. MAX_HOP_ATTEMPTS .. "). Giving up after " .. searchDuration .. " seconds.")
-        warn("[Server Hop] Total hops this session: " .. totalHopsThisSession)
-        isHopping = false
+        warn("[Server Hop] Total hops this session: " .. serverHopData.totalHopsThisSession)
+        serverHopData.isHopping = false
         return
     end
 
-    local searchDuration = os.time() - megalodonSearchStartTime
-    print("[Server Hop] Attempt " .. hopAttempts .. "/" .. MAX_HOP_ATTEMPTS .. " - Looking for server with Megalodon... (Search time: " .. searchDuration .. "s)")
+    local searchDuration = os.time() - serverHopData.megalodonSearchStartTime
+    print("[Server Hop] Attempt " .. serverHopData.hopAttempts .. "/" .. MAX_HOP_ATTEMPTS .. " - Looking for server with Megalodon... (Search time: " .. searchDuration .. "s)")
 
     -- Try to use the cache first with retry logic
     local maxRetries = 3
     local retryCount = 0
     local successfulHop = false
 
-    while retryCount < maxRetries and not successfulHop and not emergencyFallbackActivated do
+    while retryCount < maxRetries and not successfulHop and not serverHopData.emergencyFallbackActivated do
         retryCount = retryCount + 1
         print("[Server Hop] Cache attempt " .. retryCount .. "/" .. maxRetries)
 
@@ -522,7 +524,7 @@ local function hopToNewServer()
 
         if hopResult == "emergency_fallback" then
             warn("[Server Hop] Emergency fallback activated! Stopping server hopping to preserve main script functionality.")
-            emergencyFallbackActivated = true
+            serverHopData.emergencyFallbackActivated = true
             break
         elseif hopResult then
             successfulHop = true
@@ -542,12 +544,12 @@ local function hopToNewServer()
         end
     end
 
-    if not successfulHop and not emergencyFallbackActivated then
+    if not successfulHop and not serverHopData.emergencyFallbackActivated then
         warn("[Server Hop] All retry attempts failed. Resetting hop state.")
-        isHopping = false
-    elseif emergencyFallbackActivated then
+        serverHopData.isHopping = false
+    elseif serverHopData.emergencyFallbackActivated then
         warn("[Server Hop] Emergency fallback active. Server hopping disabled to prevent script issues.")
-        isHopping = false
+        serverHopData.isHopping = false
         -- Continue with current server without hopping
     end
 end
@@ -1048,7 +1050,7 @@ if shouldCheckMegalodon then
         task.wait(megalodonCheckDelay)
 
         -- Emergency fallback safety check
-        if emergencyFallbackActivated then
+        if serverHopData.emergencyFallbackActivated then
             print("[Megalodon] ⚠️ Emergency fallback is active. Skipping megalodon check to preserve script stability.")
             print("[Megalodon] 🎣 Main script will continue running in current server.")
             return
@@ -1068,7 +1070,7 @@ if shouldCheckMegalodon then
             if not megalodonCheckSuccess then
                 timeoutReached = true
                 warn("[Megalodon] ⏰ Megalodon check timeout reached! Continuing with current server.")
-                emergencyFallbackActivated = true
+                serverHopData.emergencyFallbackActivated = true
             end
         end)
 
@@ -1080,11 +1082,11 @@ if shouldCheckMegalodon then
             return
         end
 
-        if not canContinue and not emergencyFallbackActivated then
+        if not canContinue and not serverHopData.emergencyFallbackActivated then
             print("[Megalodon] 🔄 Server hopping initiated, but main script is preserved...")
             print("[Megalodon] 💭 Tip: If you experience issues, the script will auto-fallback to current server")
             -- Don't return here as main script is already loaded and should continue
-        elseif emergencyFallbackActivated then
+        elseif serverHopData.emergencyFallbackActivated then
             print("[Megalodon] 🛡️ Emergency fallback active - continuing in current server for stability.")
         end
     end)
@@ -1107,8 +1109,8 @@ task.spawn(function()
         -- Check if hopping has been stuck for too long
         if isHopping and (os.time() - lastHealthCheck) > MAX_UNHEALTHY_TIME then
             warn("[Emergency] Server hopping stuck for " .. MAX_UNHEALTHY_TIME .. " seconds! Activating emergency fallback.")
-            emergencyFallbackActivated = true
-            isHopping = false
+            serverHopData.emergencyFallbackActivated = true
+            serverHopData.isHopping = false
 
             -- Send emergency webhook if available
             if webhook2 then
@@ -1136,24 +1138,24 @@ task.spawn(function()
         end
 
         -- Reset health check if not hopping
-        if not isHopping then
+        if not serverHopData.isHopping then
             lastHealthCheck = os.time()
         end
 
         -- Display fallback status if active
-        if emergencyFallbackActivated then
+        if serverHopData.emergencyFallbackActivated then
             print("[Emergency] 🛡️ Fallback mode active - Script running safely in current server")
         end
 
         -- Monitor Error 771 patterns and provide feedback
-        if error771Count > 0 and os.time() - lastError771Time > 300 then -- Reset after 5 minutes of no errors
+        if serverHopData.error771Count > 0 and os.time() - serverHopData.lastError771Time > 300 then -- Reset after 5 minutes of no errors
             print("[Server Hop] Error 771 pattern cleared after 5 minutes of stability")
-            error771Count = 0
+            serverHopData.error771Count = 0
         end
 
         -- Provide user feedback on server hopping status
-        if isHopping then
-            local hopDuration = os.time() - megalodonSearchStartTime
+        if serverHopData.isHopping then
+            local hopDuration = os.time() - serverHopData.megalodonSearchStartTime
             if hopDuration > 60 then -- If hopping for more than 1 minute
                 print("[Server Hop] Status: Still searching for suitable server... (" .. math.floor(hopDuration/60) .. " minutes)")
             end
@@ -1162,6 +1164,34 @@ task.spawn(function()
 end)
 
 print("🛡️ [Auto Fish] Emergency monitoring system active!")
+
+-- ====== MEMORY OPTIMIZATION SYSTEM ======
+-- Periodic cleanup to prevent local register overflow
+task.spawn(function()
+    local CLEANUP_INTERVAL = 300 -- 5 minutes
+
+    while true do
+        task.wait(CLEANUP_INTERVAL)
+
+        -- Cleanup temporary pools
+        if systemState.tempPool then
+            for k, v in pairs(systemState.tempPool) do
+                if type(v) == "table" then
+                    for i = #v, 1, -1 do
+                        table.remove(v, i)
+                    end
+                end
+            end
+        end
+
+        -- Force garbage collection
+        pcall(function()
+            collectgarbage("collect")
+        end)
+
+        print("[Memory] Periodic cleanup completed - " .. math.floor(collectgarbage("count")) .. " KB used")
+    end
+end)
 
 -- Sisa script zfish v6.2.lua...
 local player = game.Players.LocalPlayer
@@ -1185,21 +1215,15 @@ local sessionStats = {
     fishTypes = {}
 }
 
--- ====== FPS TRACKING VARIABLES ====== 
-local RunService = game:GetService("RunService")
-local frameCount = 0
-local lastFPSUpdate = tick()
-local currentFPS = 0
-
--- FPS Counter function
+-- ====== OPTIMIZED FPS TRACKING ======
 local function updateFPS()
-    frameCount = frameCount + 1
+    systemState.frameCount = systemState.frameCount + 1
     local currentTime = tick()
 
-    if currentTime - lastFPSUpdate >= 1 then
-        currentFPS = frameCount
-        frameCount = 0
-        lastFPSUpdate = currentTime
+    if currentTime - systemState.lastFPSUpdate >= 1 then
+        systemState.systemState.currentFPS = systemState.frameCount
+        systemState.frameCount = 0
+        systemState.lastFPSUpdate = currentTime
     end
 end
 
@@ -1210,25 +1234,29 @@ RunService.Heartbeat:Connect(updateFPS)
 local fishDatabase = {
     [163] = {name = "Viperfish", sellPrice = 94}
 }
--- State variables
-local isAutoFarmOn = false
-local isAutoSellOn = false
-local isAutoCatchOn = false
-local isAutoWeatherOn = false
-local gpuSaverEnabled = false
-local isAutoMegalodonOn = false
-local megalodonSavedPosition = nil
-local hasTeleportedToMegalodon = false
-local currentBodyPosition = nil
+-- Consolidated state variables
+local autoState = {
+    farm = false,
+    sell = false,
+    catch = false,
+    weather = false,
+    gpuSaver = false,
+    megalodon = false,
+    preset1 = false,
+    preset2 = false,
+    preset3 = false
+}
 
-local isAutoPreset1On = false
-local isAutoPreset2On = false
-local isAutoPreset3On = false
+local megalodonState = {
+    savedPosition = nil,
+    hasTeleported = false,
+    currentBodyPosition = nil,
+    eventActive = false,
+    missingAlertSent = false,
+    eventStartedAt = 0
+}
 
--- Megalodon event variables
-local megalodonEventActive = false
-local megalodonMissingAlertSent = false
-local megalodonEventStartedAt = 0
+-- Note: Megalodon variables consolidated into megalodonState table above
 
 local HttpService = game:GetService("HttpService")
 
@@ -1612,19 +1640,11 @@ print("  Username: " .. (LocalPlayer.Name or "Unknown"))
 print("  UserID: " .. (LocalPlayer.UserId or 0))
 print("  Config file: " .. getConfigFileName())
 
-local autoMegalodonToggle
-local autoPreset1Toggle
-local autoPreset2Toggle
-local autoPreset3Toggle
-local gpuSaverToggle
-local chargeFishingSlider
-local autoFishMainSlider
-local autoSellSlider
-local autoCatchSlider
-local weatherIdSlider
-local weatherCycleSlider
-local upgradeRodToggle
-local upgradeBaitToggle
+-- Consolidated UI references
+local uiElements = {
+    toggles = {},
+    sliders = {}
+}
 
 -- ====== AUTO UPGRADE STATE & DATA (From Fish v3) ======
 local upgradeState = { rod = false, bait = false }
@@ -1790,10 +1810,17 @@ local function FormatNumber(num)
     return formatted
 end
 
--- ====== GPU SAVER VARIABLES ====== 
-local originalSettings = {}
-local whiteScreenGui = nil
-local connections = {}
+-- ====== CONSOLIDATED SYSTEM STATE ======
+local systemState = {
+    systemState.originalSettings = {},
+    systemState.whiteScreenGui = nil,
+    connections = {},
+    frameCount = 0,
+    lastFPSUpdate = tick(),
+    systemState.currentFPS = 0,
+    -- Variable recycling pool to reduce local register usage
+    tempPool = {}
+}
 
 -- ====== DELAY VARIABLES ======
 local chargeFishingDelay = 0.01
@@ -1857,20 +1884,20 @@ local fishCaughtEvent = networkEvents.fishCaughtEvent
 
 -- ====== SIMPLIFIED GPU SAVER WITH CENTER LAYOUT ====== 
 local function createWhiteScreen()
-    if whiteScreenGui then return end
+    if systemState.systemState.whiteScreenGui then return end
     
-    whiteScreenGui = Instance.new("ScreenGui")
-    whiteScreenGui.Name = "GPUSaverScreen"
-    whiteScreenGui.ResetOnSpawn = false
-    whiteScreenGui.IgnoreGuiInset = true
-    whiteScreenGui.DisplayOrder = 999999
+    systemState.systemState.whiteScreenGui = Instance.new("ScreenGui")
+    systemState.systemState.whiteScreenGui.Name = "GPUSaverScreen"
+    systemState.whiteScreenGui.ResetOnSpawn = false
+    systemState.whiteScreenGui.IgnoreGuiInset = true
+    systemState.whiteScreenGui.DisplayOrder = 999999
     
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, 0, 1, 0)
     frame.Position = UDim2.new(0, 0, 0, 0)
     frame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
     frame.BorderSizePixel = 0
-    frame.Parent = whiteScreenGui
+    frame.Parent = systemState.whiteScreenGui
     
     -- Main title with Total Caught and Best Caught
     local titleLabel = Instance.new("TextLabel")
@@ -1908,7 +1935,7 @@ local function createWhiteScreen()
     fpsLabel.Size = UDim2.new(0, 400, 0, 40)
     fpsLabel.Position = UDim2.new(0.5, -200, 0, 200)
     fpsLabel.BackgroundTransparency = 1
-    fpsLabel.Text = "📊 FPS: " .. currentFPS
+    fpsLabel.Text = "📊 FPS: " .. systemState.currentFPS
     fpsLabel.TextColor3 = Color3.new(1, 1, 1)
     fpsLabel.TextSize = 22
     fpsLabel.Font = Enum.Font.SourceSansBold
@@ -2057,7 +2084,7 @@ local function createWhiteScreen()
         local lastUpdate = tick()
         local frameCount = 0
         
-        connections.renderConnection = RunService.RenderStepped:Connect(function()
+        systemState.connections.renderConnection = RunService.RenderStepped:Connect(function()
             frameCount = frameCount + 1
             local currentTime = tick()
             
@@ -2137,7 +2164,7 @@ local function createWhiteScreen()
     
     -- Real-time listeners for Total Caught and Best Caught
     if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then
-        connections.caughtConnection = LocalPlayer.leaderstats.Caught.Changed:Connect(function(newValue)
+        systemState.connections.caughtConnection = LocalPlayer.leaderstats.Caught.Changed:Connect(function(newValue)
             if titleLabel then
                 local currentBest = (LocalPlayer.leaderstats["Rarest Fish"] and LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
                 titleLabel.Text = "🟢 " .. LocalPlayer.Name .. "\nTotal Caught: " .. newValue .. "\nBest Caught: " .. currentBest
@@ -2146,7 +2173,7 @@ local function createWhiteScreen()
     end
     
     if LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] then
-        connections.bestCaughtConnection = LocalPlayer.leaderstats["Rarest Fish"].Changed:Connect(function(newValue)
+        systemState.connections.bestCaughtConnection = LocalPlayer.leaderstats["Rarest Fish"].Changed:Connect(function(newValue)
             if titleLabel then
                 local currentCaught = (LocalPlayer.leaderstats.Caught and LocalPlayer.leaderstats.Caught.Value) or 0
                 titleLabel.Text = "🟢 " .. LocalPlayer.Name .. "\nTotal Caught: " .. currentCaught .. "\nBest Caught: " .. newValue
@@ -2154,28 +2181,21 @@ local function createWhiteScreen()
         end)
     end
     
-    whiteScreenGui.Parent = game:GetService("CoreGui")
+    systemState.whiteScreenGui.Parent = game:GetService("CoreGui")
 end
 
 local function removeWhiteScreen()
-    if whiteScreenGui then
-        whiteScreenGui:Destroy()
-        whiteScreenGui = nil
+    if systemState.whiteScreenGui then
+        systemState.whiteScreenGui:Destroy()
+        systemState.whiteScreenGui = nil
     end
-    
-    if connections.renderConnection then
-        connections.renderConnection:Disconnect()
-        connections.renderConnection = nil
-    end
-    
-    if connections.caughtConnection then
-        connections.caughtConnection:Disconnect()
-        connections.caughtConnection = nil
-    end
-    
-    if connections.bestCaughtConnection then
-        connections.bestCaughtConnection:Disconnect()
-        connections.bestCaughtConnection = nil
+
+    -- Cleanup all connections efficiently
+    for connName, conn in pairs(systemState.connections) do
+        if conn and conn.Connected then
+            conn:Disconnect()
+        end
+        systemState.connections[connName] = nil
     end
 end
 
@@ -2184,10 +2204,10 @@ function enableGPUSaver()
     gpuSaverEnabled = true
     
     -- Store original settings
-    originalSettings.GlobalShadows = Lighting.GlobalShadows
-    originalSettings.FogEnd = Lighting.FogEnd
-    originalSettings.Brightness = Lighting.Brightness
-    originalSettings.QualityLevel = settings().Rendering.QualityLevel
+    systemState.originalSettings.GlobalShadows = Lighting.GlobalShadows
+    systemState.originalSettings.FogEnd = Lighting.FogEnd
+    systemState.originalSettings.Brightness = Lighting.Brightness
+    systemState.originalSettings.QualityLevel = settings().Rendering.QualityLevel
     
     -- Apply GPU saving settings
     pcall(function()
@@ -2222,13 +2242,13 @@ function disableGPUSaver()
     
     -- Restore settings
     pcall(function()
-        if originalSettings.QualityLevel then
-            settings().Rendering.QualityLevel = originalSettings.QualityLevel
+        if systemState.originalSettings.QualityLevel then
+            settings().Rendering.QualityLevel = systemState.originalSettings.QualityLevel
         end
         
-        Lighting.GlobalShadows = originalSettings.GlobalShadows or true
-        Lighting.FogEnd = originalSettings.FogEnd or 100000
-        Lighting.Brightness = originalSettings.Brightness or 1
+        Lighting.GlobalShadows = systemState.originalSettings.GlobalShadows or true
+        Lighting.FogEnd = systemState.originalSettings.FogEnd or 100000
+        Lighting.Brightness = systemState.originalSettings.Brightness or 1
         
         for _, v in pairs(Lighting:GetChildren()) do
             if v:IsA("PostEffect") or v:IsA("Atmosphere") or v:IsA("Sky") then
@@ -2797,7 +2817,7 @@ local function autoDetectMegalodon()
     if eventFound and eventPosition then
         -- Reset hop attempts and hopping state when megalodon is found
         hopAttempts = 0
-        isHopping = false
+        serverHopData.isHopping = false
 
         -- Mark event as active if not already
         if not megalodonEventActive then
@@ -2835,7 +2855,7 @@ local function autoDetectMegalodon()
             sendMegalodonEventWebhook("missing")
 
             -- SERVER HOP: If auto megalodon is enabled and no megalodon found, hop to new server
-            if isAutoMegalodonOn and not isHopping then
+            if isAutoMegalodonOn and not serverHopData.isHopping then
                 print("[Megalodon] ❌ No Megalodon event found in this server!")
                 print("[Megalodon] 🔄 Starting server hop to find Megalodon...")
                 task.spawn(function()
