@@ -45,6 +45,10 @@ local MEGALODON_CHECK_DELAY = 10 -- seconds to wait before checking for megalodo
 local MAX_HOP_ATTEMPTS = 15 -- Maximum server hops before giving up
 local SERVER_REFRESH_INTERVAL = 30 * 60 -- 30 minutes in seconds
 local MAX_CACHE_AGE = 45 * 60 -- 45 minutes max cache age
+local TELEPORT_TIMEOUT = 15 -- seconds to wait for teleport before giving up
+local MAX_TELEPORT_FAILURES = 5 -- Maximum consecutive teleport failures before emergency fallback
+local ERROR_771_RETRY_DELAY = 10 -- seconds to wait after Error 771 before retrying
+local MAX_ERROR_771_COUNT = 3 -- Maximum Error 771 occurrences before server refresh
 
 -- Server hop variables
 local hopAttempts = 0
@@ -52,6 +56,10 @@ local isHopping = false
 local totalHopsThisSession = 0
 local megalodonSearchStartTime = os.time()
 local lastServerRefresh = 0
+local teleportFailureCount = 0
+local error771Count = 0
+local emergencyFallbackActivated = false
+local lastError771Time = 0
 
 -- Make sure the environment supports file writing/reading
 local hasFileSupport = writefile and readfile and isfile
@@ -123,20 +131,43 @@ local function fetchAndCacheNewServers()
         if server.id ~= CurrentJobId and server.playing < server.maxPlayers then
             -- Check if server was not used recently
             if not usedServers[server.id] then
-                table.insert(availableServers, server.id)
+                -- Additional check: avoid servers that are too empty (might be unstable) or too full
+                local playerRatio = server.playing / server.maxPlayers
+                if server.playing >= 2 and playerRatio < 0.9 then -- At least 2 players, less than 90% full
+                    table.insert(availableServers, {
+                        id = server.id,
+                        players = server.playing,
+                        maxPlayers = server.maxPlayers,
+                        ratio = playerRatio
+                    })
+                end
             end
         end
     end
 
-    if #availableServers > 0 then
-        print("[Server Hop] Found " .. #availableServers .. " available servers (excluding used ones). Caching their IDs.")
+    -- Sort servers by stability (prefer servers with moderate player count)
+    table.sort(availableServers, function(a, b)
+        -- Prefer servers with 30-70% capacity (more stable)
+        local aScore = math.abs(a.ratio - 0.5) -- Distance from 50%
+        local bScore = math.abs(b.ratio - 0.5)
+        return aScore < bScore
+    end)
+
+    -- Convert back to simple ID list
+    local serverIds = {}
+    for _, serverInfo in ipairs(availableServers) do
+        table.insert(serverIds, serverInfo.id)
+    end
+
+    if #serverIds > 0 then
+        print("[Server Hop] Found " .. #serverIds .. " stable servers (excluding used ones). Caching their IDs.")
 
         -- Create enhanced cache structure with metadata
         local cacheData = {
-            servers = availableServers,
+            servers = serverIds,
             lastUpdated = os.time(),
             usedServers = usedServers,
-            totalServersFound = #availableServers,
+            totalServersFound = #serverIds,
             placeId = PlaceID
         }
 
@@ -159,6 +190,110 @@ local function fetchAndCacheNewServers()
         writefile(CACHE_FILE, jsonString)
         return false
     end
+end
+
+-- Function to detect specific Roblox teleport errors
+local function detectTeleportError(errorMessage)
+    if not errorMessage then return "unknown" end
+
+    local errorStr = tostring(errorMessage):lower()
+
+    if string.find(errorStr, "771") or string.find(errorStr, "server no longer available") or string.find(errorStr, "server tidak lagi tersedia") then
+        return "error_771"
+    elseif string.find(errorStr, "770") or string.find(errorStr, "server full") or string.find(errorStr, "penuh") then
+        return "error_770"
+    elseif string.find(errorStr, "773") or string.find(errorStr, "teleport flood") then
+        return "error_773"
+    elseif string.find(errorStr, "timeout") or string.find(errorStr, "failed to connect") then
+        return "timeout"
+    else
+        return "unknown"
+    end
+end
+
+-- Function to handle specific error types with appropriate delays
+local function handleTeleportError(errorType, errorMessage)
+    if errorType == "error_771" then
+        error771Count = error771Count + 1
+        lastError771Time = os.time()
+        warn("[Server Hop] Error 771 detected (" .. error771Count .. "/" .. MAX_ERROR_771_COUNT .. "): " .. tostring(errorMessage))
+
+        if error771Count >= MAX_ERROR_771_COUNT then
+            warn("[Server Hop] Maximum Error 771 occurrences reached. Forcing server list refresh...")
+            -- Clear cache to force fresh server list
+            if hasFileSupport and isfile(CACHE_FILE) then
+                pcall(function()
+                    local emptyCache = {
+                        servers = {},
+                        lastUpdated = 0, -- Force refresh
+                        usedServers = {},
+                        totalServersFound = 0,
+                        placeId = PlaceID
+                    }
+                    writefile(CACHE_FILE, HttpService:JSONEncode(emptyCache))
+                end)
+            end
+            error771Count = 0 -- Reset counter
+            return ERROR_771_RETRY_DELAY * 2 -- Double delay after cache clear
+        end
+
+        return ERROR_771_RETRY_DELAY
+
+    elseif errorType == "error_770" then
+        warn("[Server Hop] Server full (Error 770): " .. tostring(errorMessage))
+        return 2 -- Short delay for server full
+
+    elseif errorType == "error_773" then
+        warn("[Server Hop] Teleport flood (Error 773): " .. tostring(errorMessage))
+        return 15 -- Longer delay for flood protection
+
+    elseif errorType == "timeout" then
+        warn("[Server Hop] Connection timeout: " .. tostring(errorMessage))
+        return 5 -- Medium delay for timeout
+
+    else
+        warn("[Server Hop] Unknown error: " .. tostring(errorMessage))
+        return 3 -- Default delay
+    end
+end
+
+-- Function to validate server availability before teleport
+local function validateServerAvailability(jobId)
+    print("[Server Validation] Checking server availability: " .. string.sub(jobId, 1, 8) .. "...")
+
+    local success, response = pcall(function()
+        return game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceID .. "/servers/Public?sortOrder=Asc&limit=100")
+    end)
+
+    if not success then
+        warn("[Server Validation] Failed to fetch server list for validation")
+        return false
+    end
+
+    local parseSuccess, serverData = pcall(function()
+        return HttpService:JSONDecode(response)
+    end)
+
+    if not parseSuccess or not serverData or not serverData.data then
+        warn("[Server Validation] Failed to parse server validation data")
+        return false
+    end
+
+    -- Check if target server is still available and not full
+    for _, server in ipairs(serverData.data) do
+        if server.id == jobId then
+            if server.playing < server.maxPlayers then
+                print("[Server Validation] ✅ Server is available (" .. server.playing .. "/" .. server.maxPlayers .. " players)")
+                return true
+            else
+                print("[Server Validation] ❌ Server is full (" .. server.playing .. "/" .. server.maxPlayers .. " players)")
+                return false
+            end
+        end
+    end
+
+    print("[Server Validation] ❌ Server not found in current server list")
+    return false
 end
 
 -- Function to check if cache needs refresh
@@ -227,13 +362,33 @@ local function getAndUseCachedServer()
 
     print("[Server Hop] Loaded " .. #serverList .. " server(s) from cache.")
 
-    -- Get the first server from the list
+    -- Get the first server from the list and validate it
     local targetJobId = table.remove(serverList, 1)
+
+    -- Validate server availability before attempting teleport
+    if not validateServerAvailability(targetJobId) then
+        warn("[Server Hop] Server validation failed, trying next server...")
+        usedServers[targetJobId] = os.time() -- Mark as used to avoid retry
+        teleportFailureCount = teleportFailureCount + 1
+
+        -- Update cache and try next server
+        local updatedCacheData = {
+            servers = serverList,
+            lastUpdated = cacheData.lastUpdated or os.time(),
+            usedServers = usedServers,
+            totalServersFound = cacheData.totalServersFound or #serverList,
+            placeId = PlaceID
+        }
+        local newJsonString = HttpService:JSONEncode(updatedCacheData)
+        writefile(CACHE_FILE, newJsonString)
+
+        return false -- Try next server
+    end
 
     -- Mark this server as used
     usedServers[targetJobId] = os.time()
 
-    print("[Server Hop] Hopping to server: " .. string.sub(targetJobId, 1, 8) .. "...")
+    print("[Server Hop] Hopping to validated server: " .. string.sub(targetJobId, 1, 8) .. "...")
     print("[Server Hop] " .. #serverList .. " server(s) remaining in cache.")
 
     -- Update the cache file with the remaining servers and used servers
@@ -247,13 +402,58 @@ local function getAndUseCachedServer()
     local newJsonString = HttpService:JSONEncode(updatedCacheData)
     writefile(CACHE_FILE, newJsonString)
 
-    -- Teleport to the chosen server with better error handling
+    -- Teleport to the chosen server with enhanced error handling
+    print("[Server Hop] Initiating teleport with smart error detection...")
+
+    local teleportStartTime = os.time()
+
+    -- Try primary teleport method
     local tpSuccess, message = pcall(function()
         TeleportService:TeleportToPlaceInstance(PlaceID, targetJobId, LocalPlayer)
     end)
 
+    -- If primary method fails with Error 771, try alternative methods
+    if not tpSuccess and detectTeleportError(message) == "error_771" then
+        print("[Server Hop] Primary teleport failed with Error 771, trying alternative methods...")
+
+        -- Alternative method 1: Direct teleport with options
+        local altSuccess1, altMessage1 = pcall(function()
+            local teleportOptions = Instance.new("TeleportOptions")
+            teleportOptions.ServerInstanceId = targetJobId
+            TeleportService:TeleportAsync(PlaceID, {LocalPlayer}, teleportOptions)
+        end)
+
+        if altSuccess1 then
+            print("[Server Hop] Alternative teleport method 1 successful!")
+            tpSuccess = true
+            message = "Alternative method succeeded"
+        else
+            print("[Server Hop] Alternative method 1 also failed: " .. tostring(altMessage1))
+
+            -- Alternative method 2: Queue-based teleport
+            local altSuccess2, altMessage2 = pcall(function()
+                game:GetService("TeleportService"):TeleportToPlaceInstance(PlaceID, targetJobId)
+            end)
+
+            if altSuccess2 then
+                print("[Server Hop] Alternative teleport method 2 successful!")
+                tpSuccess = true
+                message = "Alternative method 2 succeeded"
+            else
+                print("[Server Hop] All teleport methods failed. Server truly unavailable.")
+                message = altMessage2 or message
+            end
+        end
+    end
+
     if not tpSuccess then
-        warn("[Server Hop] Teleport failed:", message)
+        teleportFailureCount = teleportFailureCount + 1
+
+        -- Detect specific error type
+        local errorType = detectTeleportError(message)
+        local retryDelay = handleTeleportError(errorType, message)
+
+        warn("[Server Hop] Teleport failed (Type: " .. errorType .. ", Attempt " .. teleportFailureCount .. "/" .. MAX_TELEPORT_FAILURES .. ")")
 
         -- If teleport fails, mark server as bad and don't count it as a used server
         usedServers[targetJobId] = nil
@@ -264,9 +464,24 @@ local function getAndUseCachedServer()
         local correctedJsonString = HttpService:JSONEncode(updatedCacheData)
         writefile(CACHE_FILE, correctedJsonString)
 
+        -- Apply appropriate delay based on error type
+        if retryDelay > 0 then
+            print("[Server Hop] Waiting " .. retryDelay .. " seconds before next attempt due to " .. errorType .. "...")
+            task.wait(retryDelay)
+        end
+
+        -- Check if we need emergency fallback
+        if teleportFailureCount >= MAX_TELEPORT_FAILURES then
+            warn("[Server Hop] Maximum teleport failures reached! Activating emergency fallback...")
+            emergencyFallbackActivated = true
+            return "emergency_fallback"
+        end
+
         return false -- Return false so we can try the next server
     else
         print("[Server Hop] Teleport initiated successfully.")
+        teleportFailureCount = 0 -- Reset failure count on success
+        error771Count = 0 -- Reset Error 771 count on successful teleport
     end
 
     return true
@@ -299,13 +514,17 @@ local function hopToNewServer()
     local retryCount = 0
     local successfulHop = false
 
-    while retryCount < maxRetries and not successfulHop do
+    while retryCount < maxRetries and not successfulHop and not emergencyFallbackActivated do
         retryCount = retryCount + 1
         print("[Server Hop] Cache attempt " .. retryCount .. "/" .. maxRetries)
 
-        local usedCache = getAndUseCachedServer()
+        local hopResult = getAndUseCachedServer()
 
-        if usedCache then
+        if hopResult == "emergency_fallback" then
+            warn("[Server Hop] Emergency fallback activated! Stopping server hopping to preserve main script functionality.")
+            emergencyFallbackActivated = true
+            break
+        elseif hopResult then
             successfulHop = true
             print("[Server Hop] Successfully initiated hop using cached server.")
         else
@@ -323,9 +542,13 @@ local function hopToNewServer()
         end
     end
 
-    if not successfulHop then
+    if not successfulHop and not emergencyFallbackActivated then
         warn("[Server Hop] All retry attempts failed. Resetting hop state.")
         isHopping = false
+    elseif emergencyFallbackActivated then
+        warn("[Server Hop] Emergency fallback active. Server hopping disabled to prevent script issues.")
+        isHopping = false
+        -- Continue with current server without hopping
     end
 end
 
@@ -824,13 +1047,45 @@ if shouldCheckMegalodon then
     task.spawn(function()
         task.wait(megalodonCheckDelay)
 
-        print("[Megalodon] 🔍 Starting delayed megalodon check...")
-        local canContinue = performInitialMegalodonCheck()
+        -- Emergency fallback safety check
+        if emergencyFallbackActivated then
+            print("[Megalodon] ⚠️ Emergency fallback is active. Skipping megalodon check to preserve script stability.")
+            print("[Megalodon] 🎣 Main script will continue running in current server.")
+            return
+        end
 
-        if not canContinue then
-            print("[Megalodon] 🔄 Server hopping initiated, script execution will resume in new server...")
-            print("[Megalodon] 💭 Tip: If you don't want automatic server hopping, set shouldCheckMegalodon = false")
-            -- Don't return here as main script is already loaded
+        print("[Megalodon] 🔍 Starting delayed megalodon check...")
+
+        -- Add timeout for megalodon check
+        local megalodonCheckStartTime = os.time()
+        local MEGALODON_CHECK_TIMEOUT = 30 -- 30 seconds timeout
+
+        local megalodonCheckSuccess = false
+        local timeoutReached = false
+
+        task.spawn(function()
+            task.wait(MEGALODON_CHECK_TIMEOUT)
+            if not megalodonCheckSuccess then
+                timeoutReached = true
+                warn("[Megalodon] ⏰ Megalodon check timeout reached! Continuing with current server.")
+                emergencyFallbackActivated = true
+            end
+        end)
+
+        local canContinue = performInitialMegalodonCheck()
+        megalodonCheckSuccess = true
+
+        if timeoutReached then
+            print("[Megalodon] ⚠️ Timeout occurred, but main script is preserved and running.")
+            return
+        end
+
+        if not canContinue and not emergencyFallbackActivated then
+            print("[Megalodon] 🔄 Server hopping initiated, but main script is preserved...")
+            print("[Megalodon] 💭 Tip: If you experience issues, the script will auto-fallback to current server")
+            -- Don't return here as main script is already loaded and should continue
+        elseif emergencyFallbackActivated then
+            print("[Megalodon] 🛡️ Emergency fallback active - continuing in current server for stability.")
         end
     end)
 else
@@ -838,6 +1093,75 @@ else
 end
 
 print("🎣 [Auto Fish] Script fully initialized and ready!")
+
+-- ====== EMERGENCY FALLBACK MONITORING SYSTEM ======
+-- Monitor script health and activate fallback if needed
+task.spawn(function()
+    local lastHealthCheck = os.time()
+    local HEALTH_CHECK_INTERVAL = 30 -- Check every 30 seconds
+    local MAX_UNHEALTHY_TIME = 120 -- 2 minutes of unhealthy state triggers fallback
+
+    while true do
+        task.wait(HEALTH_CHECK_INTERVAL)
+
+        -- Check if hopping has been stuck for too long
+        if isHopping and (os.time() - lastHealthCheck) > MAX_UNHEALTHY_TIME then
+            warn("[Emergency] Server hopping stuck for " .. MAX_UNHEALTHY_TIME .. " seconds! Activating emergency fallback.")
+            emergencyFallbackActivated = true
+            isHopping = false
+
+            -- Send emergency webhook if available
+            if webhook2 then
+                pcall(function()
+                    local req = (syn and syn.request) or http_request
+                    if req then
+                        local emergencyPayload = {
+                            embeds = {{
+                                title = "🚨 Emergency Fallback Activated",
+                                description = "Server hopping system encountered issues and has been disabled to preserve main script functionality.",
+                                color = 16711680, -- Red
+                                fields = {
+                                    { name = "👤 Player", value = LocalPlayer.Name, inline = true },
+                                    { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
+                                    { name = "⚠️ Reason", value = "Server hopping timeout/failure", inline = false },
+                                    { name = "✅ Status", value = "Main script preserved and running", inline = false }
+                                },
+                                footer = { text = "Emergency Fallback System" }
+                            }}
+                        }
+                        req({ Url=webhook2, Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode(emergencyPayload) })
+                    end
+                end)
+            end
+        end
+
+        -- Reset health check if not hopping
+        if not isHopping then
+            lastHealthCheck = os.time()
+        end
+
+        -- Display fallback status if active
+        if emergencyFallbackActivated then
+            print("[Emergency] 🛡️ Fallback mode active - Script running safely in current server")
+        end
+
+        -- Monitor Error 771 patterns and provide feedback
+        if error771Count > 0 and os.time() - lastError771Time > 300 then -- Reset after 5 minutes of no errors
+            print("[Server Hop] Error 771 pattern cleared after 5 minutes of stability")
+            error771Count = 0
+        end
+
+        -- Provide user feedback on server hopping status
+        if isHopping then
+            local hopDuration = os.time() - megalodonSearchStartTime
+            if hopDuration > 60 then -- If hopping for more than 1 minute
+                print("[Server Hop] Status: Still searching for suitable server... (" .. math.floor(hopDuration/60) .. " minutes)")
+            end
+        end
+    end
+end)
+
+print("🛡️ [Auto Fish] Emergency monitoring system active!")
 
 -- Sisa script zfish v6.2.lua...
 local player = game.Players.LocalPlayer
