@@ -482,9 +482,9 @@ local defaultConfig = {
     gpuSaver = false,
     chargeFishingDelay = 0.01,
     autoFishMainDelay = 0.9,
-    autoSellDelay = 34,
+    autoSellDelay = 35,
     autoCatchDelay = 0.2,
-    weatherIdDelay = 20,
+    weatherIdDelay = 3,
     weatherCycleDelay = 100
 }
 local config = {}
@@ -995,9 +995,9 @@ local connections = {}
 -- ====== DELAY VARIABLES ====== 
 local chargeFishingDelay = 0.01
 local autoFishMainDelay = 0.9
-local autoSellDelay = 34
+local autoSellDelay = 5
 local autoCatchDelay = 0.2
-local weatherIdDelay = 20
+local weatherIdDelay = 3
 local weatherCycleDelay = 100
 
 local HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool
@@ -1609,18 +1609,10 @@ local function enablePreset(presetKey, locationName)
             enableGPUSaver()
         end)
 
-        -- Set custom delays for presets
-        if presetKey == "auto1" or presetKey == "auto2" then
-            table.insert(steps, function()
-                if autoFishMainSlider then autoFishMainSlider:Set(0.1) else setAutoFishMainDelay(0.1) end
-                if autoCatchSlider then autoCatchSlider:Set(0.1) else setAutoCatchDelay(0.1) end
-                print("[Preset] Delays set for " .. presetKey .. ": Fish(0.1s), Catch(0.1s)")
-            end)
-        elseif presetKey == "auto3" then
-            table.insert(steps, function()
-                if autoFishMainSlider then autoFishMainSlider:Set(5.5) else setAutoFishMainDelay(5.5) end
-                if autoCatchSlider then autoCatchSlider:Set(0.6) else setAutoCatchDelay(0.6) end
-                print("[Preset] Delays set for " .. presetKey .. ": Fish(5.5s), Catch(0.6s)")
+        -- Set custom delay for Kohana preset
+        if presetKey == "auto3" then
+            table.insert(steps, function() 
+                setAutoFishDelayForKohana()
             end)
         end
 
@@ -1694,20 +1686,15 @@ local function disablePreset(presetKey)
             end,
         }
 
-        -- Reset delays to default
-        if presetKey == "auto1" or presetKey == "auto2" or presetKey == "auto3" then
-            table.insert(steps, function()
-                if autoFishMainSlider then
-                    autoFishMainSlider:Set(defaultConfig.autoFishMainDelay)
+        -- Reset delay for Kohana preset
+        if presetKey == "auto3" then
+            table.insert(steps, function() 
+                if autoFishMainSlider then 
+                    autoFishMainSlider:Set(0.9)
                 else
-                    setAutoFishMainDelay(defaultConfig.autoFishMainDelay)
+                    setAutoFishMainDelay(0.9)
                 end
-                if autoCatchSlider then
-                    autoCatchSlider:Set(defaultConfig.autoCatchDelay)
-                else
-                    setAutoCatchDelay(defaultConfig.autoCatchDelay)
-                end
-                print("[Preset] Delays reset to default: Fish(" .. defaultConfig.autoFishMainDelay .. "s), Catch(" .. defaultConfig.autoCatchDelay .. "s)")
+                print("[Preset] Auto Fish Delay reset to default (0.9s)")
             end)
         end
 
@@ -1877,8 +1864,8 @@ local function sendUnifiedWebhook(webhookType, data)
         }
     elseif webhookType == "megalodon_ended" then
         embed = {
-            title = "🔚 [Megalodon] Event Berakhir",
-            description = "Event Megalodon Hunt telah selesai atau props tidak lagi ditemukan.",
+            title = "🎉 [Megalodon] Event Berakhir",
+            description = "Event Megalodon Hunt telah selesai di server ini.",
             color = 16776960, -- Yellow
             fields = {
                 { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
@@ -2022,7 +2009,73 @@ local function autoDetectMegalodon()
                             break
                         end
                     end
+-- ====== AUTO MEGALODON EVENT HANDLER ======
+task.spawn(function()
+    while task.wait(30) do -- Check every 30 seconds
+        if isAutoMegalodonOn then
+            local eventFound, eventPosition = autoDetectMegalodon()
+
+            if eventFound then
+                -- Event is active
+                if not megalodonEventActive then
+                    print("[Megalodon] Event detected.")
+                    megalodonEventActive = true
+                    megalodonMissingAlertSent = false -- Reset alert status
                 end
+                
+                if not hasTeleportedToMegalodon then
+                    print("[Megalodon] Teleporting to event...")
+                    teleportToMegalodon(eventPosition, true)
+                end
+            else
+                -- Event is not active
+                if megalodonEventActive then
+                    -- Event just ended
+                    print("[Megalodon] Event has ended. Sending notification.")
+                    sendUnifiedWebhook("megalodon_ended", {})
+                    
+                    if megalodonSavedPosition then
+                        print("[Megalodon] Returning to saved position.")
+                        pcall(function()
+                            disableMegalodonLock()
+                            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                                player.Character.HumanoidRootPart.CFrame = CFrame.new(megalodonSavedPosition)
+                            end
+                            megalodonSavedPosition = nil
+                        end)
+                    end
+                else
+                    -- No event was active, and no event is found now.
+                    if not megalodonMissingAlertSent then
+                        print("[Megalodon] No event found on this server. Sending alert.")
+                        sendUnifiedWebhook("megalodon_missing", {})
+                        megalodonMissingAlertSent = true -- Prevent spamming
+                    end
+                end
+                
+                -- Reset state since event is not found
+                megalodonEventActive = false
+                hasTeleportedToMegalodon = false
+                disableMegalodonLock()
+            end
+        else
+            -- Auto Megalodon is turned off, reset everything
+            if megalodonEventActive and megalodonSavedPosition then
+                pcall(function()
+                    disableMegalodonLock()
+                    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        player.Character.HumanoidRootPart.CFrame = CFrame.new(megalodonSavedPosition)
+                    end
+                    megalodonSavedPosition = nil
+                end)
+            end
+            megalodonEventActive = false
+            hasTeleportedToMegalodon = false
+            megalodonMissingAlertSent = false
+            disableMegalodonLock()
+        end
+    end
+end)                end
                 if eventFound then break end
             end
         end
@@ -2042,29 +2095,26 @@ local function autoDetectMegalodon()
             disableMegalodonLock()
         end
     else
-        -- Event props are not found
-        if megalodonEventActive then
-            -- The event was active in the previous check, and now it's gone.
-            print("[Megalodon] Event has ended.")
-            sendUnifiedWebhook("megalodon_ended") -- Send the "ended" notification.
-
+        -- Handle event end
+        local wasActive = megalodonEventActive
+        if wasActive then
             megalodonEventActive = false
-            megalodonEventStartedAt = 0
-            megalodonMissingAlertSent = true -- Prevent the "missing" webhook from firing right after.
+        end
 
-            -- Return to saved position if we teleported
-            if hasTeleportedToMegalodon and megalodonSavedPosition then
-                teleportToMegalodon(megalodonSavedPosition, false)
-                megalodonSavedPosition = nil
-                hasTeleportedToMegalodon = false
-            end
-        else
-            -- Event was not active, and is still not found.
-            -- Send a "missing" webhook only if it hasn't been sent before.
-            if not megalodonMissingAlertSent then
+        -- Return to saved position when event ends
+        if hasTeleportedToMegalodon and megalodonSavedPosition then
+            teleportToMegalodon(megalodonSavedPosition, false)
+            megalodonSavedPosition = nil
+            hasTeleportedToMegalodon = false
+
+            if wasActive and not megalodonMissingAlertSent then
                 megalodonMissingAlertSent = true
-                sendMegalodonEventWebhook("missing") -- This is the legacy function that calls sendUnifiedWebhook("megalodon_missing")
+                megalodonEventStartedAt = 0
             end
+        elseif not megalodonMissingAlertSent then
+            -- Send webhook about missing event only once per session
+            megalodonMissingAlertSent = true
+            sendMegalodonEventWebhook("missing")
         end
     end
 end
