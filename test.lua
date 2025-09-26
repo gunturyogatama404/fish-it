@@ -420,7 +420,7 @@ local isAutoCatchOn = false
 local isAutoWeatherOn = false
 local gpuSaverEnabled = false
 local isAutoMegalodonOn = false
-local megalodonSavedPosition = nil
+local megalodonSavedPosition = nil -- Will store full CFrame (position + orientation)
 local hasTeleportedToMegalodon = false
 local currentBodyPosition = nil
 
@@ -432,6 +432,8 @@ local isAutoPreset3On = false
 local megalodonEventActive = false
 local megalodonMissingAlertSent = false
 local megalodonEventStartedAt = 0
+local megalodonEventEndAlertSent = false
+local megalodonPreEventFarmState = nil
 
 local HttpService = game:GetService("HttpService")
 
@@ -482,9 +484,9 @@ local defaultConfig = {
     gpuSaver = false,
     chargeFishingDelay = 0.01,
     autoFishMainDelay = 0.9,
-    autoSellDelay = 35,
+    autoSellDelay = 45,
     autoCatchDelay = 0.2,
-    weatherIdDelay = 3,
+    weatherIdDelay = 33,
     weatherCycleDelay = 100
 }
 local config = {}
@@ -995,9 +997,9 @@ local connections = {}
 -- ====== DELAY VARIABLES ====== 
 local chargeFishingDelay = 0.01
 local autoFishMainDelay = 0.9
-local autoSellDelay = 5
+local autoSellDelay = 45
 local autoCatchDelay = 0.2
-local weatherIdDelay = 3
+local weatherIdDelay = 33
 local weatherCycleDelay = 100
 
 local HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool
@@ -1605,16 +1607,14 @@ local function enablePreset(presetKey, locationName)
             end)
         end
 
-        table.insert(steps, function() 
+        table.insert(steps, function()
             enableGPUSaver()
         end)
 
-        -- Set custom delay for Kohana preset
-        if presetKey == "auto3" then
-            table.insert(steps, function() 
-                setAutoFishDelayForKohana()
-            end)
-        end
+        -- Set custom delays for each preset
+        table.insert(steps, function()
+            setDelaysForPreset(presetKey)
+        end)
 
         runPresetSequence(steps)
 
@@ -1686,17 +1686,21 @@ local function disablePreset(presetKey)
             end,
         }
 
-        -- Reset delay for Kohana preset
-        if presetKey == "auto3" then
-            table.insert(steps, function() 
-                if autoFishMainSlider then 
-                    autoFishMainSlider:Set(0.9)
-                else
-                    setAutoFishMainDelay(0.9)
-                end
-                print("[Preset] Auto Fish Delay reset to default (0.9s)")
-            end)
-        end
+        -- Reset delays when disabling preset
+        table.insert(steps, function()
+            -- Reset to default delays
+            if autoFishMainSlider then
+                autoFishMainSlider:Set(0.9)
+            else
+                setAutoFishMainDelay(0.9)
+            end
+            if autoCatchSlider then
+                autoCatchSlider:Set(0.2)
+            else
+                setAutoCatchDelay(0.2)
+            end
+            print("[Preset] Delays reset to default: Fish=0.9s, Catch=0.2s")
+        end)
 
         runPresetSequence(steps)
 
@@ -1774,10 +1778,11 @@ local function teleportToMegalodon(position, isEventTeleport)
         local humanoid = player.Character.Humanoid
         local rootPart = player.Character.HumanoidRootPart
 
-        -- Save position before teleport to event
+        -- Save FULL CFrame (position + orientation) before teleport to event
         if isEventTeleport and not hasTeleportedToMegalodon then
-            megalodonSavedPosition = rootPart.Position
+            megalodonSavedPosition = rootPart.CFrame -- Save full CFrame, not just position
             hasTeleportedToMegalodon = true
+            print("[Megalodon] Saved player CFrame before event teleport")
         end
 
         -- Remove lock before teleport if exists
@@ -1786,21 +1791,32 @@ local function teleportToMegalodon(position, isEventTeleport)
             currentBodyPosition = nil
         end
 
-        -- Teleport to position
-        rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+        -- Teleport to position with proper orientation
+        if type(position) == "userdata" and position.X then
+            -- If position is a Vector3, create new CFrame with default orientation
+            rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+        elseif type(position) == "userdata" and position.Position then
+            -- If position is already a CFrame, use it directly
+            rootPart.CFrame = position + Vector3.new(0, 5, 0)
+        else
+            -- Fallback
+            rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+        end
         task.wait(0.1)
 
         -- Jump once
         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
         task.wait(0.5)
 
-        -- Enable floating/lock position
-        currentBodyPosition = Instance.new("BodyPosition")
-        currentBodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        currentBodyPosition.Position = position + Vector3.new(0, 5, 0)
-        currentBodyPosition.P = 10000
-        currentBodyPosition.D = 1000
-        currentBodyPosition.Parent = rootPart
+        -- Enable floating/lock position only for event teleports
+        if isEventTeleport then
+            currentBodyPosition = Instance.new("BodyPosition")
+            currentBodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            currentBodyPosition.Position = (type(position) == "userdata" and position.Position and position.Position or position) + Vector3.new(0, 5, 0)
+            currentBodyPosition.P = 10000
+            currentBodyPosition.D = 1000
+            currentBodyPosition.Parent = rootPart
+        end
     end
 end
 
@@ -1809,6 +1825,42 @@ local function disableMegalodonLock()
         currentBodyPosition:Destroy()
         currentBodyPosition = nil
     end
+end
+
+local function formatDuration(seconds)
+    if not seconds or seconds <= 0 then
+        return "Unavailable"
+    end
+
+    seconds = math.floor(seconds)
+    local hours = math.floor(seconds / 3600)
+    local minutes = math.floor((seconds % 3600) / 60)
+    local remainingSeconds = seconds % 60
+
+    if hours > 0 then
+        return string.format("%dh %dm %ds", hours, minutes, remainingSeconds)
+    elseif minutes > 0 then
+        return string.format("%dm %ds", minutes, remainingSeconds)
+    else
+        return string.format("%ds", remainingSeconds)
+    end
+end
+
+local function resumeFarmingAfterMegalodon(previousAutoFarmState)
+    task.spawn(function()
+        local shouldResume = previousAutoFarmState
+        if shouldResume == nil then
+            shouldResume = config.autoFarm
+        end
+
+        if shouldResume then
+            if not isAutoFarmOn then
+                setAutoFarm(true)
+            else
+                equipRod()
+            end
+        end
+    end)
 end
 
 -- ====== MEGALODON WEBHOOK ====== 
@@ -1850,6 +1902,26 @@ local function sendUnifiedWebhook(webhookType, data)
             },
             footer = { text = 'Megalodon Watch - Auto Fish' }
         }
+    elseif webhookType == "megalodon_ended" then
+        local endedAt = data and data.endedAt or os.time()
+        local startedAt = data and data.startedAt or 0
+        local duration = data and data.duration
+        if (not duration or duration <= 0) and startedAt > 0 then
+            duration = math.max(0, endedAt - startedAt)
+        end
+
+        embed = {
+            title = '[Megalodon] Event Ended',
+            description = 'Megalodon Hunt props removed. Resuming farming routine.',
+            color = 3447003, -- Blue
+            fields = {
+                { name = "Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+                { name = "Ended At", value = os.date("%H:%M:%S", endedAt), inline = true },
+                { name = "Duration", value = formatDuration(duration), inline = true },
+            },
+            footer = { text = 'Megalodon Watch - Auto Fish' }
+        }
+
     elseif webhookType == "fish_found" then
         embed = {
             title = "🎣 SECRET Fish Found",
@@ -1927,6 +1999,8 @@ end
 local sendMegalodonEventWebhook = function(status, data)
     if status == "missing" then
         sendUnifiedWebhook("megalodon_missing", data)
+    elseif status == "ended" then
+        sendUnifiedWebhook("megalodon_ended", data)
     end
 end
 
@@ -2009,6 +2083,8 @@ local function autoDetectMegalodon()
         if not megalodonEventActive then
             megalodonEventActive = true
             megalodonMissingAlertSent = false
+            megalodonEventEndAlertSent = false
+            megalodonPreEventFarmState = isAutoFarmOn
             megalodonEventStartedAt = os.time()
         end
 
@@ -2018,22 +2094,44 @@ local function autoDetectMegalodon()
             disableMegalodonLock()
         end
     else
-        -- Handle event end
+        -- Handle event end or missing props
         local wasActive = megalodonEventActive
         if wasActive then
             megalodonEventActive = false
         end
 
-        -- Return to saved position when event ends
         if hasTeleportedToMegalodon and megalodonSavedPosition then
-            teleportToMegalodon(megalodonSavedPosition, false)
+            -- Restore player to saved CFrame (position + orientation)
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                player.Character.HumanoidRootPart.CFrame = megalodonSavedPosition
+                print("[Megalodon] Restored player to original CFrame")
+            end
             megalodonSavedPosition = nil
             hasTeleportedToMegalodon = false
+            disableMegalodonLock()
+        end
 
-            if wasActive and not megalodonMissingAlertSent then
+        if wasActive then
+            if not megalodonEventEndAlertSent then
+                megalodonEventEndAlertSent = true
                 megalodonMissingAlertSent = true
-                megalodonEventStartedAt = 0
+
+                local eventEndedAt = os.time()
+                local duration = nil
+                if megalodonEventStartedAt and megalodonEventStartedAt > 0 then
+                    duration = math.max(0, eventEndedAt - megalodonEventStartedAt)
+                end
+
+                sendMegalodonEventWebhook("ended", {
+                    endedAt = eventEndedAt,
+                    startedAt = megalodonEventStartedAt,
+                    duration = duration,
+                })
             end
+
+            megalodonEventStartedAt = 0
+            resumeFarmingAfterMegalodon(megalodonPreEventFarmState)
+            megalodonPreEventFarmState = nil
         elseif not megalodonMissingAlertSent then
             -- Send webhook about missing event only once per session
             megalodonMissingAlertSent = true
@@ -2054,6 +2152,8 @@ local function setAutoMegalodon(state)
         megalodonEventActive = false
         megalodonMissingAlertSent = false
         megalodonEventStartedAt = 0
+        megalodonEventEndAlertSent = false
+        megalodonPreEventFarmState = nil
     end
     print("🦈 Auto Megalodon Hunt: " .. (state and "ENABLED" or "DISABLED"))
 end
@@ -2557,6 +2657,36 @@ local function setAutoFishDelayForKohana()
         setAutoFishMainDelay(5)
     end
     print("[Preset] Auto Fish Delay set to 5 seconds for Kohana")
+end
+
+local function setDelaysForPreset(presetKey)
+    if presetKey == "auto1" or presetKey == "auto2" then
+        -- Auto 1 dan Auto 2: Auto Fish Delay 0.1s, Auto Catch Delay 0.1s
+        if autoFishMainSlider then
+            autoFishMainSlider:Set(0.1)
+        else
+            setAutoFishMainDelay(0.1)
+        end
+        if autoCatchSlider then
+            autoCatchSlider:Set(0.1)
+        else
+            setAutoCatchDelay(0.1)
+        end
+        print("[Preset] Set delays for " .. presetKey .. ": Fish=0.1s, Catch=0.1s")
+    elseif presetKey == "auto3" then
+        -- Auto 3: Auto Fish Delay 5s, Auto Catch Delay 0.6s
+        if autoFishMainSlider then
+            autoFishMainSlider:Set(5)
+        else
+            setAutoFishMainDelay(5)
+        end
+        if autoCatchSlider then
+            autoCatchSlider:Set(0.6)
+        else
+            setAutoCatchDelay(0.6)
+        end
+        print("[Preset] Set delays for " .. presetKey .. ": Fish=5s, Catch=0.6s")
+    end
 end
 
 
