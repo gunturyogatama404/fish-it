@@ -482,9 +482,9 @@ local defaultConfig = {
     gpuSaver = false,
     chargeFishingDelay = 0.01,
     autoFishMainDelay = 0.9,
-    autoSellDelay = 35,
+    autoSellDelay = 34,
     autoCatchDelay = 0.2,
-    weatherIdDelay = 3,
+    weatherIdDelay = 20,
     weatherCycleDelay = 100
 }
 local config = {}
@@ -995,9 +995,9 @@ local connections = {}
 -- ====== DELAY VARIABLES ====== 
 local chargeFishingDelay = 0.01
 local autoFishMainDelay = 0.9
-local autoSellDelay = 5
+local autoSellDelay = 34
 local autoCatchDelay = 0.2
-local weatherIdDelay = 3
+local weatherIdDelay = 20
 local weatherCycleDelay = 100
 
 local HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool
@@ -1609,10 +1609,18 @@ local function enablePreset(presetKey, locationName)
             enableGPUSaver()
         end)
 
-        -- Set custom delay for Kohana preset
-        if presetKey == "auto3" then
-            table.insert(steps, function() 
-                setAutoFishDelayForKohana()
+        -- Set custom delays for presets
+        if presetKey == "auto1" or presetKey == "auto2" then
+            table.insert(steps, function()
+                if autoFishMainSlider then autoFishMainSlider:Set(0.1) else setAutoFishMainDelay(0.1) end
+                if autoCatchSlider then autoCatchSlider:Set(0.1) else setAutoCatchDelay(0.1) end
+                print("[Preset] Delays set for " .. presetKey .. ": Fish(0.1s), Catch(0.1s)")
+            end)
+        elseif presetKey == "auto3" then
+            table.insert(steps, function()
+                if autoFishMainSlider then autoFishMainSlider:Set(5.5) else setAutoFishMainDelay(5.5) end
+                if autoCatchSlider then autoCatchSlider:Set(0.6) else setAutoCatchDelay(0.6) end
+                print("[Preset] Delays set for " .. presetKey .. ": Fish(5.5s), Catch(0.6s)")
             end)
         end
 
@@ -1686,15 +1694,20 @@ local function disablePreset(presetKey)
             end,
         }
 
-        -- Reset delay for Kohana preset
-        if presetKey == "auto3" then
-            table.insert(steps, function() 
-                if autoFishMainSlider then 
-                    autoFishMainSlider:Set(0.9)
+        -- Reset delays to default
+        if presetKey == "auto1" or presetKey == "auto2" or presetKey == "auto3" then
+            table.insert(steps, function()
+                if autoFishMainSlider then
+                    autoFishMainSlider:Set(defaultConfig.autoFishMainDelay)
                 else
-                    setAutoFishMainDelay(0.9)
+                    setAutoFishMainDelay(defaultConfig.autoFishMainDelay)
                 end
-                print("[Preset] Auto Fish Delay reset to default (0.9s)")
+                if autoCatchSlider then
+                    autoCatchSlider:Set(defaultConfig.autoCatchDelay)
+                else
+                    setAutoCatchDelay(defaultConfig.autoCatchDelay)
+                end
+                print("[Preset] Delays reset to default: Fish(" .. defaultConfig.autoFishMainDelay .. "s), Catch(" .. defaultConfig.autoCatchDelay .. "s)")
             end)
         end
 
@@ -2066,10 +2079,172 @@ local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifi
 local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
 local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
+-- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
+local DISCORD_USER_ID = discordid  -- Ganti dengan User ID Discord yang ingin di-tag
+
+-- QUEUE SYSTEM untuk multiple accounts (mencegah rate limiting)
+local webhookQueue = {}
+local isProcessingQueue = false
+local WEBHOOK_DELAY = 2  -- seconds between webhook sends
+local lastWebhookSent = 0
+
 -- ====== RECONNECT DETECTION SYSTEM ======
 local lastSessionId = nil
 local lastDisconnectTime = nil
 local RECONNECT_THRESHOLD = 60  -- seconds, if reconnect within this time = quick reconnect
+local NEW_SESSION_THRESHOLD = 60  -- seconds, if offline > 1 minute = treat as new connection
+
+-- Fungsi untuk mengirim status koneksi ke webhook khusus
+local function sendConnectionStatusWebhook(status, reason)
+    print("[Connection Status] Attempting to send webhook - Status: " .. tostring(status) .. ", Reason: " .. tostring(reason or "none"))
+
+    -- Check if webhook URL is configured
+    if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" then
+        warn('[Connection Status] Webhook URL not configured! Please set CONNECTION_WEBHOOK_URL variable.')
+        print("[Connection Status] Current webhook3 value: " .. tostring(webhook3 or "nil"))
+        return
+    end
+
+    print("[Connection Status] Webhook URL configured, proceeding to send...")
+
+    local embed = {}
+
+    if status == "connected" then
+        embed = {
+            title = "🟢 Player Connected",
+            description = "Auto Fish script has been successfully started",
+            color = 65280, -- Green
+            fields = {
+                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
+                { name = "🎮 Game", value = "🐠 Fish It", inline = true },
+                { name = "📱 Status", value = "Auto Fish Active", inline = false }
+            },
+            footer = { text = "Connection Monitor • Auto Fish Script" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+        }
+    elseif status == "reconnected" then
+        embed = {
+            title = "🔄 Player Reconnected",
+            description = reason or "Player has successfully reconnected to the server",
+            color = 3066993, -- Blue-green
+            fields = {
+                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
+                { name = "🔄 Reconnect Info", value = reason or "Reconnection detected", inline = false },
+                { name = "📱 Status", value = "Auto Fish Resumed", inline = true }
+            },
+            footer = { text = "Reconnect Monitor • Auto Fish Script" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+        }
+    elseif status == "disconnected" then
+        embed = {
+            title = "🔴 Player Disconnected",
+            description = reason or "Player has disconnected from the server",
+            color = 16711680, -- Red
+            fields = {
+                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
+                { name = "🔌 Reason", value = reason or "Unknown", inline = false },
+                { name = "⏱️ Session Duration", value = FormatTime(os.time() - startTime), inline = true },
+                { name = "📱 Game", value = "🐠 Fish It", inline = true },
+                { name = "🆔 User ID", value = tostring(LocalPlayer.UserId), inline = true }
+            },
+            footer = { text = "Disconnect Alert • Auto Fish Script" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+        }
+    else
+        warn('[Connection Status] Unknown status type: ' .. tostring(status))
+        return
+    end
+
+    -- Prepare payload with mentions for disconnect and reconnect status
+    local payload = { embeds = {embed} }
+
+    if status == "disconnected" then
+        -- Add content field with mentions for disconnect notifications
+        payload.content = "<@" .. DISCORD_USER_ID .. "> 🔴 **ALERT: Player telah DISCONNECT!** 🚨"
+
+    elseif status == "reconnected" then
+        -- Add content field with mentions for reconnect notifications
+        payload.content = "<@" .. DISCORD_USER_ID .. "> 🟡 **Player telah RECONNECT!** ✅"
+
+    elseif status == "connected" then
+        -- No tag for normal connection, but add user info in embed
+        payload.content = ""
+    end
+
+    -- Always add allowed_mentions for any status that has content with user mention
+    if payload.content and payload.content ~= "" then
+        -- Ensure DISCORD_USER_ID is string and valid
+        local userIdStr = tostring(DISCORD_USER_ID)
+
+        payload.allowed_mentions = {
+            users = {userIdStr}
+        }
+
+        print("[Connection Status] DEBUG - Notification with tag:")
+        print("[Connection Status] - Status: " .. status)
+        print("[Connection Status] - Content: " .. payload.content)
+        print("[Connection Status] - User ID: " .. userIdStr)
+        print("[Connection Status] - Allowed mentions set for user: " .. userIdStr)
+
+        -- Validate the mention format
+        if string.find(payload.content, "<@" .. userIdStr .. ">") then
+            print("[Connection Status] - ✅ Mention format validated")
+        else
+            print("[Connection Status] - ❌ Mention format validation failed!")
+        end
+    end
+
+    local body = HttpService:JSONEncode(payload)
+
+    -- DEBUG: Print full payload before sending
+    print("[Connection Status] DEBUG - Full payload JSON:")
+    print(body)
+
+    -- Send webhook with retry logic
+    task.spawn(function()
+        local attempt = 1
+        local maxAttempts = 3
+        local success = false
+
+        while attempt <= maxAttempts and not success do
+            local retryDelay = 2 * attempt -- Progressive delay
+
+            if attempt > 1 then
+                print('[Connection Status] Retry attempt ' .. attempt .. ' after ' .. retryDelay .. ' seconds...')
+                task.wait(retryDelay)
+            end
+
+            success, err = pcall(function()
+                if syn and syn.request then
+                    syn.request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif http_request then
+                    http_request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif fluxus and fluxus.request then
+                    fluxus.request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                elseif request then
+                    request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                else
+                    error("Executor does not support HTTP requests")
+                end
+            end)
+
+            if success then
+                print('[Connection Status] ' .. status .. ' notification sent successfully on attempt ' .. attempt)
+                break
+            else
+                warn('[Connection Status] ' .. status .. ' attempt ' .. attempt .. ' failed: ' .. tostring(err))
+                attempt = attempt + 1
+            end
+        end
+
+        if not success then
+            warn('[Connection Status] All ' .. status .. ' attempts failed')
+        end
+    end)
+end
 
 -- Load previous session data (if available)
 local function loadSessionData()
@@ -2141,6 +2316,13 @@ end
 
 -- Initialize reconnect detection
 local function initializeReconnectDetection()
+    -- Verify that the webhook function is available
+    if not sendConnectionStatusWebhook or type(sendConnectionStatusWebhook) ~= "function" then
+        warn("[Reconnect] ERROR: sendConnectionStatusWebhook function not available!")
+        warn("[Reconnect] Aborting reconnect detection initialization")
+        return
+    end
+
     local currentSessionId = game.JobId
     local currentTime = os.time()
 
@@ -2156,11 +2338,20 @@ local function initializeReconnectDetection()
         local timeDiff = currentTime - lastDisconnectTime
         print("[Reconnect] Time difference: " .. timeDiff .. " seconds")
 
-        if currentSessionId == lastSessionId then
-            -- Same server session
-            print("[Reconnect] Same server detected!")
-            if timeDiff <= RECONNECT_THRESHOLD then
-                -- Quick reconnect detected
+        -- NEW LOGIC: If offline > 1 minute, treat as new session
+        if timeDiff > NEW_SESSION_THRESHOLD then
+            print("[Reconnect] Offline > 1 minute (" .. timeDiff .. "s) - treating as new connection")
+            local success, err = pcall(function()
+                sendConnectionStatusWebhook("connected", "New connection after " .. math.floor(timeDiff/60) .. " minute(s) offline")
+            end)
+            if not success then
+                print("[Reconnect] Error sending new connection webhook: " .. tostring(err))
+            end
+        else
+            -- Within 1 minute threshold - check reconnect type
+            if currentSessionId == lastSessionId then
+                -- Same server session
+                print("[Reconnect] Same server detected!")
                 print("[Reconnect] Quick reconnect detected - sending webhook")
                 local sessionPreview = string.sub(tostring(currentSessionId or "unknown"), 1, 8)
                 local success, err = pcall(function()
@@ -2170,20 +2361,8 @@ local function initializeReconnectDetection()
                     print("[Reconnect] Error sending quick reconnect webhook: " .. tostring(err))
                 end
             else
-                -- Slow reconnect to same server
-                print("[Reconnect] Slow reconnect detected - sending webhook")
-                local sessionPreview = string.sub(tostring(currentSessionId or "unknown"), 1, 8)
-                local success, err = pcall(function()
-                    sendConnectionStatusWebhook("reconnected", "Reconnected to same server (Session: " .. sessionPreview .. "..., Time: " .. tostring(timeDiff) .. "s)")
-                end)
-                if not success then
-                    print("[Reconnect] Error sending slow reconnect webhook: " .. tostring(err))
-                end
-            end
-        else
-            -- Different server session
-            print("[Reconnect] Different server detected!")
-            if timeDiff <= RECONNECT_THRESHOLD * 2 then  -- Extended window for server changes
+                -- Different server session within threshold
+                print("[Reconnect] Different server detected!")
                 print("[Reconnect] Server change reconnect detected - sending webhook")
                 local sessionPreview = string.sub(tostring(currentSessionId or "unknown"), 1, 8)
                 local success, err = pcall(function()
@@ -2191,15 +2370,6 @@ local function initializeReconnectDetection()
                 end)
                 if not success then
                     print("[Reconnect] Error sending server change webhook: " .. tostring(err))
-                end
-            else
-                -- Fresh connection after long time
-                print("[Reconnect] Fresh connection after long period - sending webhook")
-                local success, err = pcall(function()
-                    sendConnectionStatusWebhook("connected", "Fresh connection after extended offline period (Time: " .. tostring(timeDiff) .. "s)")
-                end)
-                if not success then
-                    print("[Reconnect] Error sending fresh connection webhook: " .. tostring(err))
                 end
             end
         end
@@ -2220,117 +2390,15 @@ local function initializeReconnectDetection()
     print("[Reconnect] Initialization complete!")
 end
 
--- Fungsi untuk mengirim status koneksi ke webhook khusus
-local function sendConnectionStatusWebhook(status, reason)
-    print("[Connection Status] Attempting to send webhook - Status: " .. tostring(status) .. ", Reason: " .. tostring(reason or "none"))
-
-    -- Check if webhook URL is configured
-    if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" then
-        warn('[Connection Status] Webhook URL not configured! Please set CONNECTION_WEBHOOK_URL variable.')
-        print("[Connection Status] Current webhook3 value: " .. tostring(webhook3 or "nil"))
-        return
-    end
-
-    print("[Connection Status] Webhook URL configured, proceeding to send...")
-
-    local embed = {}
-
-    if status == "connected" then
-        embed = {
-            title = "🟢 Player Connected",
-            description = "Auto Fish script has been successfully started",
-            color = 65280, -- Green
-            fields = {
-                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
-                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
-                { name = "🎮 Game", value = "🐠 Fish It", inline = true },
-                { name = "📱 Status", value = "Auto Fish Active", inline = false }
-            },
-            footer = { text = "Connection Monitor • Auto Fish Script" },
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
-        }
-    elseif status == "reconnected" then
-        embed = {
-            title = "🔄 Player Reconnected",
-            description = reason or "Player has successfully reconnected to the server",
-            color = 3066993, -- Blue-green
-            fields = {
-                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
-                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
-                { name = "🔄 Reconnect Info", value = reason or "Reconnection detected", inline = false },
-                { name = "📱 Status", value = "Auto Fish Resumed", inline = true }
-            },
-            footer = { text = "Reconnect Monitor • Auto Fish Script" },
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
-        }
-    elseif status == "disconnected" then
-        embed = {
-            title = "🔴 Player Disconnected",
-            description = reason or "Player has disconnected from the server",
-            color = 16711680, -- Red
-            fields = {
-                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
-                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
-                { name = "🔌 Reason", value = reason or "Unknown", inline = false },
-                { name = "⏱️ Session Duration", value = FormatTime(os.time() - startTime), inline = true }
-            },
-            footer = { text = "Connection Status • Auto Fish Script" },
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
-        }
-    else
-        warn('[Connection Status] Unknown status type: ' .. tostring(status))
-        return
-    end
-
-    local body = HttpService:JSONEncode({ embeds = {embed} })
-
-    -- Send webhook with retry logic
-    task.spawn(function()
-        local attempt = 1
-        local maxAttempts = 3
-        local success = false
-
-        while attempt <= maxAttempts and not success do
-            local retryDelay = 2 * attempt -- Progressive delay
-
-            if attempt > 1 then
-                print('[Connection Status] Retry attempt ' .. attempt .. ' after ' .. retryDelay .. ' seconds...')
-                task.wait(retryDelay)
-            end
-
-            success, err = pcall(function()
-                if syn and syn.request then
-                    syn.request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                elseif http_request then
-                    http_request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                elseif fluxus and fluxus.request then
-                    fluxus.request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                elseif request then
-                    request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
-                else
-                    error("Executor does not support HTTP requests")
-                end
-            end)
-
-            if success then
-                print('[Connection Status] ' .. status .. ' notification sent successfully on attempt ' .. attempt)
-                break
-            else
-                warn('[Connection Status] ' .. status .. ' attempt ' .. attempt .. ' failed: ' .. tostring(err))
-                attempt = attempt + 1
-            end
-        end
-
-        if not success then
-            warn('[Connection Status] All ' .. status .. ' attempts failed')
-        end
-    end)
-end
-
 -- Send connection status notification when script starts
 task.spawn(function()
     -- Wait a bit to ensure all services are loaded
+    print("[Reconnect] Starting initialization after 2 second delay...")
     task.wait(2)
+
+    -- Debug: Check if function exists
+    print("[Reconnect] Function check - sendConnectionStatusWebhook exists: " .. tostring(sendConnectionStatusWebhook ~= nil))
+    print("[Reconnect] Function check - sendConnectionStatusWebhook type: " .. tostring(type(sendConnectionStatusWebhook)))
 
     initializeReconnectDetection()
     print("✅ Auto Fish script fully initialized and connected!")
@@ -2384,24 +2452,41 @@ local function setupDisconnectNotifier()
 
     -- Monitor network ping for connection issues
     task.spawn(function()
+        local consecutiveFailures = 0
+        local maxConsecutiveFailures = 3  -- Fail 3 times before disconnect
+
         while true do
             local success, ping = pcall(function()
                 return LocalPlayer:GetNetworkPing() * 1000 -- Convert to milliseconds
             end)
 
             if not success then
-                task.spawn(function()
-                    sendDisconnectWebhook(username, "Connection Lost (Ping Failed)")
-                end)
-                break -- Stop monitoring after sending notification
-            elseif ping > PING_THRESHOLD then
-                task.spawn(function()
-                    sendDisconnectWebhook(username, "High Ping Detected (" .. math.floor(ping) .. "ms)")
-                end)
-                break -- Stop monitoring after sending notification
+                consecutiveFailures = consecutiveFailures + 1
+                print("[Disconnect Monitor] Ping check failed (" .. consecutiveFailures .. "/" .. maxConsecutiveFailures .. ")")
+
+                if consecutiveFailures >= maxConsecutiveFailures then
+                    task.spawn(function()
+                        sendDisconnectWebhook(username, "Connection Lost - Multiple ping failures detected")
+                    end)
+                    break -- Stop monitoring after sending notification
+                end
+            else
+                -- Reset failure counter on successful ping
+                if consecutiveFailures > 0 then
+                    consecutiveFailures = 0
+                    print("[Disconnect Monitor] Connection recovered")
+                end
+
+                if ping > PING_THRESHOLD then
+                    print("[Disconnect Monitor] High ping detected: " .. math.floor(ping) .. "ms")
+                    task.spawn(function()
+                        sendDisconnectWebhook(username, "High Ping Detected (" .. math.floor(ping) .. "ms) - Possible connection issue")
+                    end)
+                    break -- Stop monitoring after sending notification
+                end
             end
 
-            task.wait(5) -- Check every 5 seconds
+            task.wait(10) -- Check every 10 seconds (reduced frequency for better performance)
         end
     end)
 
@@ -2419,6 +2504,28 @@ end
 
 -- Initialize disconnect notifier
 setupDisconnectNotifier()
+
+-- TEST FUNCTIONS untuk testing notification dengan tags (hapus setelah testing)
+local function testDisconnectNotification()
+    print("[TEST] Testing disconnect notification with tags...")
+    sendConnectionStatusWebhook("disconnected", "TEST: Manual disconnect test - Tag system check")
+end
+
+local function testReconnectNotification()
+    print("[TEST] Testing reconnect notification with tags...")
+    sendConnectionStatusWebhook("reconnected", "TEST: Manual reconnect test - Tag system check")
+end
+
+-- ENABLE untuk test notifications (comment kembali setelah testing):
+--[[ DISABLED - Remove test notifications
+task.spawn(function()
+    task.wait(5)
+    print("[TEST] Starting tag tests in 5 seconds...")
+    testDisconnectNotification()
+    task.wait(3)
+    testReconnectNotification()
+end)
+--]]
 
 
 -- ====== ENHANCED TOGGLE FUNCTIONS ====== 
@@ -3577,25 +3684,89 @@ task.defer(function()
 end)
 
 local TabTeleport = Window:NewTab("Teleport")
-local SecTP = TabTeleport:NewSection("Quick Teleport")
+local SecTP = TabTeleport:NewSection("All Locations")
 
+-- Function to safely teleport
+local function teleportTo(locationName, cframe)
+    pcall(function()
+        local character = game.Players.LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            character.HumanoidRootPart.CFrame = cframe
+            print("[Teleport] ✅ Successfully teleported to: " .. locationName)
+        else
+            warn("[Teleport] ❌ Character or HumanoidRootPart not found!")
+        end
+    end)
+end
+
+-- Create individual teleport buttons for better UX
+SecTP:NewButton("🏠 Spawn", "Return to spawn area", function()
+    teleportTo("Spawn", CFrame.new(45.2788086, 252.562927, 2987.10913, 1, 0, 0, 0, 1, 0, 0, 0, 1))
+end)
+
+-- Popular fishing locations section
+local SecPopular = TabTeleport:NewSection("Popular Fishing Spots")
+
+SecPopular:NewButton("🌋 Kohana Volcano", "Active volcano area with rare fish", function()
+    teleportTo("Kohana Volcano", CFrame.new(-572.879456, 22.4521465, 148.355331, -0.995764792, -6.67705606e-08, 0.0919371247, -5.74611505e-08, 1, 1.03905414e-07, -0.0919371247, 9.81825394e-08, -0.995764792))
+end)
+
+SecPopular:NewButton("🗿 Sisyphus Statue", "Deep sea location near the ancient statue", function()
+    teleportTo("Sisyphus Statue", CFrame.new(-3728.21606, -135.074417, -1012.12744, -0.977224171, 7.74980258e-09, -0.212209702, 1.566994e-08, 1, -3.5640408e-08, 0.212209702, -3.81539813e-08, -0.977224171))
+end)
+
+SecPopular:NewButton("🏝️ Crater Island", "Isolated crater island with unique catches", function()
+    teleportTo("Crater Island", CFrame.new(1016.49072, 20.0919304, 5069.27295, 0.838976264, 3.30379857e-09, -0.544168055, 2.63538391e-09, 1, 1.01344115e-08, 0.544168055, -9.93662219e-09, 0.838976264))
+end)
+
+-- Deep sea locations section
+local SecDeep = TabTeleport:NewSection("Deep Sea Areas")
+
+SecDeep:NewButton("🌊 Esoteric Depths", "Deepest area with mysterious fish", function()
+    teleportTo("Esoteric Depths", CFrame.new(3248.37109, -1301.53027, 1403.82727, -0.920208454, 7.76270355e-08, 0.391428679, 4.56261056e-08, 1, -9.10549289e-08, -0.391428679, -6.5930152e-08, -0.920208454))
+end)
+
+SecDeep:NewButton("🪸 Coral Reefs", "Colorful reef system", function()
+    teleportTo("Coral Reefs", CFrame.new(-3114.78198, 1.32066584, 2237.52295, -0.304758579, 1.6556676e-08, -0.952429652, -8.50574935e-08, 1, 4.46003305e-08, 0.952429652, 9.46036067e-08, -0.304758579))
+end)
+
+-- Special locations section
+local SecSpecial = TabTeleport:NewSection("Special Areas")
+
+SecSpecial:NewButton("🏝️ Lost Isle", "Mysterious lost island", function()
+    teleportTo("Lost Isle", CFrame.new(-3618.15698, 240.836655, -1317.45801, 1, 0, 0, 0, 1, 0, 0, 0, 1))
+end)
+
+SecSpecial:NewButton("🌴 Tropical Grove", "Lush tropical area", function()
+    teleportTo("Tropical Grove", CFrame.new(-2095.34106, 197.199997, 3718.08008))
+end)
+
+SecSpecial:NewButton("💎 Treasure Room", "Hidden treasure chamber", function()
+    teleportTo("Treasure Room", CFrame.new(-3606.34985, -266.57373, -1580.97339, 0.998743415, 1.12141152e-13, -0.0501160324, -1.56847693e-13, 1, -8.88127842e-13, 0.0501160324, 8.94872392e-13, 0.998743415))
+end)
+
+-- Utility locations section
+local SecUtility = TabTeleport:NewSection("Utility Locations")
+
+SecUtility:NewButton("🌤️ Weather Machine", "Control weather patterns", function()
+    teleportTo("Weather Machine", CFrame.new(-1488.51196, 83.1732635, 1876.30298, 1, 0, 0, 0, 1, 0, 0, 0, 1))
+end)
+
+SecUtility:NewButton("🏘️ Kohana Village", "Main village area", function()
+    teleportTo("Kohana", CFrame.new(-663.904236, 3.04580712, 718.796875, -0.100799225, -2.14183729e-08, -0.994906783, -1.12300391e-08, 1, -2.03902459e-08, 0.994906783, 9.11752096e-09, -0.100799225))
+end)
+
+-- Quick dropdown for legacy support
+local SecQuick = TabTeleport:NewSection("Quick Select (Legacy)")
 local tpNames = {}
 for _, loc in ipairs(teleportLocations) do
     table.insert(tpNames, loc.Name)
 end
 
-SecTP:NewDropdown("Pilih Lokasi", "Teleport instan ke lokasi", tpNames, function(chosen)
+SecQuick:NewDropdown("Location Selector", "Choose location from dropdown", tpNames, function(chosen)
     for _, location in ipairs(teleportLocations) do
         if location.Name == chosen then
-            pcall(function()
-                local rootPart = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if rootPart then
-                    rootPart.CFrame = location.CFrame
-                    print("[Auto Fish] Teleported to: " .. chosen)
-                else
-                    warn("[Auto Fish] Character or HumanoidRootPart not found")
-                end
-            end)
+            teleportTo(chosen, location.CFrame)
             break
         end
     end
