@@ -955,7 +955,7 @@ local defaultConfig = {
     gpuSaver = false,
     chargeFishingDelay = 0.01,
     autoFishMainDelay = 0.9,
-    autoSellDelay = 35,
+    autoSellDelay = 55,
     autoCatchDelay = 0.2,
     weatherIdDelay = 3,
     weatherCycleDelay = 100
@@ -1178,19 +1178,25 @@ local function applyDelayConfig()
         return clamped
     end
 
-    chargeFishingDelay = applyField("chargeFishingDelay", 0.1, defaultConfig.chargeFishingDelay)
+    chargeFishingDelay = applyField("chargeFishingDelay", 0.01, defaultConfig.chargeFishingDelay)
     autoFishMainDelay = applyField("autoFishMainDelay", 0.1, defaultConfig.autoFishMainDelay)
-    autoSellDelay = applyField("autoSellDelay", 36, defaultConfig.autoSellDelay)
+    autoSellDelay = applyField("autoSellDelay", 1, defaultConfig.autoSellDelay)
     autoCatchDelay = applyField("autoCatchDelay", 0.1, defaultConfig.autoCatchDelay)
     weatherIdDelay = applyField("weatherIdDelay", 1, defaultConfig.weatherIdDelay)
-    weatherCycleDelay = applyField("weatherCycleDelay", 35, defaultConfig.weatherCycleDelay)
+    weatherCycleDelay = applyField("weatherCycleDelay", 10, defaultConfig.weatherCycleDelay)
 
     if updated then
         pcall(saveConfig)
     end
 
     isApplyingConfig = previousState
-    print("[Config] Delay settings applied from config")
+    print("[Config] Delay settings applied from config:")
+    print("  - Charge Fishing: " .. string.format("%.2fs", chargeFishingDelay))
+    print("  - Auto Fish Main: " .. string.format("%.2fs", autoFishMainDelay))
+    print("  - Auto Sell: " .. string.format("%.2fs", autoSellDelay))
+    print("  - Auto Catch: " .. string.format("%.2fs", autoCatchDelay))
+    print("  - Weather ID: " .. string.format("%.2fs", weatherIdDelay))
+    print("  - Weather Cycle: " .. string.format("%.2fs", weatherCycleDelay))
 end
 
 local function roundDelay(value)
@@ -1465,10 +1471,10 @@ local originalSettings = {}
 local whiteScreenGui = nil
 local connections = {}
 
--- ====== DELAY VARIABLES ====== 
+-- ====== DELAY VARIABLES ======
 local chargeFishingDelay = 0.01
 local autoFishMainDelay = 0.9
-local autoSellDelay = 5
+local autoSellDelay = 55
 local autoCatchDelay = 0.2
 local weatherIdDelay = 3
 local weatherCycleDelay = 100
@@ -2082,12 +2088,8 @@ local function enablePreset(presetKey, locationName)
             enableGPUSaver()
         end)
 
-        -- Set custom delay for Kohana preset
-        if presetKey == "auto3" then
-            table.insert(steps, function() 
-                setAutoFishDelayForKohana()
-            end)
-        end
+        -- Note: Custom delays are preserved and will not be overridden by presets
+        -- Users can manually adjust delays in the Delay Settings section if needed
 
         runPresetSequence(steps)
 
@@ -2159,17 +2161,8 @@ local function disablePreset(presetKey)
             end,
         }
 
-        -- Reset delay for Kohana preset
-        if presetKey == "auto3" then
-            table.insert(steps, function() 
-                if autoFishMainSlider then 
-                    autoFishMainSlider:Set(0.9)
-                else
-                    setAutoFishMainDelay(0.9)
-                end
-                print("[Preset] Auto Fish Delay reset to default (0.9s)")
-            end)
-        end
+        -- Note: Custom delays are preserved when disabling presets
+        -- Users can manually adjust delays in the Delay Settings section if needed
 
         runPresetSequence(steps)
 
@@ -3038,14 +3031,9 @@ local function setAutoWeather(state)
     print("🌤️ Auto Weather: " .. (state and "ENABLED" or "DISABLED"))
 end
 
-local function setAutoFishDelayForKohana()
-    if autoFishMainSlider then
-        autoFishMainSlider:Set(5)
-    else
-        setAutoFishMainDelay(5)
-    end
-    print("[Preset] Auto Fish Delay set to 5 seconds for Kohana")
-end
+-- Note: setAutoFishDelayForKohana function removed to preserve custom delay settings
+-- Users can manually adjust Auto Fish Main Delay in the Delay Settings section
+-- if they want different delays for different locations
 
 
 -- ====== ENHANCED MOBILE UI LIBRARY ====== 
