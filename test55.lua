@@ -26,6 +26,7 @@ local function suppressAssetErrors()
 end
 suppressAssetErrors()
 
+
 -- ====== AUTOMATIC PERFORMANCE OPTIMIZATION ======
 local function ultimatePerformance()
     local workspace = game:GetService("Workspace")
@@ -420,7 +421,7 @@ local isAutoCatchOn = false
 local isAutoWeatherOn = false
 local gpuSaverEnabled = false
 local isAutoMegalodonOn = false
-local megalodonSavedPosition = nil
+local megalodonSavedPosition = nil -- Will store full CFrame (position + orientation)
 local hasTeleportedToMegalodon = false
 local currentBodyPosition = nil
 
@@ -432,6 +433,8 @@ local isAutoPreset3On = false
 local megalodonEventActive = false
 local megalodonMissingAlertSent = false
 local megalodonEventStartedAt = 0
+local megalodonEventEndAlertSent = false
+local megalodonPreEventFarmState = nil
 
 local HttpService = game:GetService("HttpService")
 
@@ -482,9 +485,9 @@ local defaultConfig = {
     gpuSaver = false,
     chargeFishingDelay = 0.01,
     autoFishMainDelay = 0.9,
-    autoSellDelay = 35,
+    autoSellDelay = 45,
     autoCatchDelay = 0.2,
-    weatherIdDelay = 3,
+    weatherIdDelay = 33,
     weatherCycleDelay = 100
 }
 local config = {}
@@ -995,9 +998,9 @@ local connections = {}
 -- ====== DELAY VARIABLES ====== 
 local chargeFishingDelay = 0.01
 local autoFishMainDelay = 0.9
-local autoSellDelay = 5
+local autoSellDelay = 45
 local autoCatchDelay = 0.2
-local weatherIdDelay = 3
+local weatherIdDelay = 33
 local weatherCycleDelay = 100
 
 local HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool
@@ -1399,7 +1402,7 @@ function enableGPUSaver()
             end
         end
         
-        pcall(function() setfpscap(5) end) -- Limit FPS to 5
+        pcall(function() setfpscap(fpsset) end) -- Limit FPS to custom value
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
@@ -1605,16 +1608,14 @@ local function enablePreset(presetKey, locationName)
             end)
         end
 
-        table.insert(steps, function() 
+        table.insert(steps, function()
             enableGPUSaver()
         end)
 
-        -- Set custom delay for Kohana preset
-        if presetKey == "auto3" then
-            table.insert(steps, function() 
-                setAutoFishDelayForKohana()
-            end)
-        end
+        -- Set custom delays for each preset
+        table.insert(steps, function()
+            setDelaysForPreset(presetKey)
+        end)
 
         runPresetSequence(steps)
 
@@ -1686,17 +1687,21 @@ local function disablePreset(presetKey)
             end,
         }
 
-        -- Reset delay for Kohana preset
-        if presetKey == "auto3" then
-            table.insert(steps, function() 
-                if autoFishMainSlider then 
-                    autoFishMainSlider:Set(0.9)
-                else
-                    setAutoFishMainDelay(0.9)
-                end
-                print("[Preset] Auto Fish Delay reset to default (0.9s)")
-            end)
-        end
+        -- Reset delays when disabling preset
+        table.insert(steps, function()
+            -- Reset to default delays
+            if autoFishMainSlider then
+                autoFishMainSlider:Set(0.9)
+            else
+                setAutoFishMainDelay(0.9)
+            end
+            if autoCatchSlider then
+                autoCatchSlider:Set(0.2)
+            else
+                setAutoCatchDelay(0.2)
+            end
+            print("[Preset] Delays reset to default: Fish=0.9s, Catch=0.2s")
+        end)
 
         runPresetSequence(steps)
 
@@ -1774,10 +1779,11 @@ local function teleportToMegalodon(position, isEventTeleport)
         local humanoid = player.Character.Humanoid
         local rootPart = player.Character.HumanoidRootPart
 
-        -- Save position before teleport to event
+        -- Save FULL CFrame (position + orientation) before teleport to event
         if isEventTeleport and not hasTeleportedToMegalodon then
-            megalodonSavedPosition = rootPart.Position
+            megalodonSavedPosition = rootPart.CFrame -- Save full CFrame, not just position
             hasTeleportedToMegalodon = true
+            print("[Megalodon] Saved player CFrame before event teleport")
         end
 
         -- Remove lock before teleport if exists
@@ -1786,21 +1792,32 @@ local function teleportToMegalodon(position, isEventTeleport)
             currentBodyPosition = nil
         end
 
-        -- Teleport to position
-        rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+        -- Teleport to position with proper orientation
+        if type(position) == "userdata" and position.X then
+            -- If position is a Vector3, create new CFrame with default orientation
+            rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+        elseif type(position) == "userdata" and position.Position then
+            -- If position is already a CFrame, use it directly
+            rootPart.CFrame = position + Vector3.new(0, 5, 0)
+        else
+            -- Fallback
+            rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+        end
         task.wait(0.1)
 
         -- Jump once
         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
         task.wait(0.5)
 
-        -- Enable floating/lock position
-        currentBodyPosition = Instance.new("BodyPosition")
-        currentBodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        currentBodyPosition.Position = position + Vector3.new(0, 5, 0)
-        currentBodyPosition.P = 10000
-        currentBodyPosition.D = 1000
-        currentBodyPosition.Parent = rootPart
+        -- Enable floating/lock position only for event teleports
+        if isEventTeleport then
+            currentBodyPosition = Instance.new("BodyPosition")
+            currentBodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            currentBodyPosition.Position = (type(position) == "userdata" and position.Position and position.Position or position) + Vector3.new(0, 5, 0)
+            currentBodyPosition.P = 10000
+            currentBodyPosition.D = 1000
+            currentBodyPosition.Parent = rootPart
+        end
     end
 end
 
@@ -1809,6 +1826,42 @@ local function disableMegalodonLock()
         currentBodyPosition:Destroy()
         currentBodyPosition = nil
     end
+end
+
+local function formatDuration(seconds)
+    if not seconds or seconds <= 0 then
+        return "Unavailable"
+    end
+
+    seconds = math.floor(seconds)
+    local hours = math.floor(seconds / 3600)
+    local minutes = math.floor((seconds % 3600) / 60)
+    local remainingSeconds = seconds % 60
+
+    if hours > 0 then
+        return string.format("%dh %dm %ds", hours, minutes, remainingSeconds)
+    elseif minutes > 0 then
+        return string.format("%dm %ds", minutes, remainingSeconds)
+    else
+        return string.format("%ds", remainingSeconds)
+    end
+end
+
+local function resumeFarmingAfterMegalodon(previousAutoFarmState)
+    task.spawn(function()
+        local shouldResume = previousAutoFarmState
+        if shouldResume == nil then
+            shouldResume = config.autoFarm
+        end
+
+        if shouldResume then
+            if not isAutoFarmOn then
+                setAutoFarm(true)
+            else
+                equipRod()
+            end
+        end
+    end)
 end
 
 -- ====== MEGALODON WEBHOOK ====== 
@@ -1850,6 +1903,26 @@ local function sendUnifiedWebhook(webhookType, data)
             },
             footer = { text = 'Megalodon Watch - Auto Fish' }
         }
+    elseif webhookType == "megalodon_ended" then
+        local endedAt = data and data.endedAt or os.time()
+        local startedAt = data and data.startedAt or 0
+        local duration = data and data.duration
+        if (not duration or duration <= 0) and startedAt > 0 then
+            duration = math.max(0, endedAt - startedAt)
+        end
+
+        embed = {
+            title = '[Megalodon] Event Ended',
+            description = 'Megalodon Hunt props removed. Resuming farming routine.',
+            color = 3447003, -- Blue
+            fields = {
+                { name = "Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+                { name = "Ended At", value = os.date("%H:%M:%S", endedAt), inline = true },
+                { name = "Duration", value = formatDuration(duration), inline = true },
+            },
+            footer = { text = 'Megalodon Watch - Auto Fish' }
+        }
+
     elseif webhookType == "fish_found" then
         embed = {
             title = "🎣 SECRET Fish Found",
@@ -1927,6 +2000,8 @@ end
 local sendMegalodonEventWebhook = function(status, data)
     if status == "missing" then
         sendUnifiedWebhook("megalodon_missing", data)
+    elseif status == "ended" then
+        sendUnifiedWebhook("megalodon_ended", data)
     end
 end
 
@@ -2009,6 +2084,8 @@ local function autoDetectMegalodon()
         if not megalodonEventActive then
             megalodonEventActive = true
             megalodonMissingAlertSent = false
+            megalodonEventEndAlertSent = false
+            megalodonPreEventFarmState = isAutoFarmOn
             megalodonEventStartedAt = os.time()
         end
 
@@ -2018,22 +2095,44 @@ local function autoDetectMegalodon()
             disableMegalodonLock()
         end
     else
-        -- Handle event end
+        -- Handle event end or missing props
         local wasActive = megalodonEventActive
         if wasActive then
             megalodonEventActive = false
         end
 
-        -- Return to saved position when event ends
         if hasTeleportedToMegalodon and megalodonSavedPosition then
-            teleportToMegalodon(megalodonSavedPosition, false)
+            -- Restore player to saved CFrame (position + orientation)
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                player.Character.HumanoidRootPart.CFrame = megalodonSavedPosition
+                print("[Megalodon] Restored player to original CFrame")
+            end
             megalodonSavedPosition = nil
             hasTeleportedToMegalodon = false
+            disableMegalodonLock()
+        end
 
-            if wasActive and not megalodonMissingAlertSent then
+        if wasActive then
+            if not megalodonEventEndAlertSent then
+                megalodonEventEndAlertSent = true
                 megalodonMissingAlertSent = true
-                megalodonEventStartedAt = 0
+
+                local eventEndedAt = os.time()
+                local duration = nil
+                if megalodonEventStartedAt and megalodonEventStartedAt > 0 then
+                    duration = math.max(0, eventEndedAt - megalodonEventStartedAt)
+                end
+
+                sendMegalodonEventWebhook("ended", {
+                    endedAt = eventEndedAt,
+                    startedAt = megalodonEventStartedAt,
+                    duration = duration,
+                })
             end
+
+            megalodonEventStartedAt = 0
+            resumeFarmingAfterMegalodon(megalodonPreEventFarmState)
+            megalodonPreEventFarmState = nil
         elseif not megalodonMissingAlertSent then
             -- Send webhook about missing event only once per session
             megalodonMissingAlertSent = true
@@ -2054,6 +2153,8 @@ local function setAutoMegalodon(state)
         megalodonEventActive = false
         megalodonMissingAlertSent = false
         megalodonEventStartedAt = 0
+        megalodonEventEndAlertSent = false
+        megalodonPreEventFarmState = nil
     end
     print("🦈 Auto Megalodon Hunt: " .. (state and "ENABLED" or "DISABLED"))
 end
@@ -2067,7 +2168,7 @@ local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
 local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
-local DISCORD_USER_ID = "701247227959574567"  -- Ganti dengan User ID Discord yang ingin di-tag
+local DISCORD_USER_ID = discordid  -- Ganti dengan User ID Discord yang ingin di-tag
 
 -- QUEUE SYSTEM untuk multiple accounts (mencegah rate limiting)
 local webhookQueue = {}
@@ -2557,6 +2658,36 @@ local function setAutoFishDelayForKohana()
         setAutoFishMainDelay(5)
     end
     print("[Preset] Auto Fish Delay set to 5 seconds for Kohana")
+end
+
+local function setDelaysForPreset(presetKey)
+    if presetKey == "auto1" or presetKey == "auto2" then
+        -- Auto 1 dan Auto 2: Auto Fish Delay 0.1s, Auto Catch Delay 0.1s
+        if autoFishMainSlider then
+            autoFishMainSlider:Set(0.1)
+        else
+            setAutoFishMainDelay(0.1)
+        end
+        if autoCatchSlider then
+            autoCatchSlider:Set(0.1)
+        else
+            setAutoCatchDelay(0.1)
+        end
+        print("[Preset] Set delays for " .. presetKey .. ": Fish=0.1s, Catch=0.1s")
+    elseif presetKey == "auto3" then
+        -- Auto 3: Auto Fish Delay 5s, Auto Catch Delay 0.6s
+        if autoFishMainSlider then
+            autoFishMainSlider:Set(5)
+        else
+            setAutoFishMainDelay(5)
+        end
+        if autoCatchSlider then
+            autoCatchSlider:Set(0.6)
+        else
+            setAutoCatchDelay(0.6)
+        end
+        print("[Preset] Set delays for " .. presetKey .. ": Fish=5s, Catch=0.6s")
+    end
 end
 
 
@@ -3671,25 +3802,89 @@ task.defer(function()
 end)
 
 local TabTeleport = Window:NewTab("Teleport")
-local SecTP = TabTeleport:NewSection("Quick Teleport")
+local SecTP = TabTeleport:NewSection("All Locations")
 
+-- Function to safely teleport
+local function teleportTo(locationName, cframe)
+    pcall(function()
+        local character = game.Players.LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            character.HumanoidRootPart.CFrame = cframe
+            print("[Teleport] ✅ Successfully teleported to: " .. locationName)
+        else
+            warn("[Teleport] ❌ Character or HumanoidRootPart not found!")
+        end
+    end)
+end
+
+-- Create individual teleport buttons for better UX
+SecTP:NewButton("🏠 Spawn", "Return to spawn area", function()
+    teleportTo("Spawn", CFrame.new(45.2788086, 252.562927, 2987.10913, 1, 0, 0, 0, 1, 0, 0, 0, 1))
+end)
+
+-- Popular fishing locations section
+local SecPopular = TabTeleport:NewSection("Popular Fishing Spots")
+
+SecPopular:NewButton("🌋 Kohana Volcano", "Active volcano area with rare fish", function()
+    teleportTo("Kohana Volcano", CFrame.new(-572.879456, 22.4521465, 148.355331, -0.995764792, -6.67705606e-08, 0.0919371247, -5.74611505e-08, 1, 1.03905414e-07, -0.0919371247, 9.81825394e-08, -0.995764792))
+end)
+
+SecPopular:NewButton("🗿 Sisyphus Statue", "Deep sea location near the ancient statue", function()
+    teleportTo("Sisyphus Statue", CFrame.new(-3728.21606, -135.074417, -1012.12744, -0.977224171, 7.74980258e-09, -0.212209702, 1.566994e-08, 1, -3.5640408e-08, 0.212209702, -3.81539813e-08, -0.977224171))
+end)
+
+SecPopular:NewButton("🏝️ Crater Island", "Isolated crater island with unique catches", function()
+    teleportTo("Crater Island", CFrame.new(1016.49072, 20.0919304, 5069.27295, 0.838976264, 3.30379857e-09, -0.544168055, 2.63538391e-09, 1, 1.01344115e-08, 0.544168055, -9.93662219e-09, 0.838976264))
+end)
+
+-- Deep sea locations section
+local SecDeep = TabTeleport:NewSection("Deep Sea Areas")
+
+SecDeep:NewButton("🌊 Esoteric Depths", "Deepest area with mysterious fish", function()
+    teleportTo("Esoteric Depths", CFrame.new(3248.37109, -1301.53027, 1403.82727, -0.920208454, 7.76270355e-08, 0.391428679, 4.56261056e-08, 1, -9.10549289e-08, -0.391428679, -6.5930152e-08, -0.920208454))
+end)
+
+SecDeep:NewButton("🪸 Coral Reefs", "Colorful reef system", function()
+    teleportTo("Coral Reefs", CFrame.new(-3114.78198, 1.32066584, 2237.52295, -0.304758579, 1.6556676e-08, -0.952429652, -8.50574935e-08, 1, 4.46003305e-08, 0.952429652, 9.46036067e-08, -0.304758579))
+end)
+
+-- Special locations section
+local SecSpecial = TabTeleport:NewSection("Special Areas")
+
+SecSpecial:NewButton("🏝️ Lost Isle", "Mysterious lost island", function()
+    teleportTo("Lost Isle", CFrame.new(-3618.15698, 240.836655, -1317.45801, 1, 0, 0, 0, 1, 0, 0, 0, 1))
+end)
+
+SecSpecial:NewButton("🌴 Tropical Grove", "Lush tropical area", function()
+    teleportTo("Tropical Grove", CFrame.new(-2095.34106, 197.199997, 3718.08008))
+end)
+
+SecSpecial:NewButton("💎 Treasure Room", "Hidden treasure chamber", function()
+    teleportTo("Treasure Room", CFrame.new(-3606.34985, -266.57373, -1580.97339, 0.998743415, 1.12141152e-13, -0.0501160324, -1.56847693e-13, 1, -8.88127842e-13, 0.0501160324, 8.94872392e-13, 0.998743415))
+end)
+
+-- Utility locations section
+local SecUtility = TabTeleport:NewSection("Utility Locations")
+
+SecUtility:NewButton("🌤️ Weather Machine", "Control weather patterns", function()
+    teleportTo("Weather Machine", CFrame.new(-1488.51196, 83.1732635, 1876.30298, 1, 0, 0, 0, 1, 0, 0, 0, 1))
+end)
+
+SecUtility:NewButton("🏘️ Kohana Village", "Main village area", function()
+    teleportTo("Kohana", CFrame.new(-663.904236, 3.04580712, 718.796875, -0.100799225, -2.14183729e-08, -0.994906783, -1.12300391e-08, 1, -2.03902459e-08, 0.994906783, 9.11752096e-09, -0.100799225))
+end)
+
+-- Quick dropdown for legacy support
+local SecQuick = TabTeleport:NewSection("Quick Select (Legacy)")
 local tpNames = {}
 for _, loc in ipairs(teleportLocations) do
     table.insert(tpNames, loc.Name)
 end
 
-SecTP:NewDropdown("Pilih Lokasi", "Teleport instan ke lokasi", tpNames, function(chosen)
+SecQuick:NewDropdown("Location Selector", "Choose location from dropdown", tpNames, function(chosen)
     for _, location in ipairs(teleportLocations) do
         if location.Name == chosen then
-            pcall(function()
-                local rootPart = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if rootPart then
-                    rootPart.CFrame = location.CFrame
-                    print("[Auto Fish] Teleported to: " .. chosen)
-                else
-                    warn("[Auto Fish] Character or HumanoidRootPart not found")
-                end
-            end)
+            teleportTo(chosen, location.CFrame)
             break
         end
     end
