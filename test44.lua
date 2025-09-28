@@ -2158,14 +2158,24 @@ local function setAutoMegalodon(state)
     print("🦈 Auto Megalodon Hunt: " .. (state and "ENABLED" or "DISABLED"))
 end
 
--- ====== CONNECTION STATUS WEBHOOK SYSTEM ======
--- Webhook khusus untuk status connect/disconnect
+-- ====== ENHANCED ONLINE DETECTION SYSTEM ======
+-- Webhook khusus untuk status connect/disconnect dengan message editing
 local CONNECTION_WEBHOOK_URL = webhook3 or ""  -- URL webhook khusus untuk status koneksi
+local SERVER_URL = serverurl or "http://localhost:3000"  -- URL server.js untuk message editing
 
 local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
+local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
+local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
 local DISCORD_USER_ID = discordid  -- Ganti dengan User ID Discord yang ingin di-tag
+
+-- ONLINE DETECTION SETTINGS
+local ONLINE_UPDATE_INTERVAL = 8  -- seconds, interval untuk update timestamp
+local onlineDetectionEnabled = true
+local currentMessageId = nil  -- Store current message ID for editing
+local sessionStartTime = os.time()
+local lastOnlineUpdate = 0
 
 -- QUEUE SYSTEM untuk multiple accounts (mencegah rate limiting)
 local webhookQueue = {}
@@ -2178,6 +2188,223 @@ local lastSessionId = nil
 local lastDisconnectTime = nil
 local RECONNECT_THRESHOLD = 60  -- seconds, if reconnect within this time = quick reconnect
 local NEW_SESSION_THRESHOLD = 60  -- seconds, if offline > 1 minute = treat as new connection
+
+-- ====== ONLINE DETECTION FUNCTIONS ======
+-- Function to send request to server.js for message editing
+local function sendToServer(endpoint, data)
+    if not SERVER_URL or SERVER_URL == "" then
+        warn('[Online Detection] Server URL not configured!')
+        return false
+    end
+
+    local success, result = pcall(function()
+        local body = HttpService:JSONEncode(data)
+        local response
+
+        if syn and syn.request then
+            response = syn.request({
+                Url = SERVER_URL .. endpoint,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = body
+            })
+        elseif http_request then
+            response = http_request({
+                Url = SERVER_URL .. endpoint,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = body
+            })
+        elseif request then
+            response = request({
+                Url = SERVER_URL .. endpoint,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = body
+            })
+        else
+            error("No HTTP request function available")
+        end
+
+        if response and response.Success and response.Body then
+            return HttpService:JSONDecode(response.Body)
+        end
+        return nil
+    end)
+
+    if success and result then
+        return result
+    else
+        warn('[Online Detection] Failed to send to server: ' .. tostring(result))
+        return false
+    end
+end
+
+-- Function to create initial online status message
+local function createOnlineStatusMessage()
+    if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" then
+        warn('[Online Detection] Webhook URL not configured!')
+        return false
+    end
+
+    local embed = {
+        title = "🟢 Player Online",
+        description = "Auto Fish script is running and player is active",
+        color = 65280, -- Green
+        fields = {
+            { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+            { name = "🆔 User ID", value = tostring(LocalPlayer.UserId), inline = true },
+            { name = "🕒 Started", value = os.date("%H:%M:%S"), inline = true },
+            { name = "⏱️ Session Time", value = "0m 0s", inline = true },
+            { name = "🎮 Status", value = "🟢 Online & Active", inline = true },
+            { name = "📊 Last Update", value = os.date("%H:%M:%S"), inline = true }
+        },
+        footer = { text = "Online Monitor • Auto Fish Script" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+    }
+
+    local payload = {
+        embeds = {embed}
+    }
+
+    -- Send initial message and get message ID
+    local response = sendToServer("/send-webhook", {
+        webhook_url = CONNECTION_WEBHOOK_URL,
+        payload = payload
+    })
+
+    if response and response.message_id then
+        currentMessageId = response.message_id
+        print("[Online Detection] Initial status message created with ID: " .. currentMessageId)
+        return true
+    else
+        warn("[Online Detection] Failed to create initial status message")
+        return false
+    end
+end
+
+-- Function to update existing online status message
+local function updateOnlineStatusMessage()
+    if not currentMessageId or not CONNECTION_WEBHOOK_URL then
+        return false
+    end
+
+    local currentTime = os.time()
+    local sessionDuration = currentTime - sessionStartTime
+    local hours = math.floor(sessionDuration / 3600)
+    local minutes = math.floor((sessionDuration % 3600) / 60)
+    local seconds = sessionDuration % 60
+
+    local sessionText = ""
+    if hours > 0 then
+        sessionText = string.format("%dh %dm %ds", hours, minutes, seconds)
+    elseif minutes > 0 then
+        sessionText = string.format("%dm %ds", minutes, seconds)
+    else
+        sessionText = string.format("%ds", seconds)
+    end
+
+    -- Count active features
+    local activeFeatures = {}
+    if isAutoFarmOn then table.insert(activeFeatures, "🚜 Farm") end
+    if isAutoSellOn then table.insert(activeFeatures, "💰 Sell") end
+    if isAutoCatchOn then table.insert(activeFeatures, "🎯 Catch") end
+    if isAutoWeatherOn then table.insert(activeFeatures, "🌤️ Weather") end
+    if isAutoMegalodonOn then table.insert(activeFeatures, "🦈 Megalodon") end
+
+    local statusText = "🟢 Online & Active"
+    if #activeFeatures > 0 then
+        statusText = statusText .. " (" .. table.concat(activeFeatures, ", ") .. ")"
+    end
+
+    local embed = {
+        title = "🟢 Player Online",
+        description = "Auto Fish script is running and player is active",
+        color = 65280, -- Green
+        fields = {
+            { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+            { name = "🆔 User ID", value = tostring(LocalPlayer.UserId), inline = true },
+            { name = "🕒 Started", value = os.date("%H:%M:%S", sessionStartTime), inline = true },
+            { name = "⏱️ Session Time", value = sessionText, inline = true },
+            { name = "🎮 Status", value = statusText, inline = false },
+            { name = "📊 Last Update", value = os.date("%H:%M:%S"), inline = true }
+        },
+        footer = { text = "Online Monitor • Auto Fish Script" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+    }
+
+    local payload = {
+        embeds = {embed}
+    }
+
+    -- Update the existing message
+    local response = sendToServer("/edit-message", {
+        webhook_url = CONNECTION_WEBHOOK_URL,
+        message_id = currentMessageId,
+        payload = payload
+    })
+
+    if response and response.success then
+        lastOnlineUpdate = currentTime
+        print("[Online Detection] Status updated at " .. os.date("%H:%M:%S"))
+        return true
+    else
+        warn("[Online Detection] Failed to update status message")
+        return false
+    end
+end
+
+-- Function to handle player disconnect
+local function handlePlayerDisconnect(reason)
+    if not currentMessageId or not CONNECTION_WEBHOOK_URL then
+        return
+    end
+
+    local currentTime = os.time()
+    local sessionDuration = currentTime - sessionStartTime
+    local hours = math.floor(sessionDuration / 3600)
+    local minutes = math.floor((sessionDuration % 3600) / 60)
+    local seconds = sessionDuration % 60
+
+    local sessionText = ""
+    if hours > 0 then
+        sessionText = string.format("%dh %dm %ds", hours, minutes, seconds)
+    elseif minutes > 0 then
+        sessionText = string.format("%dm %ds", minutes, seconds)
+    else
+        sessionText = string.format("%ds", seconds)
+    end
+
+    local embed = {
+        title = "🔴 Player Disconnected",
+        description = reason or "Player has disconnected from the server",
+        color = 16711680, -- Red
+        fields = {
+            { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
+            { name = "🆔 User ID", value = tostring(LocalPlayer.UserId), inline = true },
+            { name = "🕒 Disconnected", value = os.date("%H:%M:%S"), inline = true },
+            { name = "⏱️ Session Duration", value = sessionText, inline = true },
+            { name = "🔌 Reason", value = reason or "Unknown", inline = false },
+            { name = "📱 Status", value = "🔴 Offline", inline = true }
+        },
+        footer = { text = "Disconnect Alert • Auto Fish Script" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+    }
+
+    local payload = {
+        embeds = {embed},
+        content = "<@" .. DISCORD_USER_ID .. "> 🔴 **ALERT: Player telah DISCONNECT!** 🚨"
+    }
+
+    -- Update the message to show disconnect status
+    sendToServer("/edit-message", {
+        webhook_url = CONNECTION_WEBHOOK_URL,
+        message_id = currentMessageId,
+        payload = payload
+    })
+
+    currentMessageId = nil
+end
 
 -- Fungsi untuk mengirim status koneksi ke webhook khusus
 local function sendConnectionStatusWebhook(status, reason)
@@ -2475,6 +2702,52 @@ local function initializeReconnectDetection()
     print("[Reconnect] Initialization complete!")
 end
 
+-- ====== ONLINE DETECTION SYSTEM INITIALIZATION ======
+-- Main online detection loop
+task.spawn(function()
+    -- Wait for services to load
+    task.wait(3)
+
+    -- Create initial online status message
+    if onlineDetectionEnabled and createOnlineStatusMessage() then
+        print("[Online Detection] System started successfully!")
+
+        -- Main update loop
+        while onlineDetectionEnabled do
+            local currentTime = os.time()
+
+            -- Update message every ONLINE_UPDATE_INTERVAL seconds
+            if currentTime - lastOnlineUpdate >= ONLINE_UPDATE_INTERVAL then
+                if not updateOnlineStatusMessage() then
+                    -- If update fails, try to recreate the message
+                    warn("[Online Detection] Update failed, attempting to recreate message...")
+                    task.wait(2)
+                    createOnlineStatusMessage()
+                end
+            end
+
+            task.wait(1) -- Check every second
+        end
+    else
+        warn("[Online Detection] Failed to initialize online detection system")
+    end
+end)
+
+-- Enhanced disconnect detection with message editing
+local function sendDisconnectWebhook(username, reason)
+    if hasSentDisconnectWebhook then return end
+    hasSentDisconnectWebhook = true
+
+    -- Save session data before disconnect for reconnect detection
+    saveSessionData(game.JobId, os.time())
+
+    -- Update the existing message to show disconnect status
+    handlePlayerDisconnect(reason)
+
+    -- Also send to the legacy webhook system for compatibility
+    sendConnectionStatusWebhook("disconnected", reason)
+end
+
 -- Send connection status notification when script starts
 task.spawn(function()
     -- Wait a bit to ensure all services are loaded
@@ -2489,193 +2762,96 @@ task.spawn(function()
     print("✅ Auto Fish script fully initialized and connected!")
 end)
 
-local function sendDisconnectWebhook(username, reason)
-    if hasSentDisconnectWebhook then return end
-    hasSentDisconnectWebhook = true
-
-    -- Save session data before disconnect for reconnect detection
-    saveSessionData(game.JobId, os.time())
-
-    -- Send only to dedicated connection status webhook (webhook3)
-    sendConnectionStatusWebhook("disconnected", reason)
-end
-
--- Enhanced disconnect detection system - optimized for performance
-local disconnectMonitorActive = true
-local lastAFKWarningTime = 0
-local lastUserInputTime = tick()
-local isMonitoringInput = false
 
 local function setupDisconnectNotifier()
     local username = LocalPlayer.Name
     local GuiService = game:GetService("GuiService")
-    local UserInputService = game:GetService("UserInputService")
 
-    print("🚨 Enhanced disconnect notifier initializing...")
-
-    -- Monitor Roblox system messages for disconnect/kick reasons
+    -- Monitor error messages for disconnect reasons
     GuiService.ErrorMessageChanged:Connect(function(message)
-        if not disconnectMonitorActive or hasSentDisconnectWebhook then return end
-
         local lowerMessage = string.lower(message)
-        local reason = nil
+        local reason = "Unknown"
 
-        -- Check for common disconnect messages
-        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") or lowerMessage:find("you have lost connection") then
+        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") then
             reason = "Connection Lost: " .. message
-        elseif lowerMessage:find("kick") or lowerMessage:find("banned") or lowerMessage:find("removed from") then
-            reason = "Kicked/Banned: " .. message
-        elseif lowerMessage:find("timeout") or lowerMessage:find("request timed out") then
-            reason = "Connection Timeout: " .. message
-        elseif lowerMessage:find("you have been disconnected") then
-            reason = "Disconnected: " .. message
-        elseif lowerMessage:find("login") and lowerMessage:find("another") then
-            reason = "Logged in from another device: " .. message
-        elseif lowerMessage:find("afk") or lowerMessage:find("idle") or lowerMessage:find("20 minutes") then
-            reason = "AFK/Idle Disconnect (20 minutes): " .. message
+        elseif lowerMessage:find("kick") or lowerMessage:find("banned") then
+            reason = "Kicked: " .. message
+        elseif lowerMessage:find("timeout") then
+            reason = "Timeout: " .. message
+        elseif lowerMessage:find("error") then
+            reason = "General Error: " .. message
         else
             return -- Don't send webhook for unrelated errors
         end
 
-        print("[Disconnect Monitor] System message detected: " .. reason)
         task.spawn(function()
             sendDisconnectWebhook(username, reason)
         end)
     end)
 
-    -- Monitor for player removal from game
+    -- Monitor for player removal
     Players.PlayerRemoving:Connect(function(removedPlayer)
-        if removedPlayer == LocalPlayer and not hasSentDisconnectWebhook and disconnectMonitorActive then
-            print("[Disconnect Monitor] Player removal detected")
+        if removedPlayer == LocalPlayer and not hasSentDisconnectWebhook then
             task.spawn(function()
-                sendDisconnectWebhook(username, "Player Removed from Game")
+                sendDisconnectWebhook(username, "Disconnected (Player Removed)")
             end)
         end
     end)
 
-    -- Enhanced AFK detection (passive monitoring)
-    local function setupAFKDetection()
-        local lastPosition = nil
-        local lastCameraPosition = nil
-        local stillnessTimer = 0
-        local maxStillnessTime = 18 * 60 -- 18 minutes (3 minutes before 20min AFK kick)
+    -- Monitor network ping for connection issues
+    task.spawn(function()
+        local consecutiveFailures = 0
+        local maxConsecutiveFailures = 3  -- Fail 3 times before disconnect
 
-        task.spawn(function()
-            while disconnectMonitorActive do
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local currentPos = LocalPlayer.Character.HumanoidRootPart.Position
-                    local currentCamPos = workspace.CurrentCamera.CFrame.Position
+        while true do
+            local success, ping = pcall(function()
+                return LocalPlayer:GetNetworkPing() * 1000 -- Convert to milliseconds
+            end)
 
-                    -- Check if player hasn't moved significantly
-                    if lastPosition and lastCameraPosition then
-                        local positionDelta = (currentPos - lastPosition).Magnitude
-                        local cameraDelta = (currentCamPos - lastCameraPosition).Magnitude
+            if not success then
+                consecutiveFailures = consecutiveFailures + 1
+                print("[Disconnect Monitor] Ping check failed (" .. consecutiveFailures .. "/" .. maxConsecutiveFailures .. ")")
 
-                        if positionDelta < 5 and cameraDelta < 3 then
-                            stillnessTimer = stillnessTimer + 30
-                        else
-                            stillnessTimer = 0 -- Reset if movement detected
-                        end
-
-                        -- Warn at 18 minutes of inactivity
-                        if stillnessTimer >= maxStillnessTime and tick() - lastAFKWarningTime > 600 then
-                            lastAFKWarningTime = tick()
-                            print("[AFK Monitor] Warning: 18 minutes of inactivity detected. AFK kick possible in 2 minutes.")
-                            task.spawn(function()
-                                sendDisconnectWebhook(username, "AFK Warning: 18 minutes inactive - potential kick in 2 minutes")
-                            end)
-                        end
-                    end
-
-                    lastPosition = currentPos
-                    lastCameraPosition = currentCamPos
-                end
-
-                task.wait(30) -- Check every 30 seconds (much more efficient)
-            end
-        end)
-    end
-
-    -- Network state monitoring (lightweight)
-    local function setupNetworkMonitoring()
-        -- Monitor significant network state changes only
-        local lastNetworkState = "connected"
-
-        task.spawn(function()
-            while disconnectMonitorActive do
-                local success, networkPing = pcall(function()
-                    return LocalPlayer:GetNetworkPing()
-                end)
-
-                if not success then
-                    -- Only trigger if we consistently can't get network info
-                    task.wait(5)
-                    local retrySuccess = pcall(function()
-                        return LocalPlayer:GetNetworkPing()
-                    end)
-
-                    if not retrySuccess and lastNetworkState == "connected" then
-                        lastNetworkState = "disconnected"
-                        print("[Network Monitor] Network state change detected")
-                        task.spawn(function()
-                            sendDisconnectWebhook(username, "Network Connection Issues Detected")
-                        end)
-                    end
-                else
-                    if lastNetworkState ~= "connected" then
-                        lastNetworkState = "connected"
-                        print("[Network Monitor] Network connection restored")
-                    end
-                end
-
-                task.wait(60) -- Check every minute instead of every 10 seconds
-            end
-        end)
-    end
-
-    -- Device-specific disconnect detection
-    local function setupDeviceSpecificDetection()
-        -- Monitor for mobile/device specific disconnects
-        if UserInputService.TouchEnabled then
-            print("[Disconnect Monitor] Mobile device detected - enabling touch-specific monitoring")
-
-            -- Monitor for app backgrounding on mobile
-            UserInputService.WindowFocusReleased:Connect(function()
-                print("[Mobile Monitor] App lost focus (backgrounded)")
-                task.wait(2) -- Small delay to see if it's temporary
-
-                if not UserInputService.WindowFocused then
+                if consecutiveFailures >= maxConsecutiveFailures then
                     task.spawn(function()
-                        sendDisconnectWebhook(username, "Mobile App Backgrounded - Potential Disconnect")
+                        sendDisconnectWebhook(username, "Connection Lost - Multiple ping failures detected")
                     end)
+                    break -- Stop monitoring after sending notification
                 end
+            else
+                -- Reset failure counter on successful ping
+                if consecutiveFailures > 0 then
+                    consecutiveFailures = 0
+                    print("[Disconnect Monitor] Connection recovered")
+                end
+
+                if ping > PING_THRESHOLD then
+                    print("[Disconnect Monitor] High ping detected: " .. math.floor(ping) .. "ms")
+                    task.spawn(function()
+                        sendDisconnectWebhook(username, "High Ping Detected (" .. math.floor(ping) .. "ms) - Possible connection issue")
+                    end)
+                    break -- Stop monitoring after sending notification
+                end
+            end
+
+            task.wait(10) -- Check every 10 seconds (reduced frequency for better performance)
+        end
+    end)
+
+    -- Monitor for game freezes using Stepped delta
+    RunService.Stepped:Connect(function(_, deltaTime)
+        if deltaTime > FREEZE_THRESHOLD then
+            task.spawn(function()
+                sendDisconnectWebhook(username, "Game Freeze Detected (Delta: " .. string.format("%.2f", deltaTime) .. "s)")
             end)
         end
-    end
+    end)
 
-    -- Initialize all monitoring systems
-    setupAFKDetection()
-    setupNetworkMonitoring()
-    setupDeviceSpecificDetection()
-
-    print("🚨 Enhanced disconnect notifier active (performance optimized)")
+    print("🚨 Advanced disconnect notifier setup complete")
 end
 
 -- Initialize disconnect notifier
 setupDisconnectNotifier()
-
--- Function to cleanup disconnect monitoring (call when script ends)
-local function cleanupDisconnectMonitor()
-    disconnectMonitorActive = false
-    print("[Disconnect Monitor] Monitoring disabled - cleanup complete")
-end
-
--- Cleanup on script termination
-game:GetService("Players").PlayerRemoving:Connect(function(player)
-    if player == LocalPlayer then
-        cleanupDisconnectMonitor()
-    end
-end)
 
 -- TEST FUNCTIONS untuk testing notification dengan tags (hapus setelah testing)
 local function testDisconnectNotification()
@@ -4055,6 +4231,58 @@ end)
 SecGPU:NewButton("Force Remove White Screen", "Emergency remove if stuck", function()
     removeWhiteScreen()
     gpuSaverEnabled = false
+end)
+
+-- ====== ONLINE DETECTION CONTROLS ======
+local SecOnline = TabPerformance:NewSection("Online Detection System")
+
+SecOnline:NewToggle("Online Detection", "Enable real-time online status updates to Discord", function(state)
+    onlineDetectionEnabled = state
+    if state then
+        -- Restart online detection if needed
+        task.spawn(function()
+            task.wait(1)
+            if not currentMessageId then
+                createOnlineStatusMessage()
+            end
+        end)
+        print("🟢 Online Detection: ENABLED")
+    else
+        -- Clean up current message
+        if currentMessageId then
+            handlePlayerDisconnect("Online detection disabled by user")
+        end
+        print("🔴 Online Detection: DISABLED")
+    end
+end)
+
+SecOnline:NewSlider("Update Interval", "How often to update online status (seconds, min: 5)", 60, 5, function(value)
+    ONLINE_UPDATE_INTERVAL = value
+    print(string.format("[Online Detection] Update interval set to %d seconds", value))
+end)
+
+SecOnline:NewButton("Force Update Status", "Manually update online status message", function()
+    if currentMessageId then
+        if updateOnlineStatusMessage() then
+            print("[Online Detection] Status updated manually")
+        else
+            warn("[Online Detection] Manual update failed")
+        end
+    else
+        warn("[Online Detection] No active message to update")
+    end
+end)
+
+SecOnline:NewButton("Reset Online Message", "Create a new online status message", function()
+    if currentMessageId then
+        handlePlayerDisconnect("Resetting online message")
+        task.wait(1)
+    end
+    if createOnlineStatusMessage() then
+        print("[Online Detection] New online message created")
+    else
+        warn("[Online Detection] Failed to create new message")
+    end
 end)
 
 
