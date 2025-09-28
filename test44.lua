@@ -61,7 +61,7 @@ IMPORTANT: Configure your webhooks before running this script!
 
 Required webhook variables (set these in your main.lua or loadstring):
 - webhook2: Main webhook for fish notifications and general alerts
-- webhook3: Dedicated webhook for connection status (Connect/Disconnect)
+- webhook3: Dedicated webhook for connection status (Connect/Disconnect/Online Status)
 
 Example usage in your main.lua:
 webhook2 = "https://discord.com/api/webhooks/YOUR_MAIN_WEBHOOK_URL"
@@ -69,14 +69,22 @@ webhook3 = "https://discord.com/api/webhooks/YOUR_CONNECTION_WEBHOOK_URL"
 
 Webhook Usage:
 - webhook2: Fish notifications, megalodon alerts
-- webhook3: Connection status only (Connect/Disconnect)
+- webhook3: Connection status and online monitoring
 
-Connection Status Features:
+🆕 NEW ONLINE STATUS SYSTEM Features:
+🟢 SMART MESSAGE EDITING: Each account gets its own message that updates every 8 seconds
+📝 PERSISTENT MESSAGE ID: Message IDs are saved and reused across sessions
+⏰ REAL-TIME UPDATES: Shows uptime, fish count, coins, level with live timestamps
+🔄 AUTO RECOVERY: Creates new message if old one becomes invalid
+📊 RICH STATUS INFO: Displays comprehensive player statistics
+🔴 OFFLINE DETECTION: Automatically updates message to offline when disconnected
+
+Traditional Connection Features (still active):
 ✅ Sends "Player Connected" when script starts successfully
 ❌ Sends "Player Disconnected" with detailed reason when issues occur
 📊 Includes session duration, ping monitoring, and freeze detection
 
-Note: Disconnect notifications are sent ONLY to webhook3 (not webhook2)
+Note: All status notifications are sent to webhook3 only
 --]]
 
 -- ====================================================================
@@ -2158,10 +2166,9 @@ local function setAutoMegalodon(state)
     print("🦈 Auto Megalodon Hunt: " .. (state and "ENABLED" or "DISABLED"))
 end
 
--- ====== ENHANCED ONLINE DETECTION SYSTEM ======
--- Webhook khusus untuk status connect/disconnect dengan message editing
+-- ====== CONNECTION STATUS WEBHOOK SYSTEM ======
+-- Webhook khusus untuk status connect/disconnect
 local CONNECTION_WEBHOOK_URL = webhook3 or ""  -- URL webhook khusus untuk status koneksi
-local SERVER_URL = serverurl or "http://localhost:3000"  -- URL server.js untuk message editing
 
 local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
 local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
@@ -2170,18 +2177,78 @@ local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
 local DISCORD_USER_ID = discordid  -- Ganti dengan User ID Discord yang ingin di-tag
 
--- ONLINE DETECTION SETTINGS
-local ONLINE_UPDATE_INTERVAL = 8  -- seconds, interval untuk update timestamp
-local onlineDetectionEnabled = true
-local currentMessageId = nil  -- Store current message ID for editing
-local sessionStartTime = os.time()
-local lastOnlineUpdate = 0
-
 -- QUEUE SYSTEM untuk multiple accounts (mencegah rate limiting)
 local webhookQueue = {}
 local isProcessingQueue = false
 local WEBHOOK_DELAY = 2  -- seconds between webhook sends
 local lastWebhookSent = 0
+
+-- ====== MESSAGE EDITING SYSTEM ======
+-- Sistem untuk edit message alih-alih kirim pesan baru
+local MESSAGE_ID_STORAGE = {}  -- Store message IDs per account
+local ONLINE_STATUS_UPDATE_INTERVAL = 8  -- Update setiap 8 detik
+local lastOnlineStatusUpdate = 0
+local isOnlineStatusActive = false
+local onlineStatusMessageId = nil
+
+-- Function untuk menyimpan message ID per akun
+local function saveMessageId(accountId, messageId)
+    if not MESSAGE_ID_STORAGE[accountId] then
+        MESSAGE_ID_STORAGE[accountId] = {}
+    end
+    MESSAGE_ID_STORAGE[accountId].statusMessageId = messageId
+
+    -- Save to file untuk persistent storage
+    if writefile and ensureConfigFolder() then
+        local messageFile = CONFIG_FOLDER .. "/message_ids_" .. accountId .. ".json"
+        local success = pcall(function()
+            local data = {
+                statusMessageId = messageId,
+                lastUpdate = os.time(),
+                playerName = LocalPlayer.Name
+            }
+            writefile(messageFile, HttpService:JSONEncode(data))
+        end)
+        if success then
+            print("[Message Storage] Saved message ID for account: " .. accountId)
+        end
+    end
+end
+
+-- Function untuk load message ID dari file
+local function loadMessageId(accountId)
+    if not readfile or not isfile then
+        return nil
+    end
+
+    local messageFile = CONFIG_FOLDER .. "/message_ids_" .. accountId .. ".json"
+    if not isfile(messageFile) then
+        return nil
+    end
+
+    local success, result = pcall(function()
+        local content = readfile(messageFile)
+        local data = HttpService:JSONDecode(content)
+        return data.statusMessageId
+    end)
+
+    if success and result then
+        MESSAGE_ID_STORAGE[accountId] = MESSAGE_ID_STORAGE[accountId] or {}
+        MESSAGE_ID_STORAGE[accountId].statusMessageId = result
+        print("[Message Storage] Loaded message ID for account: " .. accountId)
+        return result
+    end
+
+    return nil
+end
+
+-- Function untuk mendapatkan message ID
+local function getStoredMessageId(accountId)
+    if MESSAGE_ID_STORAGE[accountId] and MESSAGE_ID_STORAGE[accountId].statusMessageId then
+        return MESSAGE_ID_STORAGE[accountId].statusMessageId
+    end
+    return loadMessageId(accountId)
+end
 
 -- ====== RECONNECT DETECTION SYSTEM ======
 local lastSessionId = nil
@@ -2189,224 +2256,186 @@ local lastDisconnectTime = nil
 local RECONNECT_THRESHOLD = 60  -- seconds, if reconnect within this time = quick reconnect
 local NEW_SESSION_THRESHOLD = 60  -- seconds, if offline > 1 minute = treat as new connection
 
--- ====== ONLINE DETECTION FUNCTIONS ======
--- Function to send request to server.js for message editing
-local function sendToServer(endpoint, data)
-    if not SERVER_URL or SERVER_URL == "" then
-        warn('[Online Detection] Server URL not configured!')
-        return false
+-- Fungsi untuk edit message Discord
+local function editDiscordMessage(messageId, embed, content)
+    if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" then
+        return false, "Webhook URL not configured"
     end
 
-    local success, result = pcall(function()
-        local body = HttpService:JSONEncode(data)
-        local response
+    if not messageId then
+        return false, "Message ID not provided"
+    end
 
+    -- Extract webhook ID and token from URL
+    local webhookId, webhookToken = CONNECTION_WEBHOOK_URL:match("https://discord%.com/api/webhooks/(%d+)/([%w%-_]+)")
+    if not webhookId or not webhookToken then
+        return false, "Invalid webhook URL format"
+    end
+
+    local editUrl = string.format("https://discord.com/api/webhooks/%s/%s/messages/%s", webhookId, webhookToken, messageId)
+
+    local payload = { embeds = {embed} }
+    if content and content ~= "" then
+        payload.content = content
+        payload.allowed_mentions = {
+            users = {tostring(DISCORD_USER_ID)}
+        }
+    end
+
+    local body = HttpService:JSONEncode(payload)
+
+    local success, err = pcall(function()
         if syn and syn.request then
-            response = syn.request({
-                Url = SERVER_URL .. endpoint,
+            syn.request({
+                Url = editUrl,
+                Method = "PATCH",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = body
+            })
+        elseif http_request then
+            http_request({
+                Url = editUrl,
+                Method = "PATCH",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = body
+            })
+        elseif fluxus and fluxus.request then
+            fluxus.request({
+                Url = editUrl,
+                Method = "PATCH",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = body
+            })
+        elseif request then
+            request({
+                Url = editUrl,
+                Method = "PATCH",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = body
+            })
+        else
+            error("Executor does not support HTTP requests")
+        end
+    end)
+
+    return success, err
+end
+
+-- Fungsi untuk mengirim pesan baru dan mendapatkan message ID
+local function sendNewStatusMessage(embed, content)
+    if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" then
+        return nil, "Webhook URL not configured"
+    end
+
+    local payload = { embeds = {embed}, wait = true }
+    if content and content ~= "" then
+        payload.content = content
+        payload.allowed_mentions = {
+            users = {tostring(DISCORD_USER_ID)}
+        }
+    end
+
+    local body = HttpService:JSONEncode(payload)
+
+    local success, response = pcall(function()
+        if syn and syn.request then
+            return syn.request({
+                Url = CONNECTION_WEBHOOK_URL,
                 Method = "POST",
                 Headers = {["Content-Type"] = "application/json"},
                 Body = body
             })
         elseif http_request then
-            response = http_request({
-                Url = SERVER_URL .. endpoint,
+            return http_request({
+                Url = CONNECTION_WEBHOOK_URL,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = body
+            })
+        elseif fluxus and fluxus.request then
+            return fluxus.request({
+                Url = CONNECTION_WEBHOOK_URL,
                 Method = "POST",
                 Headers = {["Content-Type"] = "application/json"},
                 Body = body
             })
         elseif request then
-            response = request({
-                Url = SERVER_URL .. endpoint,
+            return request({
+                Url = CONNECTION_WEBHOOK_URL,
                 Method = "POST",
                 Headers = {["Content-Type"] = "application/json"},
                 Body = body
             })
         else
-            error("No HTTP request function available")
+            error("Executor does not support HTTP requests")
         end
-
-        if response and response.Success and response.Body then
-            return HttpService:JSONDecode(response.Body)
-        end
-        return nil
     end)
 
-    if success and result then
-        return result
-    else
-        warn('[Online Detection] Failed to send to server: ' .. tostring(result))
-        return false
+    if success and response and response.Body then
+        local messageData = HttpService:JSONDecode(response.Body)
+        if messageData and messageData.id then
+            return messageData.id, nil
+        end
     end
+
+    return nil, response or "Failed to send message"
 end
 
--- Function to create initial online status message
-local function createOnlineStatusMessage()
-    if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" then
-        warn('[Online Detection] Webhook URL not configured!')
-        return false
-    end
+-- Fungsi untuk update status online dengan timestamp
+local function updateOnlineStatus()
+    local accountId = tostring(LocalPlayer.UserId)
+    local currentTime = os.time()
+
+    -- Hitung uptime
+    local uptime = currentTime - startTime
+    local fishCount = (LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught and LocalPlayer.leaderstats.Caught.Value) or 0
+    local bestFish = (LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] and LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
 
     local embed = {
-        title = "🟢 Player Online",
-        description = "Auto Fish script is running and player is active",
+        title = "🟢 " .. (LocalPlayer.DisplayName or LocalPlayer.Name) .. " - ONLINE",
+        description = "**Status**: Auto Fish Active 🎣",
         color = 65280, -- Green
         fields = {
-            { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
-            { name = "🆔 User ID", value = tostring(LocalPlayer.UserId), inline = true },
-            { name = "🕒 Started", value = os.date("%H:%M:%S"), inline = true },
-            { name = "⏱️ Session Time", value = "0m 0s", inline = true },
-            { name = "🎮 Status", value = "🟢 Online & Active", inline = true },
-            { name = "📊 Last Update", value = os.date("%H:%M:%S"), inline = true }
+            { name = "⏰ Last Update", value = os.date("%H:%M:%S"), inline = true },
+            { name = "⌛ Uptime", value = FormatTime(uptime), inline = true },
+            { name = "🐠 Total Fish", value = FormatNumber(fishCount), inline = true },
+            { name = "🏆 Best Fish", value = bestFish, inline = true },
+            { name = "💰 Coins", value = FormatNumber(getCurrentCoins()), inline = true },
+            { name = "⭐ Level", value = getCurrentLevel(), inline = true },
         },
-        footer = { text = "Online Monitor • Auto Fish Script" },
+        footer = { text = "Auto Fish Status • Updates every " .. ONLINE_STATUS_UPDATE_INTERVAL .. "s" },
         timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
     }
 
-    local payload = {
-        embeds = {embed}
-    }
+    local existingMessageId = getStoredMessageId(accountId)
 
-    -- Send initial message and get message ID
-    local response = sendToServer("/send-webhook", {
-        webhook_url = CONNECTION_WEBHOOK_URL,
-        payload = payload
-    })
+    if existingMessageId then
+        -- Try to edit existing message
+        local success, err = editDiscordMessage(existingMessageId, embed, "")
+        if success then
+            print("[Online Status] Updated message for account: " .. accountId)
+            return true
+        else
+            print("[Online Status] Failed to edit message, creating new one. Error: " .. tostring(err))
+            -- Clear invalid message ID
+            MESSAGE_ID_STORAGE[accountId] = nil
+        end
+    end
 
-    if response and response.message_id then
-        currentMessageId = response.message_id
-        print("[Online Detection] Initial status message created with ID: " .. currentMessageId)
+    -- Send new message if no existing message or edit failed
+    local messageId, err = sendNewStatusMessage(embed, "")
+    if messageId then
+        saveMessageId(accountId, messageId)
+        onlineStatusMessageId = messageId
+        print("[Online Status] Created new status message for account: " .. accountId .. " (ID: " .. messageId .. ")")
         return true
     else
-        warn("[Online Detection] Failed to create initial status message")
+        print("[Online Status] Failed to create new message: " .. tostring(err))
         return false
     end
 end
 
--- Function to update existing online status message
-local function updateOnlineStatusMessage()
-    if not currentMessageId or not CONNECTION_WEBHOOK_URL then
-        return false
-    end
-
-    local currentTime = os.time()
-    local sessionDuration = currentTime - sessionStartTime
-    local hours = math.floor(sessionDuration / 3600)
-    local minutes = math.floor((sessionDuration % 3600) / 60)
-    local seconds = sessionDuration % 60
-
-    local sessionText = ""
-    if hours > 0 then
-        sessionText = string.format("%dh %dm %ds", hours, minutes, seconds)
-    elseif minutes > 0 then
-        sessionText = string.format("%dm %ds", minutes, seconds)
-    else
-        sessionText = string.format("%ds", seconds)
-    end
-
-    -- Count active features
-    local activeFeatures = {}
-    if isAutoFarmOn then table.insert(activeFeatures, "🚜 Farm") end
-    if isAutoSellOn then table.insert(activeFeatures, "💰 Sell") end
-    if isAutoCatchOn then table.insert(activeFeatures, "🎯 Catch") end
-    if isAutoWeatherOn then table.insert(activeFeatures, "🌤️ Weather") end
-    if isAutoMegalodonOn then table.insert(activeFeatures, "🦈 Megalodon") end
-
-    local statusText = "🟢 Online & Active"
-    if #activeFeatures > 0 then
-        statusText = statusText .. " (" .. table.concat(activeFeatures, ", ") .. ")"
-    end
-
-    local embed = {
-        title = "🟢 Player Online",
-        description = "Auto Fish script is running and player is active",
-        color = 65280, -- Green
-        fields = {
-            { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
-            { name = "🆔 User ID", value = tostring(LocalPlayer.UserId), inline = true },
-            { name = "🕒 Started", value = os.date("%H:%M:%S", sessionStartTime), inline = true },
-            { name = "⏱️ Session Time", value = sessionText, inline = true },
-            { name = "🎮 Status", value = statusText, inline = false },
-            { name = "📊 Last Update", value = os.date("%H:%M:%S"), inline = true }
-        },
-        footer = { text = "Online Monitor • Auto Fish Script" },
-        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
-    }
-
-    local payload = {
-        embeds = {embed}
-    }
-
-    -- Update the existing message
-    local response = sendToServer("/edit-message", {
-        webhook_url = CONNECTION_WEBHOOK_URL,
-        message_id = currentMessageId,
-        payload = payload
-    })
-
-    if response and response.success then
-        lastOnlineUpdate = currentTime
-        print("[Online Detection] Status updated at " .. os.date("%H:%M:%S"))
-        return true
-    else
-        warn("[Online Detection] Failed to update status message")
-        return false
-    end
-end
-
--- Function to handle player disconnect
-local function handlePlayerDisconnect(reason)
-    if not currentMessageId or not CONNECTION_WEBHOOK_URL then
-        return
-    end
-
-    local currentTime = os.time()
-    local sessionDuration = currentTime - sessionStartTime
-    local hours = math.floor(sessionDuration / 3600)
-    local minutes = math.floor((sessionDuration % 3600) / 60)
-    local seconds = sessionDuration % 60
-
-    local sessionText = ""
-    if hours > 0 then
-        sessionText = string.format("%dh %dm %ds", hours, minutes, seconds)
-    elseif minutes > 0 then
-        sessionText = string.format("%dm %ds", minutes, seconds)
-    else
-        sessionText = string.format("%ds", seconds)
-    end
-
-    local embed = {
-        title = "🔴 Player Disconnected",
-        description = reason or "Player has disconnected from the server",
-        color = 16711680, -- Red
-        fields = {
-            { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
-            { name = "🆔 User ID", value = tostring(LocalPlayer.UserId), inline = true },
-            { name = "🕒 Disconnected", value = os.date("%H:%M:%S"), inline = true },
-            { name = "⏱️ Session Duration", value = sessionText, inline = true },
-            { name = "🔌 Reason", value = reason or "Unknown", inline = false },
-            { name = "📱 Status", value = "🔴 Offline", inline = true }
-        },
-        footer = { text = "Disconnect Alert • Auto Fish Script" },
-        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
-    }
-
-    local payload = {
-        embeds = {embed},
-        content = "<@" .. DISCORD_USER_ID .. "> 🔴 **ALERT: Player telah DISCONNECT!** 🚨"
-    }
-
-    -- Update the message to show disconnect status
-    sendToServer("/edit-message", {
-        webhook_url = CONNECTION_WEBHOOK_URL,
-        message_id = currentMessageId,
-        payload = payload
-    })
-
-    currentMessageId = nil
-end
-
--- Fungsi untuk mengirim status koneksi ke webhook khusus
+-- Fungsi untuk mengirim status koneksi ke webhook khusus (modified)
 local function sendConnectionStatusWebhook(status, reason)
     print("[Connection Status] Attempting to send webhook - Status: " .. tostring(status) .. ", Reason: " .. tostring(reason or "none"))
 
@@ -2702,52 +2731,6 @@ local function initializeReconnectDetection()
     print("[Reconnect] Initialization complete!")
 end
 
--- ====== ONLINE DETECTION SYSTEM INITIALIZATION ======
--- Main online detection loop
-task.spawn(function()
-    -- Wait for services to load
-    task.wait(3)
-
-    -- Create initial online status message
-    if onlineDetectionEnabled and createOnlineStatusMessage() then
-        print("[Online Detection] System started successfully!")
-
-        -- Main update loop
-        while onlineDetectionEnabled do
-            local currentTime = os.time()
-
-            -- Update message every ONLINE_UPDATE_INTERVAL seconds
-            if currentTime - lastOnlineUpdate >= ONLINE_UPDATE_INTERVAL then
-                if not updateOnlineStatusMessage() then
-                    -- If update fails, try to recreate the message
-                    warn("[Online Detection] Update failed, attempting to recreate message...")
-                    task.wait(2)
-                    createOnlineStatusMessage()
-                end
-            end
-
-            task.wait(1) -- Check every second
-        end
-    else
-        warn("[Online Detection] Failed to initialize online detection system")
-    end
-end)
-
--- Enhanced disconnect detection with message editing
-local function sendDisconnectWebhook(username, reason)
-    if hasSentDisconnectWebhook then return end
-    hasSentDisconnectWebhook = true
-
-    -- Save session data before disconnect for reconnect detection
-    saveSessionData(game.JobId, os.time())
-
-    -- Update the existing message to show disconnect status
-    handlePlayerDisconnect(reason)
-
-    -- Also send to the legacy webhook system for compatibility
-    sendConnectionStatusWebhook("disconnected", reason)
-end
-
 -- Send connection status notification when script starts
 task.spawn(function()
     -- Wait a bit to ensure all services are loaded
@@ -2762,6 +2745,19 @@ task.spawn(function()
     print("✅ Auto Fish script fully initialized and connected!")
 end)
 
+local function sendDisconnectWebhook(username, reason)
+    if hasSentDisconnectWebhook then return end
+    hasSentDisconnectWebhook = true
+
+    -- Stop online status timer and update to offline
+    stopOnlineStatusTimer()
+
+    -- Save session data before disconnect for reconnect detection
+    saveSessionData(game.JobId, os.time())
+
+    -- Send only to dedicated connection status webhook (webhook3) - as separate notification
+    sendConnectionStatusWebhook("disconnected", reason)
+end
 
 local function setupDisconnectNotifier()
     local username = LocalPlayer.Name
@@ -2853,6 +2849,96 @@ end
 -- Initialize disconnect notifier
 setupDisconnectNotifier()
 
+-- ====== ONLINE STATUS TIMER SYSTEM ======
+-- Timer untuk update status online setiap 8 detik
+local function startOnlineStatusTimer()
+    print("[Online Status] Starting timer system...")
+    isOnlineStatusActive = true
+
+    -- Initial status message
+    task.spawn(function()
+        task.wait(3) -- Wait for everything to load
+        updateOnlineStatus()
+    end)
+
+    -- Regular updates every 8 seconds
+    task.spawn(function()
+        while isOnlineStatusActive do
+            task.wait(ONLINE_STATUS_UPDATE_INTERVAL)
+
+            if isOnlineStatusActive then
+                local currentTime = tick()
+                if currentTime - lastOnlineStatusUpdate >= ONLINE_STATUS_UPDATE_INTERVAL then
+                    local success = updateOnlineStatus()
+                    if success then
+                        lastOnlineStatusUpdate = currentTime
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Function untuk stop online status updates (saat disconnect)
+local function stopOnlineStatusTimer()
+    print("[Online Status] Stopping timer system...")
+    isOnlineStatusActive = false
+
+    -- Update message to show offline status
+    local accountId = tostring(LocalPlayer.UserId)
+    local existingMessageId = getStoredMessageId(accountId)
+
+    if existingMessageId then
+        local uptime = os.time() - startTime
+        local fishCount = (LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught and LocalPlayer.leaderstats.Caught.Value) or 0
+        local bestFish = (LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] and LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
+
+        local offlineEmbed = {
+            title = "🔴 " .. (LocalPlayer.DisplayName or LocalPlayer.Name) .. " - OFFLINE",
+            description = "**Status**: Disconnected from game",
+            color = 16711680, -- Red
+            fields = {
+                { name = "⏰ Disconnected At", value = os.date("%H:%M:%S"), inline = true },
+                { name = "⌛ Session Duration", value = FormatTime(uptime), inline = true },
+                { name = "🐠 Total Fish", value = FormatNumber(fishCount), inline = true },
+                { name = "🏆 Best Fish", value = bestFish, inline = true },
+                { name = "💰 Final Coins", value = FormatNumber(getCurrentCoins()), inline = true },
+                { name = "⭐ Final Level", value = getCurrentLevel(), inline = true },
+            },
+            footer = { text = "Auto Fish Status • Player Disconnected" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+        }
+
+        local success, err = editDiscordMessage(existingMessageId, offlineEmbed, "")
+        if success then
+            print("[Online Status] Updated message to offline status")
+        else
+            print("[Online Status] Failed to update offline status: " .. tostring(err))
+        end
+    end
+end
+
+-- Start the online status timer
+startOnlineStatusTimer()
+
+-- ====== TEST FUNCTIONS & ERROR HANDLING ======
+-- TEST FUNCTIONS untuk testing sistem online status baru
+local function testOnlineStatusUpdate()
+    print("[TEST] Testing online status update...")
+    local success = updateOnlineStatus()
+    if success then
+        print("[TEST] ✅ Online status update test PASSED")
+    else
+        print("[TEST] ❌ Online status update test FAILED")
+    end
+end
+
+local function testOfflineStatusUpdate()
+    print("[TEST] Testing offline status update...")
+    stopOnlineStatusTimer()
+    print("[TEST] ✅ Offline status update test completed")
+end
+
 -- TEST FUNCTIONS untuk testing notification dengan tags (hapus setelah testing)
 local function testDisconnectNotification()
     print("[TEST] Testing disconnect notification with tags...")
@@ -2864,14 +2950,36 @@ local function testReconnectNotification()
     sendConnectionStatusWebhook("reconnected", "TEST: Manual reconnect test - Tag system check")
 end
 
--- ENABLE untuk test notifications (comment kembali setelah testing):
---[[ DISABLED - Remove test notifications
+-- ERROR HANDLING untuk webhook failures
+local function handleWebhookError(errorType, error)
+    print("[Error Handler] " .. errorType .. " failed: " .. tostring(error))
+
+    -- Retry logic untuk critical errors
+    if errorType == "online_status" then
+        task.spawn(function()
+            task.wait(30) -- Wait 30 seconds before retry
+            print("[Error Handler] Retrying online status update...")
+            updateOnlineStatus()
+        end)
+    end
+end
+
+-- Debug function untuk check message IDs
+local function debugMessageStorage()
+    print("[DEBUG] Current message storage:")
+    for accountId, data in pairs(MESSAGE_ID_STORAGE) do
+        print("  Account " .. accountId .. ": " .. tostring(data.statusMessageId))
+    end
+end
+
+-- ENABLE untuk test functions (uncomment untuk testing):
+--[[ DISABLED - Remove test functions untuk production
 task.spawn(function()
+    task.wait(10)
+    print("[TEST] Starting online status tests in 10 seconds...")
+    testOnlineStatusUpdate()
     task.wait(5)
-    print("[TEST] Starting tag tests in 5 seconds...")
-    testDisconnectNotification()
-    task.wait(3)
-    testReconnectNotification()
+    debugMessageStorage()
 end)
 --]]
 
@@ -4231,58 +4339,6 @@ end)
 SecGPU:NewButton("Force Remove White Screen", "Emergency remove if stuck", function()
     removeWhiteScreen()
     gpuSaverEnabled = false
-end)
-
--- ====== ONLINE DETECTION CONTROLS ======
-local SecOnline = TabPerformance:NewSection("Online Detection System")
-
-SecOnline:NewToggle("Online Detection", "Enable real-time online status updates to Discord", function(state)
-    onlineDetectionEnabled = state
-    if state then
-        -- Restart online detection if needed
-        task.spawn(function()
-            task.wait(1)
-            if not currentMessageId then
-                createOnlineStatusMessage()
-            end
-        end)
-        print("🟢 Online Detection: ENABLED")
-    else
-        -- Clean up current message
-        if currentMessageId then
-            handlePlayerDisconnect("Online detection disabled by user")
-        end
-        print("🔴 Online Detection: DISABLED")
-    end
-end)
-
-SecOnline:NewSlider("Update Interval", "How often to update online status (seconds, min: 5)", 60, 5, function(value)
-    ONLINE_UPDATE_INTERVAL = value
-    print(string.format("[Online Detection] Update interval set to %d seconds", value))
-end)
-
-SecOnline:NewButton("Force Update Status", "Manually update online status message", function()
-    if currentMessageId then
-        if updateOnlineStatusMessage() then
-            print("[Online Detection] Status updated manually")
-        else
-            warn("[Online Detection] Manual update failed")
-        end
-    else
-        warn("[Online Detection] No active message to update")
-    end
-end)
-
-SecOnline:NewButton("Reset Online Message", "Create a new online status message", function()
-    if currentMessageId then
-        handlePlayerDisconnect("Resetting online message")
-        task.wait(1)
-    end
-    if createOnlineStatusMessage() then
-        print("[Online Detection] New online message created")
-    else
-        warn("[Online Detection] Failed to create new message")
-    end
 end)
 
 
