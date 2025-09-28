@@ -1401,7 +1401,7 @@ function enableGPUSaver()
             end
         end
         
-        pcall(function() setfpscap(7) end) -- Limit FPS to 5
+        pcall(function() setfpscap(5) end) -- Limit FPS to 5
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
@@ -2163,8 +2163,6 @@ end
 local CONNECTION_WEBHOOK_URL = webhook3 or ""  -- URL webhook khusus untuk status koneksi
 
 local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
-local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
-local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
 local DISCORD_USER_ID = discordid  -- Ganti dengan User ID Discord yang ingin di-tag
@@ -2502,95 +2500,182 @@ local function sendDisconnectWebhook(username, reason)
     sendConnectionStatusWebhook("disconnected", reason)
 end
 
+-- Enhanced disconnect detection system - optimized for performance
+local disconnectMonitorActive = true
+local lastAFKWarningTime = 0
+local lastUserInputTime = tick()
+local isMonitoringInput = false
+
 local function setupDisconnectNotifier()
     local username = LocalPlayer.Name
     local GuiService = game:GetService("GuiService")
+    local UserInputService = game:GetService("UserInputService")
 
-    -- Monitor error messages for disconnect reasons
+    print("🚨 Enhanced disconnect notifier initializing...")
+
+    -- Monitor Roblox system messages for disconnect/kick reasons
     GuiService.ErrorMessageChanged:Connect(function(message)
-        local lowerMessage = string.lower(message)
-        local reason = "Unknown"
+        if not disconnectMonitorActive or hasSentDisconnectWebhook then return end
 
-        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") then
+        local lowerMessage = string.lower(message)
+        local reason = nil
+
+        -- Check for common disconnect messages
+        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") or lowerMessage:find("you have lost connection") then
             reason = "Connection Lost: " .. message
-        elseif lowerMessage:find("kick") or lowerMessage:find("banned") then
-            reason = "Kicked: " .. message
-        elseif lowerMessage:find("timeout") then
-            reason = "Timeout: " .. message
-        elseif lowerMessage:find("error") then
-            reason = "General Error: " .. message
+        elseif lowerMessage:find("kick") or lowerMessage:find("banned") or lowerMessage:find("removed from") then
+            reason = "Kicked/Banned: " .. message
+        elseif lowerMessage:find("timeout") or lowerMessage:find("request timed out") then
+            reason = "Connection Timeout: " .. message
+        elseif lowerMessage:find("you have been disconnected") then
+            reason = "Disconnected: " .. message
+        elseif lowerMessage:find("login") and lowerMessage:find("another") then
+            reason = "Logged in from another device: " .. message
+        elseif lowerMessage:find("afk") or lowerMessage:find("idle") or lowerMessage:find("20 minutes") then
+            reason = "AFK/Idle Disconnect (20 minutes): " .. message
         else
             return -- Don't send webhook for unrelated errors
         end
 
+        print("[Disconnect Monitor] System message detected: " .. reason)
         task.spawn(function()
             sendDisconnectWebhook(username, reason)
         end)
     end)
 
-    -- Monitor for player removal
+    -- Monitor for player removal from game
     Players.PlayerRemoving:Connect(function(removedPlayer)
-        if removedPlayer == LocalPlayer and not hasSentDisconnectWebhook then
+        if removedPlayer == LocalPlayer and not hasSentDisconnectWebhook and disconnectMonitorActive then
+            print("[Disconnect Monitor] Player removal detected")
             task.spawn(function()
-                sendDisconnectWebhook(username, "Disconnected (Player Removed)")
+                sendDisconnectWebhook(username, "Player Removed from Game")
             end)
         end
     end)
 
-    -- Monitor network ping for connection issues
-    task.spawn(function()
-        local consecutiveFailures = 0
-        local maxConsecutiveFailures = 3  -- Fail 3 times before disconnect
+    -- Enhanced AFK detection (passive monitoring)
+    local function setupAFKDetection()
+        local lastPosition = nil
+        local lastCameraPosition = nil
+        local stillnessTimer = 0
+        local maxStillnessTime = 18 * 60 -- 18 minutes (3 minutes before 20min AFK kick)
 
-        while true do
-            local success, ping = pcall(function()
-                return LocalPlayer:GetNetworkPing() * 1000 -- Convert to milliseconds
-            end)
+        task.spawn(function()
+            while disconnectMonitorActive do
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local currentPos = LocalPlayer.Character.HumanoidRootPart.Position
+                    local currentCamPos = workspace.CurrentCamera.CFrame.Position
 
-            if not success then
-                consecutiveFailures = consecutiveFailures + 1
-                print("[Disconnect Monitor] Ping check failed (" .. consecutiveFailures .. "/" .. maxConsecutiveFailures .. ")")
+                    -- Check if player hasn't moved significantly
+                    if lastPosition and lastCameraPosition then
+                        local positionDelta = (currentPos - lastPosition).Magnitude
+                        local cameraDelta = (currentCamPos - lastCameraPosition).Magnitude
 
-                if consecutiveFailures >= maxConsecutiveFailures then
-                    task.spawn(function()
-                        sendDisconnectWebhook(username, "Connection Lost - Multiple ping failures detected")
-                    end)
-                    break -- Stop monitoring after sending notification
+                        if positionDelta < 5 and cameraDelta < 3 then
+                            stillnessTimer = stillnessTimer + 30
+                        else
+                            stillnessTimer = 0 -- Reset if movement detected
+                        end
+
+                        -- Warn at 18 minutes of inactivity
+                        if stillnessTimer >= maxStillnessTime and tick() - lastAFKWarningTime > 600 then
+                            lastAFKWarningTime = tick()
+                            print("[AFK Monitor] Warning: 18 minutes of inactivity detected. AFK kick possible in 2 minutes.")
+                            task.spawn(function()
+                                sendDisconnectWebhook(username, "AFK Warning: 18 minutes inactive - potential kick in 2 minutes")
+                            end)
+                        end
+                    end
+
+                    lastPosition = currentPos
+                    lastCameraPosition = currentCamPos
                 end
-            else
-                -- Reset failure counter on successful ping
-                if consecutiveFailures > 0 then
-                    consecutiveFailures = 0
-                    print("[Disconnect Monitor] Connection recovered")
-                end
 
-                if ping > PING_THRESHOLD then
-                    print("[Disconnect Monitor] High ping detected: " .. math.floor(ping) .. "ms")
-                    task.spawn(function()
-                        sendDisconnectWebhook(username, "High Ping Detected (" .. math.floor(ping) .. "ms) - Possible connection issue")
-                    end)
-                    break -- Stop monitoring after sending notification
-                end
+                task.wait(30) -- Check every 30 seconds (much more efficient)
             end
+        end)
+    end
 
-            task.wait(10) -- Check every 10 seconds (reduced frequency for better performance)
-        end
-    end)
+    -- Network state monitoring (lightweight)
+    local function setupNetworkMonitoring()
+        -- Monitor significant network state changes only
+        local lastNetworkState = "connected"
 
-    -- Monitor for game freezes using Stepped delta
-    RunService.Stepped:Connect(function(_, deltaTime)
-        if deltaTime > FREEZE_THRESHOLD then
-            task.spawn(function()
-                sendDisconnectWebhook(username, "Game Freeze Detected (Delta: " .. string.format("%.2f", deltaTime) .. "s)")
+        task.spawn(function()
+            while disconnectMonitorActive do
+                local success, networkPing = pcall(function()
+                    return LocalPlayer:GetNetworkPing()
+                end)
+
+                if not success then
+                    -- Only trigger if we consistently can't get network info
+                    task.wait(5)
+                    local retrySuccess = pcall(function()
+                        return LocalPlayer:GetNetworkPing()
+                    end)
+
+                    if not retrySuccess and lastNetworkState == "connected" then
+                        lastNetworkState = "disconnected"
+                        print("[Network Monitor] Network state change detected")
+                        task.spawn(function()
+                            sendDisconnectWebhook(username, "Network Connection Issues Detected")
+                        end)
+                    end
+                else
+                    if lastNetworkState ~= "connected" then
+                        lastNetworkState = "connected"
+                        print("[Network Monitor] Network connection restored")
+                    end
+                end
+
+                task.wait(60) -- Check every minute instead of every 10 seconds
+            end
+        end)
+    end
+
+    -- Device-specific disconnect detection
+    local function setupDeviceSpecificDetection()
+        -- Monitor for mobile/device specific disconnects
+        if UserInputService.TouchEnabled then
+            print("[Disconnect Monitor] Mobile device detected - enabling touch-specific monitoring")
+
+            -- Monitor for app backgrounding on mobile
+            UserInputService.WindowFocusReleased:Connect(function()
+                print("[Mobile Monitor] App lost focus (backgrounded)")
+                task.wait(2) -- Small delay to see if it's temporary
+
+                if not UserInputService.WindowFocused then
+                    task.spawn(function()
+                        sendDisconnectWebhook(username, "Mobile App Backgrounded - Potential Disconnect")
+                    end)
+                end
             end)
         end
-    end)
+    end
 
-    print("🚨 Advanced disconnect notifier setup complete")
+    -- Initialize all monitoring systems
+    setupAFKDetection()
+    setupNetworkMonitoring()
+    setupDeviceSpecificDetection()
+
+    print("🚨 Enhanced disconnect notifier active (performance optimized)")
 end
 
 -- Initialize disconnect notifier
 setupDisconnectNotifier()
+
+-- Function to cleanup disconnect monitoring (call when script ends)
+local function cleanupDisconnectMonitor()
+    disconnectMonitorActive = false
+    print("[Disconnect Monitor] Monitoring disabled - cleanup complete")
+end
+
+-- Cleanup on script termination
+game:GetService("Players").PlayerRemoving:Connect(function(player)
+    if player == LocalPlayer then
+        cleanupDisconnectMonitor()
+    end
+end)
 
 -- TEST FUNCTIONS untuk testing notification dengan tags (hapus setelah testing)
 local function testDisconnectNotification()
