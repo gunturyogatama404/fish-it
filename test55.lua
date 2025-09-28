@@ -26,7 +26,6 @@ local function suppressAssetErrors()
 end
 suppressAssetErrors()
 
-
 -- ====== AUTOMATIC PERFORMANCE OPTIMIZATION ======
 local function ultimatePerformance()
     local workspace = game:GetService("Workspace")
@@ -1402,7 +1401,7 @@ function enableGPUSaver()
             end
         end
         
-        pcall(function() setfpscap(fpsset) end) -- Limit FPS to custom value
+        pcall(function() setfpscap(10) end) -- Limit FPS to 5
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
