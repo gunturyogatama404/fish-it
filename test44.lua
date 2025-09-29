@@ -2180,7 +2180,7 @@ local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
 local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
-local DISCORD_USER_ID = discordid or "YOUR_DISCORD_USER_ID_HERE"  -- Fallback jika discordid tidak terdefinisi
+local DISCORD_USER_ID = discordid or "701247227959574567"  -- Fallback jika discordid tidak terdefinisi
 
 -- QUEUE SYSTEM untuk multiple accounts (mencegah rate limiting)
 local webhookQueue = {}
@@ -2402,58 +2402,69 @@ local function sendConnectionStatusWebhook(status, reason)
     -- Prepare payload with mentions for disconnect and reconnect status
     local payload = { embeds = {embed} }
 
+    -- Prepare content with Discord mentions
+    local userIdStr = tostring(DISCORD_USER_ID)
+    local playerName = LocalPlayer.DisplayName or LocalPlayer.Name or "Player"
+
     if status == "disconnected" then
-        -- Ensure DISCORD_USER_ID is valid before creating mention
-        local userIdStr = tostring(DISCORD_USER_ID)
-        if userIdStr and userIdStr ~= "YOUR_DISCORD_USER_ID_HERE" and userIdStr ~= "" and userIdStr ~= "nil" then
-            payload.content = "<@" .. userIdStr .. "> 🔴 **ALERT: " .. (LocalPlayer.DisplayName or LocalPlayer.Name or "Player") .. " TELAH DISCONNECT!** 🚨"
-        else
-            payload.content = "🔴 **ALERT: " .. (LocalPlayer.DisplayName or LocalPlayer.Name or "Player") .. " TELAH DISCONNECT!** 🚨 (No Discord ID configured)"
-        end
+        -- Always include mention for disconnect notifications
+        payload.content = "<@" .. userIdStr .. "> 🔴 **ALERT: " .. playerName .. " TELAH DISCONNECT!** 🚨"
 
     elseif status == "reconnected" then
-        -- Ensure DISCORD_USER_ID is valid before creating mention
-        local userIdStr = tostring(DISCORD_USER_ID)
-        if userIdStr and userIdStr ~= "YOUR_DISCORD_USER_ID_HERE" and userIdStr ~= "" and userIdStr ~= "nil" then
-            payload.content = "<@" .. userIdStr .. "> 🟡 **" .. (LocalPlayer.DisplayName or LocalPlayer.Name or "Player") .. " TELAH RECONNECT!** ✅"
-        else
-            payload.content = "🟡 **" .. (LocalPlayer.DisplayName or LocalPlayer.Name or "Player") .. " TELAH RECONNECT!** ✅ (No Discord ID configured)"
-        end
+        -- Always include mention for reconnect notifications
+        payload.content = "<@" .. userIdStr .. "> 🟡 **" .. playerName .. " TELAH RECONNECT!** ✅"
 
     elseif status == "connected" then
-        -- No tag for normal connection
-        payload.content = ""
+        -- No mention for normal connection
+        payload.content = "🟢 **" .. playerName .. " telah terhubung** ✅"
     end
 
-    -- Always add allowed_mentions for any status that has content with user mention
+    -- Always add allowed_mentions if content has mentions
     if payload.content and payload.content ~= "" then
-        -- Ensure DISCORD_USER_ID is string and valid for allowed_mentions
-        local userIdStr = tostring(DISCORD_USER_ID)
+        -- Check if content contains user mention
+        if string.find(payload.content, "<@" .. userIdStr .. ">") then
+            -- CRITICAL: Make sure allowed_mentions format is correct
+            payload.allowed_mentions = {
+                parse = {},  -- Don't parse @everyone, @here, or @role
+                users = {userIdStr},  -- Allow mention for this specific user ID
+                roles = {}  -- No role mentions
+            }
 
-        if userIdStr and userIdStr ~= "YOUR_DISCORD_USER_ID_HERE" and userIdStr ~= "" and userIdStr ~= "nil" then
-            -- Only set allowed_mentions if we have a valid user ID and the content contains a mention
-            if string.find(payload.content, "<@" .. userIdStr .. ">") then
-                payload.allowed_mentions = {
-                    users = {userIdStr}
-                }
-                print("[Connection Status] ✅ Mention configured - UserID: " .. userIdStr)
-            else
-                print("[Connection Status] ⚠️ No mention found in content")
-            end
+            print("[Connection Status] ✅ Discord mention configured:")
+            print("[Connection Status] - UserID: " .. userIdStr)
+            print("[Connection Status] - Mention format: <@" .. userIdStr .. ">")
+            print("[Connection Status] - Allowed mentions: " .. HttpService:JSONEncode(payload.allowed_mentions))
         else
-            print("[Connection Status] ⚠️ Invalid Discord User ID configured: " .. userIdStr)
+            -- No allowed_mentions if no user mention in content
+            payload.allowed_mentions = {
+                parse = {},
+                users = {},
+                roles = {}
+            }
         end
 
-        print("[Connection Status] DEBUG - Sending webhook:")
+        print("[Connection Status] 📤 Sending webhook:")
         print("[Connection Status] - Status: " .. status)
         print("[Connection Status] - Content: " .. payload.content)
+        print("[Connection Status] - Player: " .. playerName)
+        print("[Connection Status] - UserID: " .. userIdStr)
     end
 
     local body = HttpService:JSONEncode(payload)
 
     -- DEBUG: Print full payload before sending
-    print("[Connection Status] DEBUG - Full payload JSON:")
+    print("[Connection Status] 🔍 DEBUG - Full payload JSON:")
     print(body)
+
+    -- Additional validation debug
+    print("[Connection Status] 🔍 Payload validation:")
+    print("  - Has embeds: " .. tostring(payload.embeds ~= nil))
+    print("  - Has content: " .. tostring(payload.content ~= nil))
+    print("  - Has allowed_mentions: " .. tostring(payload.allowed_mentions ~= nil))
+    if payload.allowed_mentions then
+        print("  - Allowed users count: " .. tostring(#(payload.allowed_mentions.users or {})))
+        print("  - First allowed user: " .. tostring((payload.allowed_mentions.users or {})[1]))
+    end
 
     -- Send webhook with retry logic
     task.spawn(function()
@@ -2470,17 +2481,55 @@ local function sendConnectionStatusWebhook(status, reason)
             end
 
             success, err = pcall(function()
+                local httpMethod = nil
+                local response = nil
+
                 if syn and syn.request then
-                    syn.request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    httpMethod = "syn.request"
+                    response = syn.request({
+                        Url = CONNECTION_WEBHOOK_URL,
+                        Method = "POST",
+                        Headers = {["Content-Type"] = "application/json"},
+                        Body = body
+                    })
                 elseif http_request then
-                    http_request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    httpMethod = "http_request"
+                    response = http_request({
+                        Url = CONNECTION_WEBHOOK_URL,
+                        Method = "POST",
+                        Headers = {["Content-Type"] = "application/json"},
+                        Body = body
+                    })
                 elseif fluxus and fluxus.request then
-                    fluxus.request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    httpMethod = "fluxus.request"
+                    response = fluxus.request({
+                        Url = CONNECTION_WEBHOOK_URL,
+                        Method = "POST",
+                        Headers = {["Content-Type"] = "application/json"},
+                        Body = body
+                    })
                 elseif request then
-                    request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    httpMethod = "request"
+                    response = request({
+                        Url = CONNECTION_WEBHOOK_URL,
+                        Method = "POST",
+                        Headers = {["Content-Type"] = "application/json"},
+                        Body = body
+                    })
                 else
                     error("Executor does not support HTTP requests")
                 end
+
+                print("[Connection Status] 📡 HTTP Request Info:")
+                print("  - Method used: " .. tostring(httpMethod))
+                print("  - Response received: " .. tostring(response ~= nil))
+
+                if response then
+                    print("  - Response status: " .. tostring(response.StatusCode or "N/A"))
+                    print("  - Response body: " .. tostring(response.Body or "N/A"))
+                end
+
+                return response
             end)
 
             if success then
@@ -2883,8 +2932,19 @@ local function setupDisconnectNotifier()
     print("  - Workspace monitoring: ✅")
 end
 
+-- Initialize Discord mention validation
+print("🔍 Validating Discord configuration...")
+validateDiscordMention()
+
 -- Initialize disconnect notifier
 setupDisconnectNotifier()
+
+-- Auto-run test untuk memastikan sistem berfungsi (uncomment untuk testing)
+-- task.spawn(function()
+--     task.wait(5) -- Wait 5 seconds after startup
+--     print("[AUTO TEST] Running disconnect notification test...")
+--     testDisconnectNotification()
+-- end)
 
 -- ====== ONLINE STATUS TIMER SYSTEM ======
 -- Timer untuk update status online setiap 8 detik
@@ -2976,15 +3036,42 @@ local function testOfflineStatusUpdate()
     print("[TEST] ✅ Offline status update test completed")
 end
 
--- TEST FUNCTIONS untuk testing notification dengan tags (hapus setelah testing)
+-- TEST FUNCTIONS untuk testing notification dengan tags
 local function testDisconnectNotification()
-    print("[TEST] Testing disconnect notification with tags...")
-    sendConnectionStatusWebhook("disconnected", "TEST: Manual disconnect test - Tag system check")
+    print("[TEST] 🧪 Testing disconnect notification with tags...")
+    print("[TEST] - Discord User ID: " .. tostring(DISCORD_USER_ID))
+    print("[TEST] - Webhook3 URL: " .. tostring(CONNECTION_WEBHOOK_URL ~= "" and "Configured" or "NOT CONFIGURED"))
+    sendConnectionStatusWebhook("disconnected", "TEST: Manual disconnect test - Tag system check for User ID " .. tostring(DISCORD_USER_ID))
 end
 
 local function testReconnectNotification()
-    print("[TEST] Testing reconnect notification with tags...")
-    sendConnectionStatusWebhook("reconnected", "TEST: Manual reconnect test - Tag system check")
+    print("[TEST] 🧪 Testing reconnect notification with tags...")
+    print("[TEST] - Discord User ID: " .. tostring(DISCORD_USER_ID))
+    print("[TEST] - Webhook3 URL: " .. tostring(CONNECTION_WEBHOOK_URL ~= "" and "Configured" or "NOT CONFIGURED"))
+    sendConnectionStatusWebhook("reconnected", "TEST: Manual reconnect test - Tag system check for User ID " .. tostring(DISCORD_USER_ID))
+end
+
+-- Test function untuk validasi Discord mention format
+local function validateDiscordMention()
+    local userIdStr = tostring(DISCORD_USER_ID)
+    local mentionFormat = "<@" .. userIdStr .. ">"
+
+    print("[VALIDATION] 🔍 Discord Mention Validation:")
+    print("  - Raw User ID: " .. userIdStr)
+    print("  - User ID Length: " .. string.len(userIdStr))
+    print("  - Mention Format: " .. mentionFormat)
+    print("  - Is Numeric: " .. tostring(tonumber(userIdStr) ~= nil))
+    print("  - Valid Length (should be 17-19): " .. tostring(string.len(userIdStr) >= 17 and string.len(userIdStr) <= 19))
+
+    -- Test allowed_mentions structure
+    local testAllowedMentions = {
+        parse = {},
+        users = {userIdStr},
+        roles = {}
+    }
+    print("  - Test allowed_mentions JSON: " .. HttpService:JSONEncode(testAllowedMentions))
+
+    return userIdStr
 end
 
 -- ERROR HANDLING untuk webhook failures
