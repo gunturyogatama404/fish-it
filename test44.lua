@@ -2169,6 +2169,10 @@ end
 
 -- ====== CONNECTION STATUS WEBHOOK SYSTEM ======
 -- Webhook khusus untuk status connect/disconnect
+-- PENTING: Pastikan webhook3 dan discordid sudah dikonfigurasi di main.lua sebelum menjalankan script ini!
+-- Contoh konfigurasi di main.lua:
+-- webhook3 = "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+-- discordid = "123456789012345678"  -- Discord User ID (18 digit number)
 local CONNECTION_WEBHOOK_URL = webhook3 or ""  -- URL webhook khusus untuk status koneksi
 
 local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
@@ -2176,7 +2180,7 @@ local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
 local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
-local DISCORD_USER_ID = discordid  -- Ganti dengan User ID Discord yang ingin di-tag
+local DISCORD_USER_ID = discordid or "YOUR_DISCORD_USER_ID_HERE"  -- Fallback jika discordid tidak terdefinisi
 
 -- QUEUE SYSTEM untuk multiple accounts (mencegah rate limiting)
 local webhookQueue = {}
@@ -2399,39 +2403,50 @@ local function sendConnectionStatusWebhook(status, reason)
     local payload = { embeds = {embed} }
 
     if status == "disconnected" then
-        -- Add content field with mentions for disconnect notifications
-        payload.content = "<@" .. DISCORD_USER_ID .. "> 🔴 **ALERT: Player telah DISCONNECT!** 🚨"
+        -- Ensure DISCORD_USER_ID is valid before creating mention
+        local userIdStr = tostring(DISCORD_USER_ID)
+        if userIdStr and userIdStr ~= "YOUR_DISCORD_USER_ID_HERE" and userIdStr ~= "" and userIdStr ~= "nil" then
+            payload.content = "<@" .. userIdStr .. "> 🔴 **ALERT: " .. (LocalPlayer.DisplayName or LocalPlayer.Name or "Player") .. " TELAH DISCONNECT!** 🚨"
+        else
+            payload.content = "🔴 **ALERT: " .. (LocalPlayer.DisplayName or LocalPlayer.Name or "Player") .. " TELAH DISCONNECT!** 🚨 (No Discord ID configured)"
+        end
 
     elseif status == "reconnected" then
-        -- Add content field with mentions for reconnect notifications
-        payload.content = "<@" .. DISCORD_USER_ID .. "> 🟡 **Player telah RECONNECT!** ✅"
+        -- Ensure DISCORD_USER_ID is valid before creating mention
+        local userIdStr = tostring(DISCORD_USER_ID)
+        if userIdStr and userIdStr ~= "YOUR_DISCORD_USER_ID_HERE" and userIdStr ~= "" and userIdStr ~= "nil" then
+            payload.content = "<@" .. userIdStr .. "> 🟡 **" .. (LocalPlayer.DisplayName or LocalPlayer.Name or "Player") .. " TELAH RECONNECT!** ✅"
+        else
+            payload.content = "🟡 **" .. (LocalPlayer.DisplayName or LocalPlayer.Name or "Player") .. " TELAH RECONNECT!** ✅ (No Discord ID configured)"
+        end
 
     elseif status == "connected" then
-        -- No tag for normal connection, but add user info in embed
+        -- No tag for normal connection
         payload.content = ""
     end
 
     -- Always add allowed_mentions for any status that has content with user mention
     if payload.content and payload.content ~= "" then
-        -- Ensure DISCORD_USER_ID is string and valid
+        -- Ensure DISCORD_USER_ID is string and valid for allowed_mentions
         local userIdStr = tostring(DISCORD_USER_ID)
 
-        payload.allowed_mentions = {
-            users = {userIdStr}
-        }
+        if userIdStr and userIdStr ~= "YOUR_DISCORD_USER_ID_HERE" and userIdStr ~= "" and userIdStr ~= "nil" then
+            -- Only set allowed_mentions if we have a valid user ID and the content contains a mention
+            if string.find(payload.content, "<@" .. userIdStr .. ">") then
+                payload.allowed_mentions = {
+                    users = {userIdStr}
+                }
+                print("[Connection Status] ✅ Mention configured - UserID: " .. userIdStr)
+            else
+                print("[Connection Status] ⚠️ No mention found in content")
+            end
+        else
+            print("[Connection Status] ⚠️ Invalid Discord User ID configured: " .. userIdStr)
+        end
 
-        print("[Connection Status] DEBUG - Notification with tag:")
+        print("[Connection Status] DEBUG - Sending webhook:")
         print("[Connection Status] - Status: " .. status)
         print("[Connection Status] - Content: " .. payload.content)
-        print("[Connection Status] - User ID: " .. userIdStr)
-        print("[Connection Status] - Allowed mentions set for user: " .. userIdStr)
-
-        -- Validate the mention format
-        if string.find(payload.content, "<@" .. userIdStr .. ">") then
-            print("[Connection Status] - ✅ Mention format validated")
-        else
-            print("[Connection Status] - ❌ Mention format validation failed!")
-        end
     end
 
     local body = HttpService:JSONEncode(payload)
@@ -2642,51 +2657,91 @@ task.spawn(function()
 end)
 
 local function sendDisconnectWebhook(username, reason)
-    if hasSentDisconnectWebhook then return end
+    if hasSentDisconnectWebhook then
+        print("[Disconnect] Webhook already sent, skipping...")
+        return
+    end
+
+    print("[Disconnect] Sending disconnect webhook - Username: " .. tostring(username) .. ", Reason: " .. tostring(reason))
     hasSentDisconnectWebhook = true
 
     -- Stop online status timer and update to offline
-    stopOnlineStatusTimer()
+    pcall(stopOnlineStatusTimer)
 
     -- Save session data before disconnect for reconnect detection
-    saveSessionData(game.JobId, os.time())
+    pcall(function()
+        saveSessionData(game.JobId, os.time())
+    end)
 
-    -- Send only to dedicated connection status webhook (webhook3) - as separate notification
-    sendConnectionStatusWebhook("disconnected", reason)
+    -- Send disconnect notification with user tag
+    pcall(function()
+        sendConnectionStatusWebhook("disconnected", reason or "Unknown disconnect reason")
+    end)
+
+    print("[Disconnect] Disconnect webhook processing completed")
 end
 
 local function setupDisconnectNotifier()
-    local username = LocalPlayer.Name
+    local username = LocalPlayer.Name or "Unknown"
     local GuiService = game:GetService("GuiService")
+
+    print("[Disconnect Monitor] Setting up disconnect notifier for player: " .. username)
+    print("[Disconnect Monitor] Discord ID configured: " .. tostring(DISCORD_USER_ID))
+    print("[Disconnect Monitor] Webhook3 URL configured: " .. tostring(webhook3 ~= nil and "Yes" or "No"))
 
     -- Monitor error messages for disconnect reasons
     GuiService.ErrorMessageChanged:Connect(function(message)
-        local lowerMessage = string.lower(message)
+        if hasSentDisconnectWebhook then return end -- Prevent multiple sends
+
+        print("[Disconnect Monitor] Error message detected: " .. tostring(message))
+        local lowerMessage = string.lower(tostring(message))
         local reason = "Unknown"
 
-        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") then
+        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") or lowerMessage:find("lost connection") then
             reason = "Connection Lost: " .. message
-        elseif lowerMessage:find("kick") or lowerMessage:find("banned") then
-            reason = "Kicked: " .. message
-        elseif lowerMessage:find("timeout") then
-            reason = "Timeout: " .. message
-        elseif lowerMessage:find("error") then
-            reason = "General Error: " .. message
+        elseif lowerMessage:find("kick") or lowerMessage:find("banned") or lowerMessage:find("removed") then
+            reason = "Kicked/Banned: " .. message
+        elseif lowerMessage:find("timeout") or lowerMessage:find("timed out") then
+            reason = "Connection Timeout: " .. message
+        elseif lowerMessage:find("server") and lowerMessage:find("full") then
+            reason = "Server Full: " .. message
+        elseif lowerMessage:find("shut") or lowerMessage:find("restart") then
+            reason = "Server Shutdown/Restart: " .. message
+        elseif lowerMessage:find("network") then
+            reason = "Network Error: " .. message
         else
-            return -- Don't send webhook for unrelated errors
+            -- For debugging, log all errors but don't send webhook
+            print("[Disconnect Monitor] Non-disconnect error ignored: " .. message)
+            return
         end
 
+        print("[Disconnect Monitor] Triggering disconnect webhook with reason: " .. reason)
         task.spawn(function()
             sendDisconnectWebhook(username, reason)
         end)
     end)
 
-    -- Monitor for player removal
+    -- Monitor for player removal (enhanced)
     Players.PlayerRemoving:Connect(function(removedPlayer)
-        if removedPlayer == LocalPlayer and not hasSentDisconnectWebhook then
-            task.spawn(function()
-                sendDisconnectWebhook(username, "Disconnected (Player Removed)")
-            end)
+        if removedPlayer == LocalPlayer then
+            print("[Disconnect Monitor] LocalPlayer removal detected!")
+            if not hasSentDisconnectWebhook then
+                task.spawn(function()
+                    sendDisconnectWebhook(username, "Player Removed from Game (Clean Disconnect)")
+                end)
+            end
+        end
+    end)
+
+    -- Monitor for game leaving
+    game:GetService("GuiService").ErrorMessageChanged:Connect(function(message)
+        if message and (message:find("Leaving") or message:find("Disconnecting")) then
+            print("[Disconnect Monitor] Game leaving message detected: " .. message)
+            if not hasSentDisconnectWebhook then
+                task.spawn(function()
+                    sendDisconnectWebhook(username, "Game Leaving: " .. message)
+                end)
+            end
         end
     end)
 
@@ -2733,13 +2788,99 @@ local function setupDisconnectNotifier()
     -- Monitor for game freezes using Stepped delta
     RunService.Stepped:Connect(function(_, deltaTime)
         if deltaTime > FREEZE_THRESHOLD then
+            print("[Disconnect Monitor] Game freeze detected! Delta: " .. string.format("%.2f", deltaTime) .. "s")
             task.spawn(function()
                 sendDisconnectWebhook(username, "Game Freeze Detected (Delta: " .. string.format("%.2f", deltaTime) .. "s)")
             end)
         end
     end)
 
+    -- Monitor for Roblox core errors
+    local ScriptContext = game:GetService("ScriptContext")
+    ScriptContext.Error:Connect(function(message, stack, script)
+        if hasSentDisconnectWebhook then return end
+
+        local lowerMessage = string.lower(tostring(message))
+        if lowerMessage:find("disconnect") or lowerMessage:find("network") or
+           lowerMessage:find("timeout") or lowerMessage:find("connection") then
+            print("[Disconnect Monitor] Script error suggests disconnect: " .. tostring(message))
+            task.spawn(function()
+                sendDisconnectWebhook(username, "Script Error (Network/Connection): " .. tostring(message))
+            end)
+        end
+    end)
+
+    -- Heartbeat monitoring for complete game freeze
+    local lastHeartbeat = tick()
+    local heartbeatFailureCount = 0
+
+    RunService.Heartbeat:Connect(function()
+        lastHeartbeat = tick()
+        heartbeatFailureCount = 0 -- Reset on successful heartbeat
+    end)
+
+    -- Check for heartbeat failures
+    task.spawn(function()
+        while true do
+            task.wait(5) -- Check every 5 seconds
+            local currentTime = tick()
+            local timeSinceLastHeartbeat = currentTime - lastHeartbeat
+
+            if timeSinceLastHeartbeat > 10 then -- If no heartbeat for 10 seconds
+                heartbeatFailureCount = heartbeatFailureCount + 1
+                print("[Disconnect Monitor] Heartbeat failure detected! Count: " .. heartbeatFailureCount .. ", Time since last: " .. string.format("%.2f", timeSinceLastHeartbeat) .. "s")
+
+                if heartbeatFailureCount >= 2 and not hasSentDisconnectWebhook then
+                    task.spawn(function()
+                        sendDisconnectWebhook(username, "Heartbeat Failure - Game Unresponsive (" .. string.format("%.2f", timeSinceLastHeartbeat) .. "s)")
+                    end)
+                    break
+                end
+            end
+        end
+    end)
+
+    -- Emergency disconnect detection via workspace monitoring
+    local workspaceConnection
+    workspaceConnection = workspace.ChildAdded:Connect(function()
+        -- This connection will be severed on disconnect
+        -- If we lose connection, this won't fire
+    end)
+
+    -- Monitor workspace connection loss
+    task.spawn(function()
+        task.wait(10) -- Wait for initialization
+        local lastWorkspaceCheck = tick()
+
+        while true do
+            task.wait(15) -- Check every 15 seconds
+
+            pcall(function()
+                -- Try to access workspace - this will fail on disconnect
+                local _ = workspace.Name
+                lastWorkspaceCheck = tick()
+            end)
+
+            local currentTime = tick()
+            if currentTime - lastWorkspaceCheck > 30 and not hasSentDisconnectWebhook then
+                print("[Disconnect Monitor] Workspace access failure detected!")
+                task.spawn(function()
+                    sendDisconnectWebhook(username, "Workspace Access Failure - Likely Disconnected")
+                end)
+                break
+            end
+        end
+    end)
+
     print("🚨 Advanced disconnect notifier setup complete")
+    print("[Disconnect Monitor] All monitoring systems active:")
+    print("  - Error message monitoring: ✅")
+    print("  - Player removal monitoring: ✅")
+    print("  - Network ping monitoring: ✅")
+    print("  - Game freeze detection: ✅")
+    print("  - Script error monitoring: ✅")
+    print("  - Heartbeat monitoring: ✅")
+    print("  - Workspace monitoring: ✅")
 end
 
 -- Initialize disconnect notifier
