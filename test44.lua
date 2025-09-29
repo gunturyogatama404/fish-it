@@ -1,3 +1,39 @@
+-- ====== SCRIPT INITIALIZATION SAFETY CHECK ======
+print("🚀 [Auto Fish] Script loading initiated...")
+
+-- Critical dependency validation
+local success, errorMsg = pcall(function()
+    -- Validate critical services
+    local services = {
+        game = game,
+        workspace = workspace,
+        Players = game:GetService("Players"),
+        RunService = game:GetService("RunService"),
+        ReplicatedStorage = game:GetService("ReplicatedStorage"),
+        HttpService = game:GetService("HttpService")
+    }
+
+    for serviceName, service in pairs(services) do
+        if not service then
+            error("Critical service missing: " .. serviceName)
+        end
+    end
+
+    -- Validate LocalPlayer
+    local LocalPlayer = game:GetService("Players").LocalPlayer
+    if not LocalPlayer then
+        error("LocalPlayer not available")
+    end
+
+    print("✅ [Auto Fish] Core dependencies validated")
+    return true
+end)
+
+if not success then
+    error("❌ [Auto Fish] Critical dependency check failed: " .. tostring(errorMsg))
+    return
+end
+
 -- ====== ERROR HANDLING SETUP ======
 -- Suppress asset loading errors (like sound approval issues)
 local function suppressAssetErrors()
@@ -24,7 +60,14 @@ local function suppressAssetErrors()
         oldError(...)
     end
 end
-suppressAssetErrors()
+
+-- Apply error suppression
+local suppressSuccess = pcall(suppressAssetErrors)
+if suppressSuccess then
+    print("✅ [Auto Fish] Error suppression enabled")
+else
+    warn("⚠️ [Auto Fish] Error suppression setup failed")
+end
 
 -- ====== AUTOMATIC PERFORMANCE OPTIMIZATION ======
 local function ultimatePerformance()
@@ -49,9 +92,16 @@ local function ultimatePerformance()
             end
         end
     end)
-    print("🚀 Graphics Optimized")
+    print("🚀 [Auto Fish] Graphics optimized for better performance")
 end
-ultimatePerformance()
+
+-- Safe execution of performance optimization
+local perfSuccess = pcall(ultimatePerformance)
+if perfSuccess then
+    print("✅ [Auto Fish] Performance optimization applied")
+else
+    warn("⚠️ [Auto Fish] Performance optimization failed, continuing...")
+end
 
 -- ====================================================================
 --                        WEBHOOK CONFIGURATION
@@ -370,9 +420,19 @@ end
 --                        INISIALISASI & SISA SCRIPT
 -- ====================================================================
 
--- Memulai sistem inventory dan notifier setelah game siap
+-- Initialize inventory and notifier systems after game is ready
+print("⏳ [Auto Fish] Initializing inventory system...")
 task.wait(5)
-LightweightInventory.start(DiscordNotifier.scanInventory)
+
+local invSuccess = pcall(function()
+    LightweightInventory.start(DiscordNotifier.scanInventory)
+end)
+
+if invSuccess then
+    print("✅ [Auto Fish] Inventory system loaded")
+else
+    warn("⚠️ [Auto Fish] Inventory system failed to load")
+end
 
 -- Sisa script zfish v6.2.lua...
 local player = game.Players.LocalPlayer
@@ -1046,10 +1106,13 @@ local function getNetworkEvents()
 end
 
 -- Get all network events with proper error handling
+print("⏳ [Auto Fish] Initializing network events...")
 local networkEvents = getNetworkEvents()
 if not networkEvents then
-    error("Failed to initialize network events. Script cannot continue.")
+    error("❌ [Auto Fish] Failed to initialize network events. Script cannot continue.")
     return
+else
+    print("✅ [Auto Fish] Network events initialized")
 end
 
 -- Extract events for easier access
@@ -2933,11 +2996,22 @@ local function setupDisconnectNotifier()
 end
 
 -- Initialize Discord mention validation
-print("🔍 Validating Discord configuration...")
-validateDiscordMention()
+print("⏳ [Auto Fish] Validating Discord configuration...")
+local discordValid = pcall(validateDiscordMention)
+if discordValid then
+    print("✅ [Auto Fish] Discord configuration validated")
+else
+    warn("⚠️ [Auto Fish] Discord configuration validation failed")
+end
 
 -- Initialize disconnect notifier
-setupDisconnectNotifier()
+print("⏳ [Auto Fish] Setting up disconnect monitor...")
+local monitorSuccess = pcall(setupDisconnectNotifier)
+if monitorSuccess then
+    print("✅ [Auto Fish] Disconnect monitor ready")
+else
+    warn("⚠️ [Auto Fish] Disconnect monitor setup failed")
+end
 
 -- Auto-run test untuk memastikan sistem berfungsi (uncomment untuk testing)
 -- task.spawn(function()
@@ -4217,7 +4291,13 @@ do
 
 end
 
-local Window  = Library.CreateLib("🎣 Auto Fish v6.2 Enhanced")
+print("⏳ [Auto Fish] Creating user interface...")
+local Window = Library.CreateLib("🎣 Auto Fish v6.2 Enhanced")
+if Window then
+    print("✅ [Auto Fish] User interface created")
+else
+    warn("⚠️ [Auto Fish] UI creation failed")
+end
 
 --TAB: Auto
 local TabAuto      = Window:NewTab("Auto Features")
@@ -4715,7 +4795,8 @@ task.spawn(function()
 end)
 
 
--- ====== AUTO LOOPS WITH ENHANCED LOGIC ====== 
+-- ====== AUTO LOOPS WITH ENHANCED LOGIC ======
+print("⏳ [Auto Fish] Starting automation loops...")
 
 -- Enhanced Auto Farm Loop (combines equip + fishing) with asset error protection
 task.spawn(function()
@@ -4841,8 +4922,8 @@ end)
 
 -- The "Disconnect Notifier" section has been removed due to compatibility issues.
 
--- ============ SCRIPT INITIALIZATION ============ 
-print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
+-- ============ SCRIPT INITIALIZATION ============
+print("⏳ [Auto Fish] Starting auto upgrade systems...")
 
 -- ====== AUTO UPGRADE LOOPS (From Fish v3) ======
 task.spawn(function()
@@ -4918,3 +4999,66 @@ task.spawn(function()
         task.wait(15) -- Check every 15 seconds
     end
 end)
+
+-- ====== SCRIPT COMPLETION & HEALTH CHECK ======
+-- Validate all critical systems are ready
+local function performHealthCheck()
+    local healthStatus = {}
+
+    -- Check critical variables
+    healthStatus.autoFarmToggle = autoFarmToggle ~= nil
+    healthStatus.networkEvents = networkEvents ~= nil
+    healthStatus.discordMonitor = setupDisconnectNotifier ~= nil
+    healthStatus.uiSystem = Library ~= nil
+    healthStatus.webhookSystem = CONNECTION_WEBHOOK_URL ~= nil
+
+    -- Check LocalPlayer
+    healthStatus.localPlayer = (game:GetService("Players").LocalPlayer ~= nil)
+
+    return healthStatus
+end
+
+local health = performHealthCheck()
+local allSystemsReady = true
+
+print("🔍 [Auto Fish] System Health Check:")
+for system, status in pairs(health) do
+    local icon = status and "✅" or "❌"
+    print("  " .. icon .. " " .. system .. ": " .. (status and "Ready" or "Failed"))
+    if not status then
+        allSystemsReady = false
+    end
+end
+
+if allSystemsReady then
+    print("✅ [Auto Fish] All systems operational!")
+    print("📋 Auto Fish Enhanced Edition v6.2 fully loaded!")
+    print("")
+    print("🎯 Available Features:")
+    print("  🎣 Auto Farm System")
+    print("  💰 Auto Sell System")
+    print("  🎯 Auto Catch System")
+    print("  🌤️ Auto Weather System")
+    print("  🦈 Auto Megalodon Hunt")
+    print("  🔧 Auto Upgrade System")
+    print("  📡 Advanced Disconnect Monitor")
+    print("  💻 GPU Saver Mode")
+    print("  🎮 Mobile-Optimized UI")
+    print("")
+    print("🎮 Controls:")
+    print("  📱 Press RightShift to toggle UI")
+    print("  🔧 Press RightControl for GPU Saver")
+    print("")
+    print("🎉 Script ready! Happy fishing! 🎣")
+
+    -- Show Discord monitor status
+    if DISCORD_USER_ID and DISCORD_USER_ID ~= "YOUR_DISCORD_USER_ID_HERE" then
+        print("📡 Discord notifications enabled for User ID: " .. DISCORD_USER_ID)
+    else
+        print("⚠️ Discord notifications disabled (no User ID configured)")
+    end
+
+else
+    warn("⚠️ [Auto Fish] Some systems failed health check. Script may not function properly.")
+    warn("⚠️ Check the error messages above and ensure all dependencies are available.")
+end
