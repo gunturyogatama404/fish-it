@@ -103,6 +103,46 @@ else
     warn("⚠️ [Auto Fish] Performance optimization failed, continuing...")
 end
 
+-- ====== ANTI-AFK SYSTEM ======
+-- Prevents Roblox from disconnecting due to 20 minute idle timeout
+local function setupAntiAFK()
+    local VirtualUser = game:GetService("VirtualUser")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Method 1: Hook into Roblox's idle detection
+    LocalPlayer.Idled:Connect(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+        print("🔄 [Anti-AFK] Prevented idle disconnect")
+    end)
+
+    -- Method 2: Periodic random movements (every 5 minutes as backup)
+    task.spawn(function()
+        while true do
+            task.wait(300) -- Every 5 minutes
+            pcall(function()
+                local character = LocalPlayer.Character
+                if character and character:FindFirstChild("Humanoid") then
+                    -- Small jump to show activity
+                    character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+            end)
+            print("🔄 [Anti-AFK] Activity signal sent")
+        end
+    end)
+
+    print("✅ [Anti-AFK] System initialized - Idle disconnect prevention active")
+end
+
+-- Initialize Anti-AFK
+local antiAfkSuccess = pcall(setupAntiAFK)
+if antiAfkSuccess then
+    print("✅ [Auto Fish] Anti-AFK enabled")
+else
+    warn("⚠️ [Auto Fish] Anti-AFK setup failed, continuing...")
+end
+
 -- ====================================================================
 --                        WEBHOOK CONFIGURATION
 -- ====================================================================
@@ -455,6 +495,13 @@ local sessionStats = {
     bestFish = {name = "None", value = 0},
     fishTypes = {}
 }
+
+-- ====== STUCK DETECTION VARIABLES ======
+local lastFishCaughtTime = os.time()
+local STUCK_TIMEOUT = 120 -- 2 minutes in seconds
+local stuckCheckEnabled = true -- ENABLED by default
+local lastStuckNotificationTime = 0
+local STUCK_NOTIFICATION_COOLDOWN = 300 -- 5 minutes cooldown for stuck notifications
 
 -- ====== FPS TRACKING VARIABLES ====== 
 local RunService = game:GetService("RunService")
@@ -1473,7 +1520,7 @@ function enableGPUSaver()
             end
         end
         
-        pcall(function() setfpscap(30) end) -- Limit FPS to 5
+        pcall(function() setfpscap(40) end) -- Limit FPS to 5
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
@@ -1521,25 +1568,90 @@ function disableGPUSaver()
     end
 end
 
--- ====== FISH CAUGHT EVENT HANDLER ====== 
-local function setupFishTracking() 
-    print("Fish tracking active - monitoring catch count only")
-    
+-- ====== FISH CAUGHT EVENT HANDLER ======
+local function setupFishTracking()
+    print("Fish tracking active - monitoring catch count and stuck detection")
+
     task.spawn(function()
         task.wait(2)
         if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then
             local lastCaught = LocalPlayer.leaderstats.Caught.Value
-            
+
             LocalPlayer.leaderstats.Caught.Changed:Connect(function(newValue)
                 local increase = newValue - lastCaught
                 if increase > 0 then
                     sessionStats.totalFish = sessionStats.totalFish + increase
+                    -- Update last fish caught time for stuck detection
+                    lastFishCaughtTime = os.time()
+                    print("[StuckDetection] Fish caught, timer reset")
                 end
                 lastCaught = newValue
             end)
         end
     end)
 end
+
+-- ====== STUCK DETECTION SYSTEM ======
+local function sendStuckNotification()
+    local currentTime = os.time()
+    if currentTime - lastStuckNotificationTime < STUCK_NOTIFICATION_COOLDOWN then
+        return -- Still in cooldown
+    end
+
+    local timeSinceLastFish = currentTime - lastFishCaughtTime
+    local timeString = math.floor(timeSinceLastFish / 60) .. "m " .. (timeSinceLastFish % 60) .. "s ago"
+
+    sendUnifiedWebhook("account_stuck", {
+        timeSinceLastFish = timeString
+    })
+
+    lastStuckNotificationTime = currentTime
+    print("[StuckDetection] Notification sent to Discord")
+end
+
+local function restartAutoFarm()
+    print("[StuckDetection] Attempting to restart Auto Farm...")
+
+    -- Turn off auto farm first
+    if isAutoFarmOn then
+        setAutoFarm(false)
+        task.wait(2)
+    end
+
+    -- Turn it back on
+    setAutoFarm(true)
+    print("[StuckDetection] Auto Farm restarted")
+end
+
+local function checkForStuckState()
+    if not stuckCheckEnabled or not isAutoFarmOn then
+        return
+    end
+
+    local currentTime = os.time()
+    local timeSinceLastFish = currentTime - lastFishCaughtTime
+
+    if timeSinceLastFish >= STUCK_TIMEOUT then
+        print("[StuckDetection] STUCK DETECTED! No fish caught for " .. timeSinceLastFish .. " seconds")
+
+        -- Send notification
+        sendStuckNotification()
+
+        -- Restart auto farm
+        restartAutoFarm()
+
+        -- Reset timer to prevent immediate re-trigger
+        lastFishCaughtTime = currentTime
+    end
+end
+
+-- Start stuck monitoring
+task.spawn(function()
+    while true do
+        task.wait(30) -- Check every 30 seconds
+        checkForStuckState()
+    end
+end)
 
 -- Call this function
 setupFishTracking()
@@ -1945,7 +2057,7 @@ local maxRetryAttempts = 3
 -- Use webhook2 from main.lua if available, otherwise use empty fallback
 local UNIFIED_WEBHOOK_URL = webhook2  -- Uses webhook2 from loadstring
 
--- ====== UNIFIED WEBHOOK FUNCTION ====== 
+-- ====== UNIFIED WEBHOOK FUNCTION ======
 local function sendUnifiedWebhook(webhookType, data)
     -- Check if webhook URL is configured
     if not UNIFIED_WEBHOOK_URL or UNIFIED_WEBHOOK_URL == "" then
@@ -1992,6 +2104,20 @@ local function sendUnifiedWebhook(webhookType, data)
                 { name = "Duration", value = formatDuration(duration), inline = true },
             },
             footer = { text = 'Megalodon Watch - Auto Fish' }
+        }
+
+    elseif webhookType == "account_stuck" then
+        embed = {
+            title = '⚠️ [Alert] Account Stuck Detected',
+            description = 'Account appears to be stuck - no fish caught in 2+ minutes. Auto-restart attempted.',
+            color = 16776960, -- Yellow/Orange
+            fields = {
+                { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+                { name = "🕒 Detected At", value = os.date("%H:%M:%S"), inline = true },
+                { name = "⏱️ Last Fish", value = data and data.timeSinceLastFish or "2+ minutes ago", inline = true },
+                { name = "🔄 Action Taken", value = "Auto Farm restarted", inline = false }
+            },
+            footer = { text = 'Stuck Detection - Auto Fish' }
         }
 
     elseif webhookType == "fish_found" then
@@ -2413,21 +2539,9 @@ local function sendConnectionStatusWebhook(status, reason)
 
     local embed = {}
 
-    if status == "connected" then
-        embed = {
-            title = "🟢 Player Connected",
-            description = "Auto Fish script has been successfully started",
-            color = 65280, -- Green
-            fields = {
-                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
-                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
-                { name = "🎮 Game", value = "🐠 Fish It", inline = true },
-                { name = "📱 Status", value = "Auto Fish Active", inline = false }
-            },
-            footer = { text = "Connection Monitor • Auto Fish Script" },
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
-        }
-    elseif status == "reconnected" then
+    -- NOTE: "connected" status removed to reduce webhook spam
+    -- Only "reconnected" and "disconnected" will send notifications
+    if status == "reconnected" then
         embed = {
             title = "🔄 Player Reconnected",
             description = reason or "Player has successfully reconnected to the server",
@@ -2476,10 +2590,10 @@ local function sendConnectionStatusWebhook(status, reason)
     elseif status == "reconnected" then
         -- Always include mention for reconnect notifications
         payload.content = "<@" .. userIdStr .. "> 🟡 **" .. playerName .. " TELAH RECONNECT!** ✅"
-
-    elseif status == "connected" then
-        -- No mention for normal connection
-        payload.content = "🟢 **" .. playerName .. " telah terhubung** ✅"
+    else
+        -- Unknown status or "connected" (which is now disabled)
+        warn('[Connection Status] Unknown or disabled status: ' .. tostring(status))
+        return
     end
 
     -- Always add allowed_mentions if content has mentions
@@ -2702,14 +2816,14 @@ local function initializeReconnectDetection()
         local timeDiff = currentTime - lastDisconnectTime
         print("[Reconnect] Time difference: " .. timeDiff .. " seconds")
 
-        -- NEW LOGIC: If offline > 1 minute, treat as new session
+        -- NEW LOGIC: If offline > 1 minute, treat as reconnect (not new connection)
         if timeDiff > NEW_SESSION_THRESHOLD then
-            print("[Reconnect] Offline > 1 minute (" .. timeDiff .. "s) - treating as new connection")
+            print("[Reconnect] Offline > 1 minute (" .. timeDiff .. "s) - treating as reconnect")
             local success, err = pcall(function()
-                sendConnectionStatusWebhook("connected", "New connection after " .. math.floor(timeDiff/60) .. " minute(s) offline")
+                sendConnectionStatusWebhook("reconnected", "Reconnected after " .. math.floor(timeDiff/60) .. " minute(s) offline")
             end)
             if not success then
-                print("[Reconnect] Error sending new connection webhook: " .. tostring(err))
+                print("[Reconnect] Error sending reconnect webhook: " .. tostring(err))
             end
         else
             -- Within 1 minute threshold - check reconnect type
@@ -2738,14 +2852,10 @@ local function initializeReconnectDetection()
             end
         end
     else
-        -- No previous session data = fresh start
-        print("[Reconnect] No previous session data found - fresh start")
-        local success, err = pcall(function()
-            sendConnectionStatusWebhook("connected")
-        end)
-        if not success then
-            print("[Reconnect] Error sending fresh start webhook: " .. tostring(err))
-        end
+        -- No previous session data = fresh start (no webhook sent to avoid spam)
+        print("[Reconnect] No previous session data found - fresh start (no notification)")
+        -- Webhook "connected" disabled to reduce spam
+        -- Only reconnect and disconnect will send notifications
     end
 
     -- Save current session as the new baseline
@@ -2766,6 +2876,9 @@ task.spawn(function()
 
     initializeReconnectDetection()
     print("✅ Auto Fish script fully initialized and connected!")
+
+    -- NOTE: Online status updates are disabled to reduce webhook spam
+    -- Only connect/disconnect/reconnect notifications will be sent
 end)
 
 local function sendDisconnectWebhook(username, reason)
@@ -3051,46 +3164,16 @@ local function startOnlineStatusTimer()
 end
 
 -- Function untuk stop online status updates (saat disconnect)
+-- DISABLED: Online status system is turned off to reduce webhook spam
 local function stopOnlineStatusTimer()
-    print("[Online Status] Stopping timer system...")
+    print("[Online Status] Timer system disabled (no online status updates)")
     isOnlineStatusActive = false
-
-    -- Update message to show offline status
-    local accountId = tostring(LocalPlayer.UserId)
-    local existingMessageId = getStoredMessageId(accountId)
-
-    if existingMessageId then
-        local uptime = os.time() - startTime
-        local fishCount = (LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught and LocalPlayer.leaderstats.Caught.Value) or 0
-        local bestFish = (LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] and LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
-
-        local offlineEmbed = {
-            title = "🔴 " .. (LocalPlayer.DisplayName or LocalPlayer.Name) .. " - OFFLINE",
-            description = "**Status**: Disconnected from game",
-            color = 16711680, -- Red
-            fields = {
-                { name = "⏰ Disconnected At", value = os.date("%H:%M:%S"), inline = true },
-                { name = "⌛ Session Duration", value = FormatTime(uptime), inline = true },
-                { name = "🐠 Total Fish", value = FormatNumber(fishCount), inline = true },
-                { name = "🏆 Best Fish", value = bestFish, inline = true },
-                { name = "💰 Final Coins", value = FormatNumber(getCurrentCoins()), inline = true },
-                { name = "⭐ Final Level", value = getCurrentLevel(), inline = true },
-            },
-            footer = { text = "Auto Fish Status • Player Disconnected" },
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
-        }
-
-        local success, err = editDiscordMessage(existingMessageId, offlineEmbed, "")
-        if success then
-            print("[Online Status] Updated message to offline status")
-        else
-            print("[Online Status] Failed to update offline status: " .. tostring(err))
-        end
-    end
+    -- No message editing needed since online status is disabled
 end
 
--- Start the online status timer
-startOnlineStatusTimer()
+-- DISABLED: Online status timer to reduce webhook spam
+-- Only connect/disconnect/reconnect notifications will be sent
+-- startOnlineStatusTimer()
 
 -- ====== TEST FUNCTIONS & ERROR HANDLING ======
 -- TEST FUNCTIONS untuk testing sistem online status baru
@@ -3152,14 +3235,8 @@ end
 local function handleWebhookError(errorType, error)
     print("[Error Handler] " .. errorType .. " failed: " .. tostring(error))
 
-    -- Retry logic untuk critical errors
-    if errorType == "online_status" then
-        task.spawn(function()
-            task.wait(30) -- Wait 30 seconds before retry
-            print("[Error Handler] Retrying online status update...")
-            updateOnlineStatus()
-        end)
-    end
+    -- Online status updates are disabled, no retry needed
+    -- Only reconnect/disconnect webhooks are active
 end
 
 -- Debug function untuk check message IDs
