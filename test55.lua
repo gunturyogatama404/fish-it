@@ -943,167 +943,51 @@ local upgradeBaitToggle
 -- ====== AUTO UPGRADE STATE & DATA (From Fish v3) ======
 -- Convert upgrade system to globals to save local register space
 upgradeState = { rod = false, bait = false }
-rodIDs = {79, 76, 85, 77, 78, 4, 80, 6, 7, 5}
+rodIDs = {79, 76, 85, 77, 78, 4, 80, 6, 7, 5, 126}
 baitIDs = {10, 2, 3, 17, 6, 8, 15, 16}
-rodPrices = {[79]=350,[76]=3000,[85]=1500,[77]=3000,[78]=5000,[4]=15000,[80]=50000,[6]=215000,[7]=437000,[5]=1000000}
+rodPrices = {[79]=350,[76]=3000,[85]=1500,[77]=3000,[78]=5000,[4]=15000,[80]=50000,[6]=215000,[7]=437000,[5]=1000000,[126]=2500000}
 baitPrices = {[10]=100,[2]=1000,[3]=3000,[17]=83500,[6]=290000,[8]=630000,[15]=1150000,[16]=1000000}
 failedRodAttempts, failedBaitAttempts, rodFailedCounts, baitFailedCounts = {}, {}, {}, {}
 currentRodTarget, currentBaitTarget = nil, nil
 
-local function findNextRodTarget()
-    local a=1;if currentRodTarget then for c=1,#rodIDs do if rodIDs[c]==currentRodTarget then a=c+1;break end end end;for c=a,#rodIDs do local b=rodIDs[c];if rodPrices[b]and(not rodFailedCounts[b]or rodFailedCounts[b]<3)then return b end end;return nil
-end
-local function findNextBaitTarget()
-    local a=1;if currentBaitTarget then for c=1,#baitIDs do if baitIDs[c]==currentBaitTarget then a=c+1;break end end end;for c=a,#baitIDs do local b=baitIDs[c];if baitPrices[b]and(not baitFailedCounts[b]or baitFailedCounts[b]<3)then return b end end;return nil
-end
-local function initializeTargets()
-    currentRodTarget=findNextRodTarget();currentBaitTarget=findNextBaitTarget()
-    if currentRodTarget then print("[AutoUpgrade] Initial rod target: ID "..tostring(currentRodTarget))end
-    if currentBaitTarget then print("[AutoUpgrade] Initial bait target: ID "..tostring(currentBaitTarget))end
-end
-local function getAffordableRod(a)
-    if not currentRodTarget then return end;local b=rodPrices[currentRodTarget];if not b then currentRodTarget=findNextRodTarget();return end
-    if failedRodAttempts[currentRodTarget]and tick()-failedRodAttempts[currentRodTarget]<30 then return end;if a>=b then return currentRodTarget,b end
-end
-local function getAffordableBait(a)
-    if not currentBaitTarget then return end;local b=baitPrices[currentBaitTarget];if not b then currentBaitTarget=findNextBaitTarget();return end
-    if failedBaitAttempts[currentBaitTarget]and tick()-failedBaitAttempts[currentBaitTarget]<30 then return end;if a>=b then return currentBaitTarget,b end
-end
-
-local function setUpgradeRod(a)
-    if upgradeState.rod==a then return end;upgradeState.rod=a;if upgradeRodToggle then upgradeRodToggle:UpdateToggle(nil,a)end;if a then initializeTargets()end;print("🔧 Auto Upgrade Rod: "..(a and "ENABLED" or "DISABLED"))
-end
-local function setUpgradeBait(a)
-    if upgradeState.bait==a then return end;upgradeState.bait=a;if upgradeBaitToggle then upgradeBaitToggle:UpdateToggle(nil,a)end;if a then initializeTargets()end;print("🔧 Auto Upgrade Bait: "..(a and "ENABLED" or "DISABLED"))
-end
+function findNextRodTarget()local a=1;if currentRodTarget then for c=1,#rodIDs do if rodIDs[c]==currentRodTarget then a=c+1;break end end end;for c=a,#rodIDs do local b=rodIDs[c];if rodPrices[b]and(not rodFailedCounts[b]or rodFailedCounts[b]<3)then return b end end;return nil end
+function findNextBaitTarget()local a=1;if currentBaitTarget then for c=1,#baitIDs do if baitIDs[c]==currentBaitTarget then a=c+1;break end end end;for c=a,#baitIDs do local b=baitIDs[c];if baitPrices[b]and(not baitFailedCounts[b]or baitFailedCounts[b]<3)then return b end end;return nil end
+function initializeTargets()currentRodTarget=findNextRodTarget();currentBaitTarget=findNextBaitTarget();if currentRodTarget then print("[AutoUpgrade] Rod target: "..currentRodTarget)end;if currentBaitTarget then print("[AutoUpgrade] Bait target: "..currentBaitTarget)end end
+function getAffordableRod(a)if not currentRodTarget then return end;local b=rodPrices[currentRodTarget];if not b then currentRodTarget=findNextRodTarget();return end;if failedRodAttempts[currentRodTarget]and tick()-failedRodAttempts[currentRodTarget]<30 then return end;if a>=b then return currentRodTarget,b end end
+function getAffordableBait(a)if not currentBaitTarget then return end;local b=baitPrices[currentBaitTarget];if not b then currentBaitTarget=findNextBaitTarget();return end;if failedBaitAttempts[currentBaitTarget]and tick()-failedBaitAttempts[currentBaitTarget]<30 then return end;if a>=b then return currentBaitTarget,b end end
+function setUpgradeRod(a)if upgradeState.rod==a then return end;upgradeState.rod=a;if upgradeRodToggle then upgradeRodToggle:UpdateToggle(nil,a)end;if a then initializeTargets()end;print("🔧 Auto Upgrade Rod: "..(a and "ON"or "OFF"))end
+function setUpgradeBait(a)if upgradeState.bait==a then return end;upgradeState.bait=a;if upgradeBaitToggle then upgradeBaitToggle:UpdateToggle(nil,a)end;if a then initializeTargets()end;print("🔧 Auto Upgrade Bait: "..(a and "ON"or "OFF"))end
 -- ====== END AUTO UPGRADE ======
 
--- ====== FUNGSI UNTUK MENDAPATKAN COIN DAN LEVEL ====== 
-local function getCurrentCoins()
-    local currencyText = "0"
-    local success, result = pcall(function()
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        local events = playerGui and playerGui:FindFirstChild("Events")
-        local frame = events and events:FindFirstChild("Frame")
-        local currencyCounter = frame and frame:FindFirstChild("CurrencyCounter")
-        local counter = currencyCounter and currencyCounter:FindFirstChild("Counter")
-        return counter and counter.Text
-    end)
+-- ====== SHOP PURCHASE FUNCTIONS (GLOBALS TO SAVE LOCAL REGISTERS) ======
+rodDatabase = {luck=79,carbon=76,grass=85,demascus=77,ice=78,lucky=4,midnight=80,steampunk=6,chrome=7,astral=5,ares=126}
+baitDatabase = {topwaterbait=10,luckbait=2,midnightbait=3,deepbait=17,chromabait=6,darkmatterbait=8,corruptbait=15,aetherbait=16}
 
-    if success and result then
-        currencyText = result
-    end
-
-    local cleanText = currencyText:gsub(",", "")
-    local numResult = 0
-    if cleanText:lower():find("k") then
-        local numPart = cleanText:lower():gsub("k", "")
-        numResult = (tonumber(numPart) or 0) * 1000
-    elseif cleanText:lower():find("m") then
-        local numPart = cleanText:lower():gsub("m", "")
-        numResult = (tonumber(numPart) or 0) * 1000000
-    else
-        numResult = tonumber(cleanText) or 0
-    end
-    return numResult
+-- Manual purchase functions (globals to reduce local register usage)
+function buyRod(a)
+    if networkEvents and networkEvents.purchaseRodEvent then pcall(function()networkEvents.purchaseRodEvent:InvokeServer(a)print("🛒 [Shop] Purchase rod: "..a)end)else pcall(function()local b=game:GetService("ReplicatedStorage")if b then local c=b.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseFishingRod"]if c then task.wait(0.5)c:InvokeServer(a)print("🛒 [Shop] Purchased rod (direct): "..a)end end end)end
 end
-
-local function getCurrentLevel()
-    local success, result = pcall(function()
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        if not playerGui then return "Lvl 0" end
-        
-        local xp = playerGui:FindFirstChild("XP")
-        if not xp then return "Lvl 0" end
-        
-        local frame = xp:FindFirstChild("Frame")
-        if not frame then return "Lvl 0" end
-        
-        local levelCount = frame:FindFirstChild("LevelCount")
-        if not levelCount then return "Lvl 0" end
-        
-        return levelCount.Text or "Lvl 0"
-    end)
-    
-    return success and result or "Lvl 0"
+function buyBait(a)
+    if networkEvents and networkEvents.purchaseBaitEvent then pcall(function()networkEvents.purchaseBaitEvent:InvokeServer(a)print("🛒 [Shop] Purchase bait: "..a)end)else pcall(function()local b=game:GetService("ReplicatedStorage")if b then local c=b.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseBait"]if c then task.wait(0.5)c:InvokeServer(a)print("🛒 [Shop] Purchased bait (direct): "..a)end end end)end
 end
-
--- ====== HELPER FUNCTIONS FOR WEB MONITOR ====== 
-local function getFishCaught()
-    local success, fishCaught = pcall(function()
-        if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then
-            return LocalPlayer.leaderstats.Caught.Value
-        end
-        return 0
-    end)
-
-    return success and fishCaught or 0
+function shopAutoPurchaseOnStartup()
+    print("🛒 [Shop] Ready. Uncomment lines below to auto-buy:")
+    -- buyRod(rodDatabase.ares) -- Ares Rod
 end
+--- ====== END SHOP FUNCTIONS ======
 
-local function getBestFish()
-    local success, bestFish = pcall(function()
-        if LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] then
-            return LocalPlayer.leaderstats["Rarest Fish"].Value
-        end
-        return "None"
-    end)
+-- ====== COIN/LEVEL FUNCTIONS (GLOBAL TO SAVE REGISTERS) ======
+function getCurrentCoins()local a="0";local b,c=pcall(function()local d=LocalPlayer:FindFirstChild("PlayerGui")local e=d and d:FindFirstChild("Events")local f=e and e:FindFirstChild("Frame")local g=f and f:FindFirstChild("CurrencyCounter")local h=g and g:FindFirstChild("Counter")return h and h.Text end)if b and c then a=c end;local i=a:gsub(",","")local j=0;if i:lower():find("k")then local k=i:lower():gsub("k","")j=(tonumber(k)or 0)*1000 elseif i:lower():find("m")then local k=i:lower():gsub("m","")j=(tonumber(k)or 0)*1000000 else j=tonumber(i)or 0 end;return j end
+function getCurrentLevel()local a,b=pcall(function()local c=LocalPlayer:FindFirstChild("PlayerGui")if not c then return"Lvl 0"end;local d=c:FindFirstChild("XP")if not d then return"Lvl 0"end;local e=d:FindFirstChild("Frame")if not e then return"Lvl 0"end;local f=e:FindFirstChild("LevelCount")if not f then return"Lvl 0"end;return f.Text or"Lvl 0"end)return a and b or"Lvl 0"end
 
-    return success and bestFish or "None"
-end
+-- ====== HELPER FUNCTIONS (GLOBAL TO SAVE REGISTERS) ======
+function getFishCaught()local a,b=pcall(function()if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then return LocalPlayer.leaderstats.Caught.Value end;return 0 end)return a and b or 0 end
+function getBestFish()local a,b=pcall(function()if LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"]then return LocalPlayer.leaderstats["Rarest Fish"].Value end;return"None"end)return a and b or"None"end
+function getQuestText(a)local b,c=pcall(function()local d=workspace:FindFirstChild("!!! MENU RINGS")if not d then return"Quest not found"end;local e=d:FindFirstChild("Deep Sea Tracker")if not e then return"Quest not found"end;local f=e:FindFirstChild("Board")if not f then return"Quest not found"end;local g=f:FindFirstChild("Gui")if not g then return"Quest not found"end;local h=g:FindFirstChild("Content")if not h then return"Quest not found"end;local i=h:FindFirstChild(a)if not i then return"Quest not found"end;return i.Text or"No data"end)return b and c or"Error fetching quest"end
 
--- fungsi quest
-
-local function getQuestText(labelName)
-    local success, result = pcall(function()
-        local menuRings = workspace:FindFirstChild("!!! MENU RINGS")
-        if not menuRings then return "Quest not found" end
-        
-        local deepSeaTracker = menuRings:FindFirstChild("Deep Sea Tracker")
-        if not deepSeaTracker then return "Quest not found" end
-        
-        local board = deepSeaTracker:FindFirstChild("Board")
-        if not board then return "Quest not found" end
-        
-        local gui = board:FindFirstChild("Gui")
-        if not gui then return "Quest not found" end
-        
-        local content = gui:FindFirstChild("Content")
-        if not content then return "Quest not found" end
-        
-        local label = content:FindFirstChild(labelName)
-        if not label then return "Quest not found" end
-        
-        return label.Text or "No data"
-    end)
-    
-    return success and result or "Error fetching quest"
-end
-
--- ====== FISHING STATS FUNCTIONS ====== 
--- Format waktu
-local function FormatTime(seconds)
-    -- Ensure we have a valid number
-    seconds = tonumber(seconds) or 0
-    seconds = math.max(0, math.floor(seconds))
-
-    local hours = math.floor(seconds / 3600)
-    local minutes = math.floor((seconds % 3600) / 60)
-    local secs = seconds % 60
-    return string.format("%02d:%02d:%02d", hours, minutes, secs)
-end
-
--- Format angka dengan koma
-local function FormatNumber(num)
-    -- Ensure we have a valid number
-    local number = tonumber(num) or 0
-    local formatted = tostring(math.floor(number))
-    local k
-    while true do  
-        formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
-        if k == 0 then break end
-    end
-    return formatted
-end
+-- ====== STATS/FORMAT FUNCTIONS (GLOBAL TO SAVE REGISTERS) ======
+function FormatTime(a)a=tonumber(a)or 0;a=math.max(0,math.floor(a))local b=math.floor(a/3600)local c=math.floor((a%3600)/60)local d=a%60;return string.format("%02d:%02d:%02d",b,c,d)end
+function FormatNumber(a)local b=tonumber(a)or 0;local c=tostring(math.floor(b))local d;while true do c,d=string.gsub(c,"^(-?%d+)(%d%d%d)",'%1,%2')if d==0 then break end end;return c end
 
 -- ====== GPU SAVER VARIABLES ====== 
 local originalSettings = {}
@@ -4647,9 +4531,198 @@ end)
 
 -- The "Advanced Modules" tab and its contents have been removed as per instructions.
 
--- ====== UI CONTROLS ====== 
-local TabUI = Window:NewTab("UI Controls")
-local SecUI = TabUI:NewSection("Interface Controls")
+-- ====== SHOP & UI CONTROLS ======
+local TabShop = Window:NewTab("Shop")
+local SecShop = TabShop:NewSection("Purchase Items")
+
+-- Rod shop buttons
+SecShop:NewButton("Luck Rod - $350", "Purchase Luck Rod", function()
+    buyRod(rodDatabase.luck)
+end)
+
+SecShop:NewButton("Grass Rod - $1.5k", "Purchase Grass Rod", function()
+    buyRod(rodDatabase.grass)
+end)
+
+SecShop:NewButton("Carbon Rod - $3k", "Purchase Carbon Rod", function()
+    buyRod(rodDatabase.carbon)
+end)
+
+SecShop:NewButton("Demascus Rod - $3k", "Purchase Demascus Rod", function()
+    buyRod(rodDatabase.demascus)
+end)
+
+SecShop:NewButton("Ice Rod - $5k", "Purchase Ice Rod", function()
+    buyRod(rodDatabase.ice)
+end)
+
+SecShop:NewButton("Lucky Rod - $15k", "Purchase Lucky Rod", function()
+    buyRod(rodDatabase.lucky)
+end)
+
+SecShop:NewButton("Midnight Rod - $50k", "Purchase Midnight Rod", function()
+    buyRod(rodDatabase.midnight)
+end)
+
+SecShop:NewButton("Steampunk Rod - $215k", "Purchase Steampunk Rod", function()
+    buyRod(rodDatabase.steampunk)
+end)
+
+SecShop:NewButton("Chrome Rod - $437k", "Purchase Chrome Rod", function()
+    buyRod(rodDatabase.chrome)
+end)
+
+SecShop:NewButton("Astral Rod - $1M", "Purchase Astral Rod", function()
+    buyRod(rodDatabase.astral)
+end)
+
+SecShop:NewButton("Ares Rod - $2.5M", "Purchase Ares Rod (NEW!)", function()
+    buyRod(rodDatabase.ares)
+end)
+
+-- Bait shop section
+local SecBait = TabShop:NewSection("Purchase Bait")
+
+SecBait:NewButton("TopWater Bait - $100", "Purchase TopWater Bait", function()
+    buyBait(baitDatabase.topwaterbait)
+end)
+
+SecBait:NewButton("Luck Bait - $1k", "Purchase Luck Bait", function()
+    buyBait(baitDatabase.luckbait)
+end)
+
+SecBait:NewButton("Midnight Bait - $3k", "Purchase Midnight Bait", function()
+    buyBait(baitDatabase.midnightbait)
+end)
+
+SecBait:NewButton("Deep Bait - $83.5k", "Purchase Deep Bait", function()
+    buyBait(baitDatabase.deepbait)
+end)
+
+SecBait:NewButton("Chroma Bait - $290k", "Purchase Chroma Bait", function()
+    buyBait(baitDatabase.chromabait)
+end)
+
+SecBait:NewButton("Dark Matter Bait - $630k", "Purchase Dark Matter Bait", function()
+    buyBait(baitDatabase.darkmatterbait)
+end)
+
+SecBait:NewButton("Corrupt Bait - $1.15M", "Purchase Corrupt Bait", function()
+    buyBait(baitDatabase.corruptbait)
+end)
+
+SecBait:NewButton("Aether Bait - $1M", "Purchase Aether Bait", function()
+    buyBait(baitDatabase.aetherbait)
+end)
+
+-- UI Controls section in Shop tab
+local SecUI = TabShop:NewSection("Interface Controls")
+
+
+-- ====== ENCHANT TAB ======
+local TabEnchant = Window:NewTab("Enchant")
+local SecEnchant = TabEnchant:NewSection("Enchant Items")
+
+-- Placeholder enchant functions (you can implement the actual logic later)
+local function enchantRod(enchantType)
+    print("🔮 [Enchant] Attempting to enchant rod with: " .. enchantType)
+    -- Add your enchant logic here
+    -- Example: call game RemoteFunction/RemoteEvent for enchanting
+end
+
+local function enchantBait(enchantType)
+    print("🔮 [Enchant] Attempting to enchant bait with: " .. enchantType)
+    -- Add your enchant logic here
+end
+
+-- Rod Enchant Section
+local SecRodEnchant = TabEnchant:NewSection("Rod Enchants")
+
+SecRodEnchant:NewButton("⚡ Speed Enchant", "Increase fishing speed", function()
+    enchantRod("Speed")
+end)
+
+SecRodEnchant:NewButton("💎 Luck Enchant", "Increase rare fish chance", function()
+    enchantRod("Luck")
+end)
+
+SecRodEnchant:NewButton("🌊 Deep Sea Enchant", "Better deep sea fishing", function()
+    enchantRod("DeepSea")
+end)
+
+SecRodEnchant:NewButton("⭐ Quality Enchant", "Increase fish quality", function()
+    enchantRod("Quality")
+end)
+
+SecRodEnchant:NewButton("💰 Value Enchant", "Increase fish value", function()
+    enchantRod("Value")
+end)
+
+-- Bait Enchant Section
+local SecBaitEnchant = TabEnchant:NewSection("Bait Enchants")
+
+SecBaitEnchant:NewButton("🔥 Fire Enchant", "Attract fire-type fish", function()
+    enchantBait("Fire")
+end)
+
+SecBaitEnchant:NewButton("❄️ Ice Enchant", "Attract ice-type fish", function()
+    enchantBait("Ice")
+end)
+
+SecBaitEnchant:NewButton("⚡ Electric Enchant", "Attract electric-type fish", function()
+    enchantBait("Electric")
+end)
+
+SecBaitEnchant:NewButton("🌙 Lunar Enchant", "Attract night fish", function()
+    enchantBait("Lunar")
+end)
+
+SecBaitEnchant:NewButton("☀️ Solar Enchant", "Attract day fish", function()
+    enchantBait("Solar")
+end)
+
+-- Advanced Enchant Section
+local SecAdvancedEnchant = TabEnchant:NewSection("Advanced Enchants")
+
+SecAdvancedEnchant:NewButton("💫 Cosmic Enchant", "Legendary enchant for cosmic fish", function()
+    enchantRod("Cosmic")
+end)
+
+SecAdvancedEnchant:NewButton("🌌 Void Enchant", "Mythical enchant for void fish", function()
+    enchantRod("Void")
+end)
+
+SecAdvancedEnchant:NewButton("🔮 Mystic Enchant", "Mystical enchant for rare catches", function()
+    enchantBait("Mystic")
+end)
+
+-- Enchant Settings Section
+local SecEnchantSettings = TabEnchant:NewSection("Enchant Settings")
+
+SecEnchantSettings:NewToggle("Auto Enchant Rod", "Automatically enchant rod after purchase", function(state)
+    print("🔮 Auto Enchant Rod: " .. (state and "ON" or "OFF"))
+    -- Add auto enchant logic here
+end)
+
+SecEnchantSettings:NewToggle("Auto Enchant Bait", "Automatically enchant bait after purchase", function(state)
+    print("🔮 Auto Enchant Bait: " .. (state and "ON" or "OFF"))
+    -- Add auto enchant logic here
+end)
+
+SecEnchantSettings:NewDropdown("Default Rod Enchant", "Select default enchant for rods",
+    {"Speed", "Luck", "DeepSea", "Quality", "Value", "Cosmic", "Void"},
+    function(selected)
+        print("🔮 Default Rod Enchant set to: " .. selected)
+    end
+)
+
+SecEnchantSettings:NewDropdown("Default Bait Enchant", "Select default enchant for bait",
+    {"Fire", "Ice", "Electric", "Lunar", "Solar", "Mystic"},
+    function(selected)
+        print("🔮 Default Bait Enchant set to: " .. selected)
+    end
+)
+
 
 -- ====== MINIMIZE SYSTEM ====== 
 local CoreGui = game:GetService("CoreGui")
@@ -5001,6 +5074,9 @@ end)
 
 -- ============ SCRIPT INITIALIZATION ============
 print("⏳ [Auto Fish] Starting auto upgrade systems...")
+
+-- Initialize shop system
+shopAutoPurchaseOnStartup()
 
 -- ====== AUTO UPGRADE LOOPS (From Fish v3) ======
 task.spawn(function()
