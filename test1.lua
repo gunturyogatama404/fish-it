@@ -1825,6 +1825,44 @@ local function disablePreset(presetKey)
 end
 
 
+local presetLocationLookup = {
+    auto1 = "Crater Island",
+    auto2 = "Sisyphus State",
+    auto3 = "Kohana Volcano"
+}
+
+local function applyStartupConfigState()
+    if not config then return end
+
+    local presetKey = config.activePreset
+    local presetLocation = presetLocationLookup[presetKey]
+
+    if presetLocation then
+        task.spawn(function()
+            enablePreset(presetKey, presetLocation)
+        end)
+        return
+    end
+
+    isApplyingConfig = true
+    setAutoFarm(config.autoFarm)
+    setAutoSell(config.autoSell)
+    setAutoCatch(config.autoCatch)
+    setAutoWeather(config.autoWeather)
+    setAutoMegalodon(config.autoMegalodon)
+
+    if config.gpuSaver then
+        enableGPUSaver()
+    else
+        disableGPUSaver()
+    end
+
+    isApplyingConfig = false
+    syncConfigFromStates()
+    pcall(saveConfig)
+end
+
+task.defer(applyStartupConfigState)
 -- ====== DAFTAR IDS ====== 
 local WeatherIDs = {"Cloudy", "Storm","Wind"}
 
@@ -3475,3 +3513,4 @@ task.spawn(function()
         end
     end
 end)
+
