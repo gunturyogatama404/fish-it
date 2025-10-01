@@ -1,3 +1,11 @@
+-- ====================================================================
+--              AUTO FISH V6.2 - MAIN SCRIPT (NO UI)
+--                    Upload this to GitHub
+-- ====================================================================
+-- This script is designed to work WITHOUT UI
+-- Configuration is loaded via executor script
+-- ====================================================================
+
 -- ====== SCRIPT INITIALIZATION SAFETY CHECK ======
 
 -- Critical dependency validation
@@ -1516,59 +1524,89 @@ local function enablePreset(presetKey, locationName)
         local steps = {}
 
         if config.activePreset and config.activePreset ~= "none" and config.activePreset ~= presetKey then
-            table.insert(steps, function() 
-                if autoMegalodonToggle then 
+            table.insert(steps, function()
+                if autoMegalodonToggle then
                     autoMegalodonToggle:UpdateToggle(nil, false)
+                else
+                    -- NO-UI mode: directly disable
+                    setAutoMegalodon(false)
                 end
             end)
-            table.insert(steps, function() 
-                if autoWeatherToggle then 
+            table.insert(steps, function()
+                if autoWeatherToggle then
                     autoWeatherToggle:UpdateToggle(nil, false)
+                else
+                    -- NO-UI mode: directly disable
+                    setAutoWeather(false)
                 end
             end)
-            table.insert(steps, function() 
-                if autoCatchToggle then 
+            table.insert(steps, function()
+                if autoCatchToggle then
                     autoCatchToggle:UpdateToggle(nil, false)
+                else
+                    -- NO-UI mode: directly disable
+                    setAutoCatch(false)
                 end
             end)
-            table.insert(steps, function() 
-                if autoSellToggle then 
+            table.insert(steps, function()
+                if autoSellToggle then
                     autoSellToggle:UpdateToggle(nil, false)
+                else
+                    -- NO-UI mode: directly disable
+                    setAutoSell(false)
                 end
             end)
-            table.insert(steps, function() 
-                if autoFarmToggle then 
+            table.insert(steps, function()
+                if autoFarmToggle then
                     autoFarmToggle:UpdateToggle(nil, false)
+                else
+                    -- NO-UI mode: directly disable
+                    setAutoFarm(false)
                 end
             end)
         end
 
-        table.insert(steps, function() 
-            if autoFarmToggle then 
+        table.insert(steps, function()
+            if autoFarmToggle then
                 autoFarmToggle:UpdateToggle(nil, true)
+            else
+                -- NO-UI mode: directly enable
+                setAutoFarm(true)
             end
         end)
-        table.insert(steps, function() 
-            if autoSellToggle then 
+        table.insert(steps, function()
+            if autoSellToggle then
                 autoSellToggle:UpdateToggle(nil, true)
+            else
+                -- NO-UI mode: directly enable
+                setAutoSell(true)
             end
         end)
-        table.insert(steps, function() 
-            if autoCatchToggle then 
+        table.insert(steps, function()
+            if autoCatchToggle then
                 autoCatchToggle:UpdateToggle(nil, true)
+            else
+                -- NO-UI mode: directly enable
+                setAutoCatch(true)
             end
         end)
 
         -- Only enable weather and megalodon for auto1 and auto2, not auto3
         if presetKey ~= "auto3" then
-            table.insert(steps, function() 
-                if autoWeatherToggle then 
+            table.insert(steps, function()
+                if autoWeatherToggle then
                     autoWeatherToggle:UpdateToggle(nil, true)
+                else
+                    -- NO-UI mode: directly enable
+                    setAutoWeather(true)
                 end
             end)
-            table.insert(steps, function() 
-                if autoMegalodonToggle then 
+            table.insert(steps, function()
+                if autoMegalodonToggle then
                     autoMegalodonToggle:UpdateToggle(nil, true)
+                else
+                    -- NO-UI mode: directly enable
+                    setAutoMegalodon(true)
                 end
             end)
         end
@@ -1622,32 +1660,47 @@ local function disablePreset(presetKey)
         end
 
         local steps = {
-            function() 
-                if autoMegalodonToggle then 
+            function()
+                if autoMegalodonToggle then
                     autoMegalodonToggle:UpdateToggle(nil, false)
+                else
+                    -- NO-UI mode: directly disable
+                    setAutoMegalodon(false)
                 end
             end,
-            function() 
-                if autoWeatherToggle then 
+            function()
+                if autoWeatherToggle then
                     autoWeatherToggle:UpdateToggle(nil, false)
+                else
+                    -- NO-UI mode: directly disable
+                    setAutoWeather(false)
                 end
             end,
-            function() 
-                if autoCatchToggle then 
+            function()
+                if autoCatchToggle then
                     autoCatchToggle:UpdateToggle(nil, false)
+                else
+                    -- NO-UI mode: directly disable
+                    setAutoCatch(false)
                 end
             end,
-            function() 
-                if autoSellToggle then 
+            function()
+                if autoSellToggle then
                     autoSellToggle:UpdateToggle(nil, false)
+                else
+                    -- NO-UI mode: directly disable
+                    setAutoSell(false)
                 end
             end,
-            function() 
-                if autoFarmToggle then 
+            function()
+                if autoFarmToggle then
                     autoFarmToggle:UpdateToggle(nil, false)
+                else
+                    -- NO-UI mode: directly disable
+                    setAutoFarm(false)
                 end
             end,
-            function() 
+            function()
                 disableGPUSaver()
             end,
         }
@@ -1842,6 +1895,11 @@ local function resumeFarmingAfterMegalodon(previousAutoFarmState)
                 autoPreset1Toggle:UpdateToggle(nil, false)
                 task.wait(0.5)
                 autoPreset1Toggle:UpdateToggle(nil, true)
+            else
+                -- NO-UI mode: directly re-enable preset
+                disablePreset("auto1")
+                task.wait(0.5)
+                enablePreset("auto1", "Crater Island")
             end
         elseif activePreset == "auto2" then
             -- Re-activate Auto 2 (Sisyphus)
@@ -1849,6 +1907,11 @@ local function resumeFarmingAfterMegalodon(previousAutoFarmState)
                 autoPreset2Toggle:UpdateToggle(nil, false)
                 task.wait(0.5)
                 autoPreset2Toggle:UpdateToggle(nil, true)
+            else
+                -- NO-UI mode: directly re-enable preset
+                disablePreset("auto2")
+                task.wait(0.5)
+                enablePreset("auto2", "Sisyphus State")
             end
         elseif activePreset == "auto3" then
             -- Re-activate Auto 3 (Kohana)
@@ -1856,6 +1919,11 @@ local function resumeFarmingAfterMegalodon(previousAutoFarmState)
                 autoPreset3Toggle:UpdateToggle(nil, false)
                 task.wait(0.5)
                 autoPreset3Toggle:UpdateToggle(nil, true)
+            else
+                -- NO-UI mode: directly re-enable preset
+                disablePreset("auto3")
+                task.wait(0.5)
+                enablePreset("auto3", "Kohana Volcano")
             end
         else
             -- No preset active, just resume farming if it was on
@@ -3029,1700 +3097,6 @@ function createInstance(className, properties, parent)
     return obj
 end
 
-local Library = {}
-do
-    -- Get screen size for responsive design
-    local function getScreenSize()
-        local viewport = workspace.CurrentCamera.ViewportSize
-        return viewport.X, viewport.Y
-    end
-
-    -- Responsive sizing based on screen
-    local function getResponsiveSize()
-        local screenX, screenY = getScreenSize()
-        local isMobile = screenX < 800 or screenY < 600
-
-        if isMobile then
-            return {
-                windowWidth = math.min(screenX * 0.95, 400),
-                windowHeight = math.min(screenY * 0.85, 500),
-                titleSize = 16,
-                textSize = 13,
-                buttonHeight = 35,
-                padding = 8
-            }
-        else
-            return {
-                windowWidth = 480,
-                windowHeight = 580,
-                titleSize = 18,
-                textSize = 14,
-                buttonHeight = 38,
-                padding = 12
-            }
-        end
-    end
-
-    local function createRow(sectionFrame, titleText, descriptionText)
-        local responsive = getResponsiveSize()
-
-        local row = Instance.new("Frame")
-        row.Name = ("Row_%s"):format(titleText:gsub("%s", ""))
-        row.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
-        row.BackgroundTransparency = 0
-        row.AutomaticSize = Enum.AutomaticSize.Y
-        row.Size = UDim2.new(1, 0, 0, math.max(50, responsive.buttonHeight + 20))
-        row.Parent = sectionFrame
-        row.ClipsDescendants = false
-
-        local rowCorner = Instance.new("UICorner")
-        rowCorner.CornerRadius = UDim.new(0, 8)
-        rowCorner.Parent = row
-
-        local rowStroke = Instance.new("UIStroke")
-        rowStroke.Color = Color3.fromRGB(45, 45, 45)
-        rowStroke.Thickness = 1
-        rowStroke.Parent = row
-
-        local padding = Instance.new("UIPadding")
-        padding.PaddingLeft = UDim.new(0, responsive.padding)
-        padding.PaddingRight = UDim.new(0, responsive.padding)
-        padding.PaddingTop = UDim.new(0, responsive.padding)
-        padding.PaddingBottom = UDim.new(0, responsive.padding)
-        padding.Parent = row
-
-        local infoFrame = Instance.new("Frame")
-        infoFrame.Name = "Info"
-        infoFrame.BackgroundTransparency = 1
-        infoFrame.Size = UDim2.new(1, -120, 1, 0)
-        infoFrame.Position = UDim2.new(0, 0, 0, 0)
-        infoFrame.Parent = row
-
-        local infoLayout = Instance.new("UIListLayout")
-        infoLayout.FillDirection = Enum.FillDirection.Vertical
-        infoLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        infoLayout.Padding = UDim.new(0, 2)
-        infoLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        infoLayout.Parent = infoFrame
-
-        local title = Instance.new("TextLabel")
-        title.Name = "Title"
-        title.BackgroundTransparency = 1
-        title.AutomaticSize = Enum.AutomaticSize.Y
-        title.Size = UDim2.new(1, 0, 0, 0)
-        title.Font = Enum.Font.GothamSemibold
-        title.Text = titleText
-        title.TextColor3 = Color3.fromRGB(255, 255, 255)
-        title.TextSize = responsive.textSize + 1
-        title.TextWrapped = true
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.TextYAlignment = Enum.TextYAlignment.Top
-        title.Parent = infoFrame
-
-        if descriptionText and descriptionText ~= "" then
-            local description = Instance.new("TextLabel")
-            description.Name = "Description"
-            description.BackgroundTransparency = 1
-            description.AutomaticSize = Enum.AutomaticSize.Y
-            description.Size = UDim2.new(1, 0, 0, 0)
-            description.Font = Enum.Font.Gotham
-            description.Text = descriptionText
-            description.TextColor3 = Color3.fromRGB(180, 180, 180)
-            description.TextSize = responsive.textSize - 1
-            description.TextWrapped = true
-            description.TextXAlignment = Enum.TextXAlignment.Left
-            description.TextYAlignment = Enum.TextYAlignment.Top
-            description.Parent = infoFrame
-        end
-
-        local actionContainer = Instance.new("Frame")
-        actionContainer.Name = "Action"
-        actionContainer.BackgroundTransparency = 1
-        actionContainer.Size = UDim2.new(0, 110, 0, responsive.buttonHeight)
-        actionContainer.AnchorPoint = Vector2.new(1, 0.5)
-        actionContainer.Position = UDim2.new(1, 0, 0.5, 0)
-        actionContainer.Parent = row
-
-        return row, actionContainer
-    end
-
-    local function createWindow(titleText)
-        local coreGui = game:GetService("CoreGui")
-        local userInputService = game:GetService("UserInputService")
-        local responsive = getResponsiveSize()
-
-        -- Clean up any existing UI
-        local existingGui = coreGui:FindFirstChild("AF_MobileUI")
-        if existingGui then
-            existingGui:Destroy()
-        end
-
-        local screenGui = Instance.new("ScreenGui")
-        screenGui.Name = "AF_MobileUI"
-        screenGui.ResetOnSpawn = false
-        screenGui.IgnoreGuiInset = true
-        screenGui.DisplayOrder = 1000
-        screenGui.Parent = coreGui
-
-        local mainFrame = Instance.new("Frame")
-        mainFrame.Name = "MainFrame"
-        mainFrame.Size = UDim2.new(0, responsive.windowWidth, 0, responsive.windowHeight)
-        mainFrame.Position = UDim2.new(0.5, -responsive.windowWidth/2, 0.5, -responsive.windowHeight/2)
-        mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-        mainFrame.Parent = screenGui
-        mainFrame.Active = true
-        mainFrame.ClipsDescendants = true
-
-        local mainCorner = Instance.new("UICorner")
-        mainCorner.CornerRadius = UDim.new(0, 12)
-        mainCorner.Parent = mainFrame
-
-        local mainStroke = Instance.new("UIStroke")
-        mainStroke.Color = Color3.fromRGB(50, 50, 50)
-        mainStroke.Thickness = 2
-        mainStroke.Parent = mainFrame
-
-        local topBar = Instance.new("Frame")
-        topBar.Name = "TopBar"
-        topBar.Size = UDim2.new(1, 0, 0, 45)
-        topBar.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
-        topBar.Parent = mainFrame
-        topBar.Active = true
-
-        local topCorner = Instance.new("UICorner")
-        topCorner.CornerRadius = UDim.new(0, 12)
-        topCorner.Parent = topBar
-
-        local topStroke = Instance.new("UIStroke")
-        topStroke.Color = Color3.fromRGB(60, 60, 60)
-        topStroke.Thickness = 1
-        topStroke.Parent = topBar
-
-        local topPadding = Instance.new("UIPadding")
-        topPadding.PaddingLeft = UDim.new(0, 15)
-        topPadding.PaddingRight = UDim.new(0, 15)
-        topPadding.PaddingTop = UDim.new(0, 8)
-        topPadding.PaddingBottom = UDim.new(0, 8)
-        topPadding.Parent = topBar
-
-        local titleLabel = Instance.new("TextLabel")
-        titleLabel.Name = "Title"
-        titleLabel.BackgroundTransparency = 1
-        titleLabel.Size = UDim2.new(1, -60, 1, 0)
-        titleLabel.Position = UDim2.new(0, 0, 0, 0)
-        titleLabel.Font = Enum.Font.GothamBold
-        titleLabel.Text = titleText or "Auto Fish v6.2"
-        titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        titleLabel.TextSize = responsive.titleSize
-        titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-        titleLabel.TextYAlignment = Enum.TextYAlignment.Center
-        titleLabel.Parent = topBar
-
-        -- Minimize button
-        local minimizeButton = Instance.new("TextButton")
-        minimizeButton.Name = "MinimizeButton"
-        minimizeButton.Size = UDim2.new(0, 30, 0, 30)
-        minimizeButton.Position = UDim2.new(1, -70, 0.5, -15)
-        minimizeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        minimizeButton.Text = "−"
-        minimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        minimizeButton.TextSize = 18
-        minimizeButton.Font = Enum.Font.GothamBold
-        minimizeButton.Parent = topBar
-
-        local minimizeCorner = Instance.new("UICorner")
-        minimizeCorner.CornerRadius = UDim.new(0, 6)
-        minimizeCorner.Parent = minimizeButton
-
-        -- Close button
-        local closeButton = Instance.new("TextButton")
-        closeButton.Name = "CloseButton"
-        closeButton.Size = UDim2.new(0, 30, 0, 30)
-        closeButton.Position = UDim2.new(1, -35, 0.5, -15)
-        closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        closeButton.Text = "×"
-        closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        closeButton.TextSize = 18
-        closeButton.Font = Enum.Font.GothamBold
-        closeButton.Parent = topBar
-
-        local closeCorner = Instance.new("UICorner")
-        closeCorner.CornerRadius = UDim.new(0, 6)
-        closeCorner.Parent = closeButton
-
-        local tabContainer = Instance.new("Frame")
-        tabContainer.Name = "TabContainer"
-        tabContainer.BackgroundTransparency = 1
-        tabContainer.Size = UDim2.new(1, 0, 0, 40)
-        tabContainer.Position = UDim2.new(0, 0, 0, 45)
-        tabContainer.Parent = mainFrame
-
-        local tabBar = Instance.new("Frame")
-        tabBar.Name = "TabBar"
-        tabBar.BackgroundTransparency = 1
-        tabBar.Size = UDim2.new(1, -20, 1, 0)
-        tabBar.Position = UDim2.new(0, 10, 0, 0)
-        tabBar.Parent = tabContainer
-
-        local tabScrollFrame = Instance.new("ScrollingFrame")
-        tabScrollFrame.Name = "TabScroll"
-        tabScrollFrame.BackgroundTransparency = 1
-        tabScrollFrame.Size = UDim2.new(1, 0, 1, 0)
-        tabScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-        tabScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.X
-        tabScrollFrame.ScrollingDirection = Enum.ScrollingDirection.X
-        tabScrollFrame.ScrollBarThickness = 0
-        tabScrollFrame.Parent = tabBar
-
-        local tabLayout = Instance.new("UIListLayout")
-        tabLayout.FillDirection = Enum.FillDirection.Horizontal
-        tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        tabLayout.Padding = UDim.new(0, 5)
-        tabLayout.Parent = tabScrollFrame
-
-        local contentFrame = Instance.new("Frame")
-        contentFrame.Name = "Content"
-        contentFrame.BackgroundTransparency = 1
-        contentFrame.Size = UDim2.new(1, -20, 1, -95)
-        contentFrame.Position = UDim2.new(0, 10, 0, 85)
-        contentFrame.Parent = mainFrame
-
-        local pageLayout = Instance.new("UIPageLayout")
-        pageLayout.FillDirection = Enum.FillDirection.Horizontal
-        pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        pageLayout.TweenTime = 0.15
-        pageLayout.EasingStyle = Enum.EasingStyle.Quad
-        pageLayout.EasingDirection = Enum.EasingDirection.Out
-        pageLayout.Parent = contentFrame
-
-        local window = {
-            _screenGui = screenGui,
-            _mainFrame = mainFrame,
-            _pageLayout = pageLayout,
-            _tabButtons = {},
-            _tabPages = {},
-            _currentTab = nil,
-            _tabScrollFrame = tabScrollFrame,
-            _closeButton = closeButton,
-            _minimizeButton = minimizeButton,
-            _contentFrame = contentFrame,
-            _tabContainer = tabContainer,
-            _isMinimized = false,
-            _originalHeight = responsive.windowHeight,
-        }
-
-        -- Enhanced drag system
-        local dragging = false
-        local dragStart, startPos
-
-        local function beginDrag(input)
-            if input.Position.X > minimizeButton.AbsolutePosition.X then
-                return -- Don't drag if clicking minimize or close button
-            end
-
-            dragging = true
-            dragStart = input.Position
-            startPos = mainFrame.Position
-
-            local changeConn
-            changeConn = input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                    if changeConn then
-                        changeConn:Disconnect()
-                    end
-                end
-            end)
-        end
-
-        topBar.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                beginDrag(input)
-            end
-        end)
-
-        userInputService.InputChanged:Connect(function(input)
-            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                local delta = input.Position - dragStart
-                local newPosX = math.clamp(startPos.X.Offset + delta.X, 0, getScreenSize() - responsive.windowWidth)
-                local newPosY = math.clamp(startPos.Y.Offset + delta.Y, 0, getScreenSize() - responsive.windowHeight)
-
-                mainFrame.Position = UDim2.new(0, newPosX, 0, newPosY)
-            end
-        end)
-
-        -- Close button functionality
-        closeButton.MouseButton1Click:Connect(function()
-            window:ToggleUI(false)
-        end)
-
-        closeButton.MouseEnter:Connect(function()
-            closeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-        end)
-
-        closeButton.MouseLeave:Connect(function()
-            closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        end)
-
-        -- Minimize button functionality
-        minimizeButton.MouseButton1Click:Connect(function()
-            window:MinimizeUI()
-        end)
-
-        minimizeButton.MouseEnter:Connect(function()
-            minimizeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-        end)
-
-        minimizeButton.MouseLeave:Connect(function()
-            minimizeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        end)
-
-        local function highlightTab(tabName)
-            for name, button in pairs(window._tabButtons) do
-                if name == tabName then
-                    button.BackgroundColor3 = Color3.fromRGB(50, 130, 245)
-                    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    -- Add selection indicator
-                    if not button:FindFirstChild("SelectionIndicator") then
-                        local indicator = Instance.new("Frame")
-                        indicator.Name = "SelectionIndicator"
-                        indicator.Size = UDim2.new(1, 0, 0, 2)
-                        indicator.Position = UDim2.new(0, 0, 1, -2)
-                        indicator.BackgroundColor3 = Color3.fromRGB(70, 150, 255)
-                        indicator.BorderSizePixel = 0
-                        indicator.Parent = button
-                    end
-                else
-                    button.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-                    button.TextColor3 = Color3.fromRGB(180, 180, 180)
-                    -- Remove selection indicator
-                    local indicator = button:FindFirstChild("SelectionIndicator")
-                    if indicator then
-                        indicator:Destroy()
-                    end
-                end
-            end
-        end
-
-        function window:ShowTab(tabName)
-            local targetPage = self._tabPages[tabName]
-            if not targetPage then return end
-            self._pageLayout:JumpTo(targetPage)
-            highlightTab(tabName)
-            self._currentTab = tabName
-        end
-
-        function window:ToggleUI(force)
-            if typeof(force) == "boolean" then
-                self._screenGui.Enabled = force
-            else
-                self._screenGui.Enabled = not self._screenGui.Enabled
-            end
-            return self._screenGui.Enabled
-        end
-
-        function window:MinimizeUI(force)
-            if typeof(force) == "boolean" then
-                self._isMinimized = force
-            else
-                self._isMinimized = not self._isMinimized
-            end
-
-            if self._isMinimized then
-                -- Minimize: hide content and resize to just title bar
-                self._contentFrame.Visible = false
-                self._tabContainer.Visible = false
-                self._mainFrame.Size = UDim2.new(0, self._mainFrame.Size.X.Offset, 0, 45)
-                self._minimizeButton.Text = "+"
-            else
-                -- Restore: show content and restore original size
-                self._contentFrame.Visible = true
-                self._tabContainer.Visible = true
-                self._mainFrame.Size = UDim2.new(0, self._mainFrame.Size.X.Offset, 0, self._originalHeight)
-                self._minimizeButton.Text = "−"
-            end
-
-            return self._isMinimized
-        end
-
-        function window:NewTab(tabName)
-            local responsive = getResponsiveSize()
-
-            local tabButton = Instance.new("TextButton")
-            tabButton.Name = ("Tab_%s"):format(tabName:gsub("%s", ""))
-            tabButton.Size = UDim2.new(0, math.max(100, #tabName * 8 + 20), 0, 32)
-            tabButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-            tabButton.TextColor3 = Color3.fromRGB(180, 180, 180)
-            tabButton.Font = Enum.Font.GothamSemibold
-            tabButton.TextSize = responsive.textSize
-            tabButton.AutoButtonColor = false
-            tabButton.Text = tabName
-            tabButton.Parent = tabScrollFrame
-
-            local tabCorner = Instance.new("UICorner")
-            tabCorner.CornerRadius = UDim.new(0, 6)
-            tabCorner.Parent = tabButton
-
-            local tabStroke = Instance.new("UIStroke")
-            tabStroke.Color = Color3.fromRGB(55, 55, 55)
-            tabStroke.Thickness = 1
-            tabStroke.Parent = tabButton
-
-            -- Tab hover effects
-            tabButton.MouseEnter:Connect(function()
-                if window._currentTab ~= tabName then
-                    tabButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                end
-            end)
-
-            tabButton.MouseLeave:Connect(function()
-                if window._currentTab ~= tabName then
-                    tabButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-                end
-            end)
-
-            local page = Instance.new("ScrollingFrame")
-            page.Name = ("Page_%s"):format(tabName)
-            page.Active = true
-            page.AutomaticCanvasSize = Enum.AutomaticSize.Y
-            page.CanvasSize = UDim2.new(0, 0, 0, 0)
-            page.ScrollBarThickness = responsive.padding / 2
-            page.ScrollingDirection = Enum.ScrollingDirection.Y
-            page.BackgroundTransparency = 1
-            page.BorderSizePixel = 0
-            page.TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
-            page.BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
-            page.MidImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
-            page.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
-            page.Size = UDim2.new(1, 0, 1, 0)
-            page.Parent = contentFrame
-
-            local pagePadding = Instance.new("UIPadding")
-            pagePadding.PaddingLeft = UDim.new(0, responsive.padding)
-            pagePadding.PaddingRight = UDim.new(0, responsive.padding)
-            pagePadding.PaddingTop = UDim.new(0, responsive.padding)
-            pagePadding.PaddingBottom = UDim.new(0, responsive.padding * 2)
-            pagePadding.Parent = page
-
-            local pageLayoutList = Instance.new("UIListLayout")
-            pageLayoutList.FillDirection = Enum.FillDirection.Vertical
-            pageLayoutList.SortOrder = Enum.SortOrder.LayoutOrder
-            pageLayoutList.Padding = UDim.new(0, responsive.padding)
-            pageLayoutList.Parent = page
-
-            self._tabButtons[tabName] = tabButton
-            self._tabPages[tabName] = page
-
-            tabButton.MouseButton1Click:Connect(function()
-                self:ShowTab(tabName)
-            end)
-
-            local tab = {}
-
-            function tab:NewSection(sectionName)
-                local responsive = getResponsiveSize()
-
-                local sectionFrame = Instance.new("Frame")
-                sectionFrame.Name = ("Section_%s"):format(sectionName:gsub("%s", ""))
-                sectionFrame.AutomaticSize = Enum.AutomaticSize.Y
-                sectionFrame.Size = UDim2.new(1, 0, 0, 0)
-                sectionFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-                sectionFrame.Parent = page
-
-                local sectionCorner = Instance.new("UICorner")
-                sectionCorner.CornerRadius = UDim.new(0, 8)
-                sectionCorner.Parent = sectionFrame
-
-                local sectionStroke = Instance.new("UIStroke")
-                sectionStroke.Color = Color3.fromRGB(40, 40, 40)
-                sectionStroke.Thickness = 1
-                sectionStroke.Parent = sectionFrame
-
-                local sectionPadding = Instance.new("UIPadding")
-                sectionPadding.PaddingLeft = UDim.new(0, responsive.padding)
-                sectionPadding.PaddingRight = UDim.new(0, responsive.padding)
-                sectionPadding.PaddingTop = UDim.new(0, responsive.padding)
-                sectionPadding.PaddingBottom = UDim.new(0, responsive.padding)
-                sectionPadding.Parent = sectionFrame
-
-                local sectionLayout = Instance.new("UIListLayout")
-                sectionLayout.FillDirection = Enum.FillDirection.Vertical
-                sectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
-                sectionLayout.Padding = UDim.new(0, responsive.padding / 2)
-                sectionLayout.Parent = sectionFrame
-
-                local header = Instance.new("TextLabel")
-                header.Name = "Header"
-                header.BackgroundTransparency = 1
-                header.AutomaticSize = Enum.AutomaticSize.Y
-                header.Size = UDim2.new(1, 0, 0, 0)
-                header.Font = Enum.Font.GothamBold
-                header.Text = sectionName
-                header.TextColor3 = Color3.fromRGB(255, 255, 255)
-                header.TextSize = responsive.titleSize - 1
-                header.TextXAlignment = Enum.TextXAlignment.Left
-                header.TextYAlignment = Enum.TextYAlignment.Top
-                header.TextWrapped = true
-                header.Parent = sectionFrame
-
-                local section = {}
-                function section:NewToggle(title, description, callback)
-                    local responsive = getResponsiveSize()
-                    local _, actionContainer = createRow(sectionFrame, title, description)
-
-                    local toggleButton = Instance.new("TextButton")
-                    toggleButton.Name = "ToggleButton"
-                    toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    toggleButton.TextColor3 = Color3.fromRGB(220, 220, 220)
-                    toggleButton.Font = Enum.Font.GothamSemibold
-                    toggleButton.TextSize = responsive.textSize
-                    toggleButton.Text = "OFF"
-                    toggleButton.Size = UDim2.new(1, 0, 1, 0)
-                    toggleButton.AutoButtonColor = false
-                    toggleButton.Parent = actionContainer
-
-                    local corner = Instance.new("UICorner")
-                    corner.CornerRadius = UDim.new(0, 6)
-                    corner.Parent = toggleButton
-
-                    local stroke = Instance.new("UIStroke")
-                    stroke.Color = Color3.fromRGB(65, 65, 65)
-                    stroke.Thickness = 1
-                    stroke.Parent = toggleButton
-
-                    local toggler = { state = false }
-
-                    local function updateVisual(state)
-                        toggleButton.Text = state and "ON" or "OFF"
-                        if state then
-                            toggleButton.BackgroundColor3 = Color3.fromRGB(50, 130, 245)
-                            stroke.Color = Color3.fromRGB(70, 150, 255)
-                        else
-                            toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                            stroke.Color = Color3.fromRGB(65, 65, 65)
-                        end
-                    end
-
-                    -- Add hover effects
-                    toggleButton.MouseEnter:Connect(function()
-                        if toggler.state then
-                            toggleButton.BackgroundColor3 = Color3.fromRGB(60, 140, 255)
-                        else
-                            toggleButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
-                        end
-                    end)
-
-                    toggleButton.MouseLeave:Connect(function()
-                        updateVisual(toggler.state)
-                    end)
-
-                    function toggler:SetState(state, skipCallback)
-                        state = not not state
-                        if self.state == state then return end
-                        self.state = state
-                        updateVisual(state)
-                        if not skipCallback and callback then
-                            local ok, err = pcall(callback, state)
-                            if not ok then
-                                warn("[Auto Fish UI] Toggle callback error: " .. tostring(err))
-                            end
-                        end
-                    end
-
-                    toggleButton.MouseButton1Click:Connect(function()
-                        toggler:SetState(not toggler.state)
-                    end)
-
-                    function toggler:UpdateToggle(_, state)
-                        self:SetState(state)
-                    end
-
-                    updateVisual(false)
-                    return toggler
-                end
-
-                function section:NewButton(title, description, callback)
-                    local responsive = getResponsiveSize()
-                    local _, actionContainer = createRow(sectionFrame, title, description)
-
-                    local button = Instance.new("TextButton")
-                    button.Name = "ActionButton"
-                    button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-                    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    button.Font = Enum.Font.GothamSemibold
-                    button.Text = "RUN"
-                    button.TextSize = responsive.textSize
-                    button.AutoButtonColor = false
-                    button.Size = UDim2.new(1, 0, 1, 0)
-                    button.Parent = actionContainer
-
-                    local corner = Instance.new("UICorner")
-                    corner.CornerRadius = UDim.new(0, 6)
-                    corner.Parent = button
-
-                    local stroke = Instance.new("UIStroke")
-                    stroke.Color = Color3.fromRGB(80, 80, 80)
-                    stroke.Thickness = 1
-                    stroke.Parent = button
-
-                    -- Button hover effects
-                    button.MouseEnter:Connect(function()
-                        button.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-                    end)
-
-                    button.MouseLeave:Connect(function()
-                        button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-                    end)
-
-                    button.MouseButton1Click:Connect(function()
-                        if not callback then return end
-                        local ok, err = pcall(callback)
-                        if not ok then
-                            warn("[Auto Fish UI] Button callback error: " .. tostring(err))
-                        end
-                    end)
-
-                    return button
-                end
-
-                function section:NewDropdown(title, description, options, callback)
-                    local responsive = getResponsiveSize()
-                    local row, actionContainer = createRow(sectionFrame, title, description)
-
-                    local dropdownButton = Instance.new("TextButton")
-                    dropdownButton.Name = "DropdownButton"
-                    dropdownButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-                    dropdownButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    dropdownButton.Font = Enum.Font.GothamSemibold
-                    dropdownButton.TextSize = responsive.textSize
-                    dropdownButton.Text = (options and options[1]) or "Select"
-                    dropdownButton.AutoButtonColor = false
-                    dropdownButton.Size = UDim2.new(1, 0, 1, 0)
-                    dropdownButton.Parent = actionContainer
-
-                    local corner = Instance.new("UICorner")
-                    corner.CornerRadius = UDim.new(0, 6)
-                    corner.Parent = dropdownButton
-
-                    local stroke = Instance.new("UIStroke")
-                    stroke.Color = Color3.fromRGB(70, 70, 70)
-                    stroke.Thickness = 1
-                    stroke.Parent = dropdownButton
-
-                    -- Dropdown arrow indicator
-                    local arrow = Instance.new("TextLabel")
-                    arrow.Name = "Arrow"
-                    arrow.BackgroundTransparency = 1
-                    arrow.Size = UDim2.new(0, 20, 1, 0)
-                    arrow.Position = UDim2.new(1, -20, 0, 0)
-                    arrow.Text = "▼"
-                    arrow.TextColor3 = Color3.fromRGB(180, 180, 180)
-                    arrow.TextSize = responsive.textSize - 2
-                    arrow.Font = Enum.Font.Gotham
-                    arrow.TextXAlignment = Enum.TextXAlignment.Center
-                    arrow.Parent = dropdownButton
-
-                    local optionsFrame = Instance.new("Frame")
-                    optionsFrame.Name = "Options"
-                    optionsFrame.Visible = false
-                    optionsFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-                    optionsFrame.Position = UDim2.new(1, -5, 1, 5)
-                    optionsFrame.AnchorPoint = Vector2.new(1, 0)
-                    optionsFrame.AutomaticSize = Enum.AutomaticSize.Y
-                    optionsFrame.Size = UDim2.new(0, 150, 0, 0)
-                    optionsFrame.Parent = row
-                    optionsFrame.ZIndex = 10
-
-                    local optionsCorner = Instance.new("UICorner")
-                    optionsCorner.CornerRadius = UDim.new(0, 6)
-                    optionsCorner.Parent = optionsFrame
-
-                    local optionsStroke = Instance.new("UIStroke")
-                    optionsStroke.Color = Color3.fromRGB(60, 60, 60)
-                    optionsStroke.Thickness = 1
-                    optionsStroke.Parent = optionsFrame
-
-                    local optionsLayout = Instance.new("UIListLayout")
-                    optionsLayout.FillDirection = Enum.FillDirection.Vertical
-                    optionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-                    optionsLayout.Padding = UDim.new(0, 2)
-                    optionsLayout.Parent = optionsFrame
-
-                    local optionsPadding = Instance.new("UIPadding")
-                    optionsPadding.PaddingLeft = UDim.new(0, 6)
-                    optionsPadding.PaddingRight = UDim.new(0, 6)
-                    optionsPadding.PaddingTop = UDim.new(0, 6)
-                    optionsPadding.PaddingBottom = UDim.new(0, 6)
-                    optionsPadding.Parent = optionsFrame
-
-                    -- Hover effects for dropdown button
-                    dropdownButton.MouseEnter:Connect(function()
-                        dropdownButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-                    end)
-
-                    dropdownButton.MouseLeave:Connect(function()
-                        dropdownButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-                    end)
-
-                    local function setSelection(value, skipCallback)
-                        dropdownButton.Text = value
-                        optionsFrame.Visible = false
-                        arrow.Text = "▼"
-                        if not skipCallback and callback then
-                            local ok, err = pcall(callback, value)
-                            if not ok then
-                                warn("[Auto Fish UI] Dropdown callback error: " .. tostring(err))
-                            end
-                        end
-                    end
-
-                    dropdownButton.MouseButton1Click:Connect(function()
-                        optionsFrame.Visible = not optionsFrame.Visible
-                        arrow.Text = optionsFrame.Visible and "▲" or "▼"
-                    end)
-
-                    if options then
-                        for _, option in ipairs(options) do
-                            local optionButton = Instance.new("TextButton")
-                            optionButton.Name = "Option"
-                            optionButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-                            optionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-                            optionButton.TextSize = responsive.textSize
-                            optionButton.AutoButtonColor = false
-                            optionButton.Font = Enum.Font.Gotham
-                            optionButton.Text = option
-                            optionButton.Size = UDim2.new(1, 0, 0, 28)
-                            optionButton.Parent = optionsFrame
-
-                            local optionCorner = Instance.new("UICorner")
-                            optionCorner.CornerRadius = UDim.new(0, 4)
-                            optionCorner.Parent = optionButton
-
-                            optionButton.MouseEnter:Connect(function()
-                                optionButton.BackgroundColor3 = Color3.fromRGB(50, 130, 245)
-                            end)
-
-                            optionButton.MouseLeave:Connect(function()
-                                optionButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-                            end)
-
-                            optionButton.MouseButton1Click:Connect(function()
-                                setSelection(option)
-                            end)
-                        end
-                    end
-
-                    if options and options[1] and callback then
-                        local ok, err = pcall(callback, options[1])
-                        if not ok then
-                            warn("[Auto Fish UI] Dropdown callback error: " .. tostring(err))
-                        end
-                    end
-
-                    return {
-                        Set = function(_, value) 
-                            setSelection(value, true)
-                        end
-                    }
-                end
-
-                function section:NewSlider(title, description, maxValue, minValue, callback)
-                    local responsive = getResponsiveSize()
-                    local _, actionContainer = createRow(sectionFrame, title, description)
-
-                    local textBox = Instance.new("TextBox")
-                    textBox.Name = "SliderBox"
-                    textBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    textBox.Font = Enum.Font.GothamSemibold
-                    textBox.TextSize = responsive.textSize
-                    textBox.ClearTextOnFocus = false
-                    textBox.Size = UDim2.new(1, 0, 1, 0)
-                    textBox.Text = tostring(minValue)
-                    textBox.PlaceholderText = string.format("%s - %s", tostring(minValue), tostring(maxValue))
-                    textBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
-                    textBox.TextXAlignment = Enum.TextXAlignment.Center
-                    textBox.Parent = actionContainer
-
-                    local corner = Instance.new("UICorner")
-                    corner.CornerRadius = UDim.new(0, 6)
-                    corner.Parent = textBox
-
-                    local stroke = Instance.new("UIStroke")
-                    stroke.Color = Color3.fromRGB(65, 65, 65)
-                    stroke.Thickness = 1
-                    stroke.Parent = textBox
-
-                    -- Focus effects
-                    textBox.Focused:Connect(function()
-                        stroke.Color = Color3.fromRGB(50, 130, 245)
-                    end)
-
-                    textBox.FocusLost:Connect(function()
-                        stroke.Color = Color3.fromRGB(65, 65, 65)
-                    end)
-
-                    local currentValue = tonumber(minValue) or 0
-                    if callback then
-                        local ok, err = pcall(callback, currentValue)
-                        if not ok then
-                            warn("[Auto Fish UI] Slider callback error: " .. tostring(err))
-                        end
-                    end
-
-                    local function commitValue(raw)
-                        local value = tonumber(raw)
-                        if not value then
-                            textBox.Text = tostring(currentValue)
-                            return
-                        end
-                        local minClamp = tonumber(minValue)
-                        local maxClamp = tonumber(maxValue)
-                        if minClamp and maxClamp then
-                            value = math.clamp(value, minClamp, maxClamp)
-                        end
-                        if value ~= currentValue then
-                            currentValue = value
-                            if callback then
-                                local ok, err = pcall(callback, value)
-                                if not ok then
-                                    warn("[Auto Fish UI] Slider callback error: " .. tostring(err))
-                                end
-                            end
-                        end
-                        textBox.Text = tostring(value)
-                    end
-
-                    -- Auto-save on text change with debounce
-                    local lastChanged = 0
-                    local debounceTime = 0.5 -- seconds
-                    textBox.Changed:Connect(function(property)
-                        if property == "Text" then
-                            lastChanged = tick()
-                            task.delay(debounceTime, function()
-                                if tick() - lastChanged >= debounceTime then
-                                    commitValue(textBox.Text)
-                                end
-                            end)
-                        end
-                    end)
-
-                    textBox.FocusLost:Connect(function()
-                        commitValue(textBox.Text)
-                    end)
-
-                    textBox.InputEnded:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.Touch then
-                            commitValue(textBox.Text)
-                        end
-                    end)
-
-                    return {
-                        Set = function(_, value) 
-                            commitValue(value)
-                        end
-                    }
-                end
-
-                function section:NewKeybind(title, description, defaultKey, callback)
-                    local responsive = getResponsiveSize()
-                    local _, actionContainer = createRow(sectionFrame, title, description)
-
-                    local keyButton = Instance.new("TextButton")
-                    keyButton.Name = "KeybindButton"
-                    keyButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    keyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    keyButton.Font = Enum.Font.GothamSemibold
-                    keyButton.TextSize = responsive.textSize
-                    keyButton.AutoButtonColor = false
-                    keyButton.Size = UDim2.new(1, 0, 1, 0)
-                    keyButton.Parent = actionContainer
-
-                    local corner = Instance.new("UICorner")
-                    corner.CornerRadius = UDim.new(0, 6)
-                    corner.Parent = keyButton
-
-                    local stroke = Instance.new("UIStroke")
-                    stroke.Color = Color3.fromRGB(65, 65, 65)
-                    stroke.Thickness = 1
-                    stroke.Parent = keyButton
-
-                    -- Hover effects
-                    keyButton.MouseEnter:Connect(function()
-                        keyButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
-                    end)
-
-                    keyButton.MouseLeave:Connect(function()
-                        keyButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    end)
-
-                    local userInput = game:GetService("UserInputService")
-                    local listening = false
-                    local currentKey = defaultKey or Enum.KeyCode.RightShift
-                    keyButton.Text = currentKey.Name
-
-                    local activationConn
-                    local function bindKeybind(keyCode)
-                        currentKey = keyCode
-                        keyButton.Text = currentKey.Name
-                        if activationConn then
-                            activationConn:Disconnect()
-                        end
-                        activationConn = userInput.InputBegan:Connect(function(input, gpe)
-                            if gpe then return end
-                            if input.KeyCode == currentKey then
-                                if callback then
-                                    local ok, err = pcall(callback)
-                                    if not ok then
-                                        warn("[Auto Fish UI] Keybind callback error: " .. tostring(err))
-                                    end
-                                end
-                            end
-                        end)
-                    end
-
-                    bindKeybind(currentKey)
-
-                    keyButton.MouseButton1Click:Connect(function()
-                        if listening then return end
-                        listening = true
-                        keyButton.Text = "Press key"
-
-                        local connection
-                        connection = userInput.InputBegan:Connect(function(input, gpe)
-                            if gpe then return end
-                            if input.UserInputType == Enum.UserInputType.Keyboard then
-                                listening = false
-                                if connection then
-                                    connection:Disconnect()
-                                end
-                                bindKeybind(input.KeyCode)
-                            end
-                        end)
-                    end)
-
-                    return {
-                        Set = function(_, keyCode) 
-                            bindKeybind(keyCode)
-                        end
-                    }
-                end
-
-                return section
-            end
-
-            if not window._currentTab then
-                window:ShowTab(tabName)
-            end
-
-            return tab
-        end
-
-        return window
-    end
-
-    function Library.CreateLib(titleText)
-        local window = createWindow(titleText)
-        Library._lastWindow = window
-        return window
-    end
-
-    function Library:ToggleUI(force)
-        if self._lastWindow then
-            return self._lastWindow:ToggleUI(force)
-        end
-    end
-
-    function Library:MinimizeUI(force)
-        if self._lastWindow then
-            return self._lastWindow:MinimizeUI(force)
-        end
-    end
-
-end
-
-local Window = Library.CreateLib("🎣 Auto Fish v6.2 Enhanced")
-if Window then
-else
-    warn("⚠️ [Auto Fish] UI creation failed")
-end
-
---TAB: Auto
-local TabAuto      = Window:NewTab("Auto Features")
-local SecMain      = TabAuto:NewSection("Main Features")
-local SecOther     = TabAuto:NewSection("Other Features")
-local SecDelays    = TabAuto:NewSection("Delay Settings")
-
-autoFarmToggle = SecMain:NewToggle("Auto Farm", "Auto equip rod + fishing (kombinasi)", function(state)
-    setAutoFarm(state)
-end)
-
-autoSellToggle = SecMain:NewToggle("Auto Sell", "Auto jual hasil", function(state)
-    setSell(state)
-end)
-
-autoCatchToggle = SecMain:NewToggle("Auto Catch", "Auto catch fish", function(state)
-    setAutoCatch(state)
-end)
-
-autoPreset1Toggle = SecMain:NewToggle("Auto 1 (Auto Crater)", "Enable core auto features with 0.5s stagger then teleport to Crater Island", function(state)
-    if state then
-        enablePreset("auto1", "Crater Island")
-    else
-        disablePreset("auto1")
-    end
-end)
-
-autoPreset2Toggle = SecMain:NewToggle("Auto 2 (Auto Sisyphus)", "Enable core auto features with 0.5s stagger then teleport to Sisyphus State", function(state)
-    if state then
-        enablePreset("auto2", "Sisyphus State")
-    else
-        disablePreset("auto2")
-    end
-end)
-
-autoPreset3Toggle = SecMain:NewToggle("Auto 3 (Auto Kohana)", "Enable core auto features with 5s delay then teleport to Kohana Volcano", function(state)
-    if state then
-        enablePreset("auto3", "Kohana Volcano")
-    else
-        disablePreset("auto3")
-    end
-end)
-
-
-
-autoWeatherToggle = SecOther:NewToggle("Auto Weather", "Auto weather events", function(state)
-    setAutoWeather(state)
-end)
-
-chargeFishingSlider = SecDelays:NewSlider("Charge Rod Delay", "Delay setelah charge fishing rod (detik, min: 0.01)", 10, 0.1, function(value)
-    setChargeFishingDelay(value)
-end)
-
-autoFishMainSlider = SecDelays:NewSlider("Auto Fish Delay", "Delay loop utama auto fish (detik, min: 0.1)", 20, 0.1, function(value)
-    setAutoFishMainDelay(value)
-end)
-
-autoSellSlider = SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik, min: 1)", 180, 1, function(value)
-    setAutoSellDelay(value)
-end)
-
-autoCatchSlider = SecDelays:NewSlider("Auto Catch Delay", "Delay auto catch (detik, min: 0.1)", 10, 0.1, function(value)
-    setAutoCatchDelay(value)
-end)
-
-weatherIdSlider = SecDelays:NewSlider("Weather ID Delay", "Delay antar weather ID (detik, min: 1)", 60, 1, function(value)
-    setWeatherIdDelay(value)
-end)
-
-weatherCycleSlider = SecDelays:NewSlider("Weather Cycle Delay", "Delay siklus weather (detik, min: 10)", 600, 30, function(value)
-    setWeatherCycleDelay(value)
-end)
-
-task.defer(function()
-    task.wait(1)
-    if chargeFishingSlider then
-        chargeFishingSlider:Set(config.chargeFishingDelay or chargeFishingDelay)
-    end
-    if autoFishMainSlider then
-        autoFishMainSlider:Set(config.autoFishMainDelay or autoFishMainDelay)
-    end
-    if autoSellSlider then
-        autoSellSlider:Set(config.autoSellDelay or autoSellDelay)
-    end
-    if autoCatchSlider then
-        autoCatchSlider:Set(config.autoCatchDelay or autoCatchDelay)
-    end
-    if weatherIdSlider then
-        weatherIdSlider:Set(config.weatherIdDelay or weatherIdDelay)
-    end
-    if weatherCycleSlider then
-        weatherCycleSlider:Set(config.weatherCycleDelay or weatherCycleDelay)
-    end
-end)
-
-local TabTeleport = Window:NewTab("Teleport")
-local SecTP = TabTeleport:NewSection("All Locations")
-
--- Function to safely teleport
-local function teleportTo(locationName, cframe)
-    pcall(function()
-        local character = game.Players.LocalPlayer.Character
-        if character and character:FindFirstChild("HumanoidRootPart") then
-            character.HumanoidRootPart.CFrame = cframe
-        else
-            warn("[Teleport] ❌ Character or HumanoidRootPart not found!")
-        end
-    end)
-end
-
--- Create individual teleport buttons for better UX
-SecTP:NewButton("🏠 Spawn", "Return to spawn area", function()
-    teleportTo("Spawn", CFrame.new(45.2788086, 252.562927, 2987.10913, 1, 0, 0, 0, 1, 0, 0, 0, 1))
-end)
-
--- Popular fishing locations section
-local SecPopular = TabTeleport:NewSection("Popular Fishing Spots")
-
-SecPopular:NewButton("🌋 Kohana Volcano", "Active volcano area with rare fish", function()
-    teleportTo("Kohana Volcano", CFrame.new(-572.879456, 22.4521465, 148.355331, -0.995764792, -6.67705606e-08, 0.0919371247, -5.74611505e-08, 1, 1.03905414e-07, -0.0919371247, 9.81825394e-08, -0.995764792))
-end)
-
-SecPopular:NewButton("🗿 Sisyphus Statue", "Deep sea location near the ancient statue", function()
-    teleportTo("Sisyphus Statue", CFrame.new(-3728.21606, -135.074417, -1012.12744, -0.977224171, 7.74980258e-09, -0.212209702, 1.566994e-08, 1, -3.5640408e-08, 0.212209702, -3.81539813e-08, -0.977224171))
-end)
-
-SecPopular:NewButton("🏝️ Crater Island", "Isolated crater island with unique catches", function()
-    teleportTo("Crater Island", CFrame.new(1016.49072, 20.0919304, 5069.27295, 0.838976264, 3.30379857e-09, -0.544168055, 2.63538391e-09, 1, 1.01344115e-08, 0.544168055, -9.93662219e-09, 0.838976264))
-end)
-
--- Deep sea locations section
-local SecDeep = TabTeleport:NewSection("Deep Sea Areas")
-
-SecDeep:NewButton("🌊 Esoteric Depths", "Deepest area with mysterious fish", function()
-    teleportTo("Esoteric Depths", CFrame.new(3248.37109, -1301.53027, 1403.82727, -0.920208454, 7.76270355e-08, 0.391428679, 4.56261056e-08, 1, -9.10549289e-08, -0.391428679, -6.5930152e-08, -0.920208454))
-end)
-
-SecDeep:NewButton("🪸 Coral Reefs", "Colorful reef system", function()
-    teleportTo("Coral Reefs", CFrame.new(-3114.78198, 1.32066584, 2237.52295, -0.304758579, 1.6556676e-08, -0.952429652, -8.50574935e-08, 1, 4.46003305e-08, 0.952429652, 9.46036067e-08, -0.304758579))
-end)
-
--- Special locations section
-local SecSpecial = TabTeleport:NewSection("Special Areas")
-
-SecSpecial:NewButton("🏝️ Lost Isle", "Mysterious lost island", function()
-    teleportTo("Lost Isle", CFrame.new(-3618.15698, 240.836655, -1317.45801, 1, 0, 0, 0, 1, 0, 0, 0, 1))
-end)
-
-SecSpecial:NewButton("🌴 Tropical Grove", "Lush tropical area", function()
-    teleportTo("Tropical Grove", CFrame.new(-2095.34106, 197.199997, 3718.08008))
-end)
-
-SecSpecial:NewButton("💎 Treasure Room", "Hidden treasure chamber", function()
-    teleportTo("Treasure Room", CFrame.new(-3606.34985, -266.57373, -1580.97339, 0.998743415, 1.12141152e-13, -0.0501160324, -1.56847693e-13, 1, -8.88127842e-13, 0.0501160324, 8.94872392e-13, 0.998743415))
-end)
-
--- Utility locations section
-local SecUtility = TabTeleport:NewSection("Utility Locations")
-
-SecUtility:NewButton("🌤️ Weather Machine", "Control weather patterns", function()
-    teleportTo("Weather Machine", CFrame.new(-1488.51196, 83.1732635, 1876.30298, 1, 0, 0, 0, 1, 0, 0, 0, 1))
-end)
-
-SecUtility:NewButton("🏘️ Kohana Village", "Main village area", function()
-    teleportTo("Kohana", CFrame.new(-663.904236, 3.04580712, 718.796875, -0.100799225, -2.14183729e-08, -0.994906783, -1.12300391e-08, 1, -2.03902459e-08, 0.994906783, 9.11752096e-09, -0.100799225))
-end)
-
--- Quick dropdown for legacy support
-local SecQuick = TabTeleport:NewSection("Quick Select (Legacy)")
-local tpNames = {}
-for _, loc in ipairs(teleportLocations) do
-    table.insert(tpNames, loc.Name)
-end
-
-SecQuick:NewDropdown("Location Selector", "Choose location from dropdown", tpNames, function(chosen)
-    for _, location in ipairs(teleportLocations) do
-        if location.Name == chosen then
-            teleportTo(chosen, location.CFrame)
-            break
-        end
-    end
-end)
-
-
-autoMegalodonToggle = SecOther:NewToggle("Auto Megalodon Hunt", "Auto teleport to Megalodon events", function(state)
-    setAutoMegalodon(state)
-end)
-
-upgradeRodToggle = SecOther:NewToggle("Auto Upgrade Rod", "Otomatis beli rod pancing selanjutnya", function(state)
-    setUpgradeRod(state)
-end)
-
-upgradeBaitToggle = SecOther:NewToggle("Auto Upgrade Bait", "Otomatis beli umpan selanjutnya", function(state)
-    setUpgradeBait(state)
-end)
-
-
-local function applyLoadedConfig()
-    if config.activePreset == "none" then
-        isApplyingConfig = true
-
-        if config.autoFarm and autoFarmToggle then
-            autoFarmToggle:UpdateToggle(nil, true)
-        end
-        if config.autoSell and autoSellToggle then
-            autoSellToggle:UpdateToggle(nil, true)
-        end
-        if config.autoCatch and autoCatchToggle then
-            autoCatchToggle:UpdateToggle(nil, true)
-        end
-        if config.autoWeather and autoWeatherToggle then
-            autoWeatherToggle:UpdateToggle(nil, true)
-        end
-        if config.autoMegalodon and autoMegalodonToggle then
-            autoMegalodonToggle:UpdateToggle(nil, true)
-        end
-        if config.gpuSaver then
-            enableGPUSaver()
-        end
-        if config.gpuSaver and gpuSaverToggle then
-            gpuSaverToggle:UpdateToggle(nil, true)
-        end
-
-        isApplyingConfig = false
-        syncConfigFromStates()
-        saveConfig()
-    end
-
-    if config.activePreset == "auto1" and autoPreset1Toggle then
-        autoPreset1Toggle:UpdateToggle(nil, true)
-    elseif config.activePreset == "auto2" and autoPreset2Toggle then
-        autoPreset2Toggle:UpdateToggle(nil, true)
-    elseif config.activePreset == "auto3" and autoPreset3Toggle then
-        autoPreset3Toggle:UpdateToggle(nil, true)
-    end
-end
-
-task.defer(applyLoadedConfig)
-
-
--- ====== PERFORMANCE TAB ====== 
-local TabPerformance = Window:NewTab("Performance")
-local SecGPU = TabPerformance:NewSection("GPU Saver Mode")
-
-gpuSaverToggle = SecGPU:NewToggle("GPU Saver Mode", "Enable white screen to save GPU/battery", function(state)
-    if state then
-        enableGPUSaver()
-    else
-        disableGPUSaver()
-    end
-    updateConfigField("gpuSaver", state)
-end)
-
-SecGPU:NewKeybind("GPU Saver Hotkey", "Quick toggle GPU saver", Enum.KeyCode.RightControl, function()
-    if gpuSaverEnabled then
-        disableGPUSaver()
-    else
-        enableGPUSaver()
-    end
-end)
-
-SecGPU:NewButton("Force Remove White Screen", "Emergency remove if stuck", function()
-    removeWhiteScreen()
-    gpuSaverEnabled = false
-end)
-
-
-
--- The "Advanced Modules" tab and its contents have been removed as per instructions.
-
--- ====== SHOP & UI CONTROLS ======
-local TabShop = Window:NewTab("Shop")
-local SecShop = TabShop:NewSection("Purchase Items")
-
--- Rod shop buttons
-SecShop:NewButton("Luck Rod - $350", "Purchase Luck Rod", function()
-    buyRod(rodDatabase.luck)
-end)
-
-SecShop:NewButton("Grass Rod - $1.5k", "Purchase Grass Rod", function()
-    buyRod(rodDatabase.grass)
-end)
-
-SecShop:NewButton("Carbon Rod - $3k", "Purchase Carbon Rod", function()
-    buyRod(rodDatabase.carbon)
-end)
-
-SecShop:NewButton("Demascus Rod - $3k", "Purchase Demascus Rod", function()
-    buyRod(rodDatabase.demascus)
-end)
-
-SecShop:NewButton("Ice Rod - $5k", "Purchase Ice Rod", function()
-    buyRod(rodDatabase.ice)
-end)
-
-SecShop:NewButton("Lucky Rod - $15k", "Purchase Lucky Rod", function()
-    buyRod(rodDatabase.lucky)
-end)
-
-SecShop:NewButton("Midnight Rod - $50k", "Purchase Midnight Rod", function()
-    buyRod(rodDatabase.midnight)
-end)
-
-SecShop:NewButton("Steampunk Rod - $215k", "Purchase Steampunk Rod", function()
-    buyRod(rodDatabase.steampunk)
-end)
-
-SecShop:NewButton("Chrome Rod - $437k", "Purchase Chrome Rod", function()
-    buyRod(rodDatabase.chrome)
-end)
-
-SecShop:NewButton("Astral Rod - $1M", "Purchase Astral Rod", function()
-    buyRod(rodDatabase.astral)
-end)
-
-SecShop:NewButton("Ares Rod - $2.5M", "Purchase Ares Rod (NEW!)", function()
-    buyRod(rodDatabase.ares)
-end)
-
--- Bait shop section
-local SecBait = TabShop:NewSection("Purchase Bait")
-
-SecBait:NewButton("TopWater Bait - $100", "Purchase TopWater Bait", function()
-    buyBait(baitDatabase.topwaterbait)
-end)
-
-SecBait:NewButton("Luck Bait - $1k", "Purchase Luck Bait", function()
-    buyBait(baitDatabase.luckbait)
-end)
-
-SecBait:NewButton("Midnight Bait - $3k", "Purchase Midnight Bait", function()
-    buyBait(baitDatabase.midnightbait)
-end)
-
-SecBait:NewButton("Deep Bait - $83.5k", "Purchase Deep Bait", function()
-    buyBait(baitDatabase.deepbait)
-end)
-
-SecBait:NewButton("Chroma Bait - $290k", "Purchase Chroma Bait", function()
-    buyBait(baitDatabase.chromabait)
-end)
-
-SecBait:NewButton("Dark Matter Bait - $630k", "Purchase Dark Matter Bait", function()
-    buyBait(baitDatabase.darkmatterbait)
-end)
-
-SecBait:NewButton("Corrupt Bait - $1.15M", "Purchase Corrupt Bait", function()
-    buyBait(baitDatabase.corruptbait)
-end)
-
-SecBait:NewButton("Aether Bait - $1M", "Purchase Aether Bait", function()
-    buyBait(baitDatabase.aetherbait)
-end)
-
--- UI Controls section in Shop tab
-local SecUI = TabShop:NewSection("Interface Controls")
-
-
--- ====== ENCHANT TAB ======
-local TabEnchant = Window:NewTab("Enchant")
-local SecEnchant = TabEnchant:NewSection("Enchant Items")
-
--- Placeholder enchant functions (you can implement the actual logic later)
-local function enchantRod(enchantType)
-    -- Add your enchant logic here
-    -- Example: call game RemoteFunction/RemoteEvent for enchanting
-end
-
-local function enchantBait(enchantType)
-    -- Add your enchant logic here
-end
-
--- Rod Enchant Section
-local SecRodEnchant = TabEnchant:NewSection("Rod Enchants")
-
-SecRodEnchant:NewButton("⚡ Speed Enchant", "Increase fishing speed", function()
-    enchantRod("Speed")
-end)
-
-SecRodEnchant:NewButton("💎 Luck Enchant", "Increase rare fish chance", function()
-    enchantRod("Luck")
-end)
-
-SecRodEnchant:NewButton("🌊 Deep Sea Enchant", "Better deep sea fishing", function()
-    enchantRod("DeepSea")
-end)
-
-SecRodEnchant:NewButton("⭐ Quality Enchant", "Increase fish quality", function()
-    enchantRod("Quality")
-end)
-
-SecRodEnchant:NewButton("💰 Value Enchant", "Increase fish value", function()
-    enchantRod("Value")
-end)
-
--- Bait Enchant Section
-local SecBaitEnchant = TabEnchant:NewSection("Bait Enchants")
-
-SecBaitEnchant:NewButton("🔥 Fire Enchant", "Attract fire-type fish", function()
-    enchantBait("Fire")
-end)
-
-SecBaitEnchant:NewButton("❄️ Ice Enchant", "Attract ice-type fish", function()
-    enchantBait("Ice")
-end)
-
-SecBaitEnchant:NewButton("⚡ Electric Enchant", "Attract electric-type fish", function()
-    enchantBait("Electric")
-end)
-
-SecBaitEnchant:NewButton("🌙 Lunar Enchant", "Attract night fish", function()
-    enchantBait("Lunar")
-end)
-
-SecBaitEnchant:NewButton("☀️ Solar Enchant", "Attract day fish", function()
-    enchantBait("Solar")
-end)
-
--- Advanced Enchant Section
-local SecAdvancedEnchant = TabEnchant:NewSection("Advanced Enchants")
-
-SecAdvancedEnchant:NewButton("💫 Cosmic Enchant", "Legendary enchant for cosmic fish", function()
-    enchantRod("Cosmic")
-end)
-
-SecAdvancedEnchant:NewButton("🌌 Void Enchant", "Mythical enchant for void fish", function()
-    enchantRod("Void")
-end)
-
-SecAdvancedEnchant:NewButton("🔮 Mystic Enchant", "Mystical enchant for rare catches", function()
-    enchantBait("Mystic")
-end)
-
--- Enchant Settings Section
-local SecEnchantSettings = TabEnchant:NewSection("Enchant Settings")
-
-SecEnchantSettings:NewToggle("Auto Enchant Rod", "Automatically enchant rod after purchase", function(state)
-    -- Add auto enchant logic here
-end)
-
-SecEnchantSettings:NewToggle("Auto Enchant Bait", "Automatically enchant bait after purchase", function(state)
-    -- Add auto enchant logic here
-end)
-
-SecEnchantSettings:NewDropdown("Default Rod Enchant", "Select default enchant for rods",
-    {"Speed", "Luck", "DeepSea", "Quality", "Value", "Cosmic", "Void"},
-    function(selected)
-    end
-)
-
-SecEnchantSettings:NewDropdown("Default Bait Enchant", "Select default enchant for bait",
-    {"Fire", "Ice", "Electric", "Lunar", "Solar", "Mystic"},
-    function(selected)
-    end
-)
-
-
--- ====== MINIMIZE SYSTEM ====== 
-local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
-
-local MiniGui = Instance.new("ScreenGui")
-MiniGui.Name = "AF_Minibar"
-MiniGui.ResetOnSpawn = false
-MiniGui.IgnoreGuiInset = true
-MiniGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-MiniGui.Parent = CoreGui
-
-local MiniBtn = Instance.new("TextButton")
-MiniBtn.Name = "RestoreButton"
-MiniBtn.Size = UDim2.new(0, 200, 0, 40)
-MiniBtn.Position = UDim2.new(0, 20, 0, 80)
-MiniBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-MiniBtn.BorderSizePixel = 0
-MiniBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-MiniBtn.TextSize = 14
-MiniBtn.Font = Enum.Font.GothamSemibold
-MiniBtn.Text = "🚜 Auto Fish v4.5 (Show)"
-MiniBtn.AutoButtonColor = true
-MiniBtn.Visible = false
-MiniBtn.Parent = MiniGui
-
--- Add status indicator
-local statusFrame = Instance.new("Frame")
-statusFrame.Size = UDim2.new(1, 0, 0, 3)
-statusFrame.Position = UDim2.new(0, 0, 1, -3)
-statusFrame.BorderSizePixel = 0
-statusFrame.Parent = MiniBtn
-
-local statusGradient = Instance.new("UIGradient")
-statusGradient.Color = ColorSequence.new{ 
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 0)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
-}
-statusGradient.Parent = statusFrame
-
--- Update status bar color based on active features
-task.spawn(function()
-    while true do
-        if MiniBtn.Visible then
-            local activeCount = 0
-            if isAutoFarmOn then activeCount = activeCount + 1 end
-            if isAutoSellOn then activeCount = activeCount + 1 end
-            if isAutoCatchOn then activeCount = activeCount + 1 end
-            
-            local intensity = math.min(activeCount / 3, 1)
-            statusGradient.Offset = Vector2.new(-intensity, 0)
-            
-            -- Update button text with status
-            local statusText = ""
-            if isAutoFarmOn then statusText = statusText .. "🚜" end
-            if isAutoSellOn then statusText = statusText .. "💰" end
-            if isAutoCatchOn then statusText = statusText .. "🎯" end
-            
-            MiniBtn.Text = "Auto Fish v4.5 " .. statusText .. " (Show)"
-        end
-        task.wait(1)
-    end
-end)
-
--- Drag functionality
-do
-    local dragging = false
-    local dragStart, startPos
-    MiniBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = MiniBtn.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
-            end)
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            MiniBtn.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-end
-
-local isMinimized = false
-local function minimizeUI()
-    if not isMinimized then
-        isMinimized = true
-        if MiniBtn then MiniBtn.Visible = true end
-        Library:ToggleUI()
-    end
-end
-
-local function restoreUI()
-    if isMinimized then
-        isMinimized = false
-        if MiniBtn then MiniBtn.Visible = false end
-        Library:ToggleUI()
-    end
-end
-
-MiniBtn.MouseButton1Click:Connect(restoreUI)
-
-SecUI:NewKeybind("Minimize/Restore (RightShift)", "Toggle UI cepat", Enum.KeyCode.RightShift, function()
-    if isMinimized then restoreUI() else minimizeUI() end
-end)
-
-SecUI:NewButton("Minimize UI", "Hide the interface", function()
-    minimizeUI()
-end)
-
--- Custom minimize button
-task.spawn(function()
-    task.wait(2) -- Wait longer for UI to fully load
-    
-    local possibleNames = {"Kavo UI", "KavoLibrary", "UI", "MainUI"}
-    local kavoGui = nil
-    
-    for _, name in pairs(possibleNames) do
-        kavoGui = CoreGui:FindFirstChild(name)
-        if kavoGui then break end
-    end
-    
-    if not kavoGui then
-        for _, gui in pairs(CoreGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name ~= "AF_Minibar" and gui.Name ~= "GPUSaverScreen" then
-                local frame = gui:FindFirstChildOfClass("Frame")
-                if frame and frame:FindFirstChild("Main") then
-                    kavoGui = gui
-                    break
-                end
-            end
-        end
-    end
-    
-    if not kavoGui then
-        warn("❌ Kavo GUI tidak ditemukan untuk minimize button")
-        return
-    end
-    
-    local mainFrame = kavoGui:FindFirstChild("Main") or kavoGui:FindFirstChildOfClass("Frame")
-    if not mainFrame then return end
-    
-    local titleBar = nil
-    for _, child in pairs(mainFrame:GetChildren()) do
-        if child:IsA("Frame") and (child.Name:lower():find("top") or child.Name:lower():find("title") or child.Size.Y.Offset < 40) then
-            titleBar = child
-            break
-        end
-    end
-    
-    if not titleBar then
-        local topMost = nil
-        local smallestY = math.huge
-        
-        for _, child in pairs(mainFrame:GetChildren()) do
-            if child:IsA("Frame") and child.Position.Y.Offset < smallestY then
-                smallestY = child.Position.Y.Offset
-                topMost = child
-            end
-        end
-        titleBar = topMost
-    end
-    
-    if not titleBar then
-        warn("❌ Title bar tidak ditemukan")
-        return
-    end
-    
-    local closeBtn = nil
-    for _, child in pairs(titleBar:GetDescendants()) do
-        if child:IsA("TextButton") and (child.Text == "X" or child.Text == "✕" or child.Text:find("close")) then
-            closeBtn = child
-            break
-        end
-    end
-    
-    local minimizeBtn = Instance.new("TextButton")
-    minimizeBtn.Name = "CustomMinimizeButton"
-    minimizeBtn.Size = UDim2.new(0, 20, 0, 20)
-    
-    if closeBtn then
-        minimizeBtn.Position = UDim2.new(0, closeBtn.Position.X.Offset - 25, 0, closeBtn.Position.Y.Offset)
-    else
-        minimizeBtn.Position = UDim2.new(1, -45, 0, 5)
-    end
-    
-    minimizeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    minimizeBtn.BorderSizePixel = 0
-    minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    minimizeBtn.TextSize = 12
-    minimizeBtn.Font = Enum.Font.GothamBold
-    minimizeBtn.Text = "−"
-    minimizeBtn.TextYAlignment = Enum.TextYAlignment.Center
-    minimizeBtn.ZIndex = 10
-    minimizeBtn.Parent = titleBar
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 2)
-    corner.Parent = minimizeBtn
-    
-    minimizeBtn.MouseEnter:Connect(function()
-        minimizeBtn.BackgroundColor3 = Color3.fromRGB(65, 65, 65)
-    end)
-    
-    minimizeBtn.MouseLeave:Connect(function()
-        minimizeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    end)
-    
-    minimizeBtn.MouseButton1Click:Connect(function()
-        minimizeUI()
-    end)
-    
-end)
-
-
 -- ====== AUTO LOOPS WITH ENHANCED LOGIC ======
 
 -- Enhanced Auto Farm Loop (combines equip + fishing) with asset error protection
@@ -4964,3 +3338,67 @@ else
     warn("⚠️ [Auto Fish] Some systems failed health check. Script may not function properly.")
     warn("⚠️ Check the error messages above and ensure all dependencies are available.")
 end
+
+-- ====================================================================
+--                    EXPORT FUNCTIONS TO GLOBAL
+--              (For config script to access)
+-- ====================================================================
+
+-- Export delay functions
+_G.setChargeFishingDelay = setChargeFishingDelay
+_G.setAutoFishMainDelay = setAutoFishMainDelay
+_G.setAutoSellDelay = setAutoSellDelay
+_G.setAutoCatchDelay = setAutoCatchDelay
+_G.setWeatherIdDelay = setWeatherIdDelay
+_G.setWeatherCycleDelay = setWeatherCycleDelay
+
+-- Export upgrade functions
+_G.setUpgradeRod = setUpgradeRod
+_G.setUpgradeBait = setUpgradeBait
+
+-- Export preset function
+_G.enablePreset = enablePreset
+_G.disablePreset = disablePreset
+
+-- Export GPU functions
+_G.enableGPUSaver = enableGPUSaver
+_G.disableGPUSaver = disableGPUSaver
+
+-- ====================================================================
+--                    AUTO-CONFIGURATION FROM GLOBALS
+--              (Read config from executor file)
+-- ====================================================================
+
+task.spawn(function()
+    task.wait(0.5) -- Wait for all systems to initialize
+
+    -- Apply delay settings
+    if CHARGE_ROD_DELAY then setChargeFishingDelay(CHARGE_ROD_DELAY) end
+    if AUTO_FISH_DELAY then setAutoFishMainDelay(AUTO_FISH_DELAY) end
+    if AUTO_SELL_DELAY then setAutoSellDelay(AUTO_SELL_DELAY) end
+    if AUTO_CATCH_DELAY then setAutoCatchDelay(AUTO_CATCH_DELAY) end
+    if WEATHER_ID_DELAY then setWeatherIdDelay(WEATHER_ID_DELAY) end
+    if WEATHER_CYCLE_DELAY then setWeatherCycleDelay(WEATHER_CYCLE_DELAY) end
+
+    -- Apply upgrade settings
+    if AUTO_UPGRADE_ROD ~= nil then setUpgradeRod(AUTO_UPGRADE_ROD) end
+    if AUTO_UPGRADE_BAIT ~= nil then setUpgradeBait(AUTO_UPGRADE_BAIT) end
+
+    -- Apply Discord webhooks
+    if webhook2 then CONNECTION_WEBHOOK_URL = webhook2 end
+    if webhook3 then DISCONNECT_WEBHOOK_URL = webhook3 end
+    if discordid then DISCORD_USER_ID = discordid end
+
+    -- Activate preset based on AUTO setting
+    if AUTO then
+        task.wait(1) -- Wait for player to fully load
+
+        if AUTO == 1 then
+            enablePreset("auto1", "Crater Island")
+        elseif AUTO == 2 then
+            enablePreset("auto2", "Sisyphus State")
+        elseif AUTO == 3 then
+            enablePreset("auto3", "Kohana Volcano")
+        end
+    end
+end)
