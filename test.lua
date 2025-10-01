@@ -1401,7 +1401,7 @@ function enableGPUSaver()
             end
         end
         
-        pcall(function() setfpscap(10) end) -- Limit FPS to 5
+        pcall(function() setfpscap(8) end) -- Limit FPS to 5
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
@@ -1435,7 +1435,7 @@ function disableGPUSaver()
             end
         end
         
-        pcall(function() setfpscap(0) end) -- Remove FPS limit
+        pcall(function() setfpscap(8) end) -- Remove FPS limit
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, true)
         workspace.CurrentCamera.FieldOfView = 70
     end)
