@@ -675,8 +675,7 @@ local function loadConfig()
         end
     end
 
-    -- Always save after loading to ensure file exists and is up to date
-    saveConfig()
+    -- Don't auto-save here, let the manual config section handle it
 end
 
 local function migrateOldConfig()
@@ -771,10 +770,12 @@ local function applyDelayConfig()
 
     local function applyField(field, minValue, defaultValue)
         local value = tonumber(config[field])
-        if value == nil then
-            value = defaultValue
+        if value == nil or value == 0 then
+            value = defaultValue or 0.1
             updated = true
         end
+        -- Ensure we have a valid number before math.max
+        value = tonumber(value) or defaultValue or 0.1
         local clamped = math.max(minValue, value)
         if clamped ~= value then
             updated = true
@@ -783,12 +784,12 @@ local function applyDelayConfig()
         return clamped
     end
 
-    chargeFishingDelay = applyField("chargeFishingDelay", 0.1, defaultConfig.chargeFishingDelay)
-    autoFishMainDelay = applyField("autoFishMainDelay", 0.1, defaultConfig.autoFishMainDelay)
-    autoSellDelay = applyField("autoSellDelay", 36, defaultConfig.autoSellDelay)
-    autoCatchDelay = applyField("autoCatchDelay", 0.1, defaultConfig.autoCatchDelay)
+    chargeFishingDelay = applyField("chargeFishingDelay", 0.01, defaultConfig.chargeFishingDelay)
+    autoFishMainDelay = applyField("autoFishDelay", 0.1, defaultConfig.autoFishDelay)
+    autoSellDelay = applyField("autoSellDelay", 30, defaultConfig.autoSellDelay)
+    autoCatchDelay = applyField("autoCatchDelay", 0.01, defaultConfig.autoCatchDelay)
     weatherIdDelay = applyField("weatherIdDelay", 1, defaultConfig.weatherIdDelay)
-    weatherCycleDelay = applyField("weatherCycleDelay", 35, defaultConfig.weatherCycleDelay)
+    weatherCycleDelay = applyField("weatherCycleDelay", 10, defaultConfig.weatherCycleDelay)
 
     if updated then
         pcall(saveConfig)
@@ -3057,7 +3058,7 @@ end
 
 print("🎣 [Auto Fish] Starting NO-UI mode (Manual Config)...")
 
--- First, try to load existing config from JSON
+-- First, load config (will load from JSON if exists, otherwise use defaults)
 loadConfig()
 
 -- Check if config file exists
@@ -3067,27 +3068,22 @@ if isfile then
     configExists = isfile(configFile)
 end
 
--- Variables to use (either from JSON or from main_noui.lua)
+-- Variables to use
 local useAutoFarm, useAutoSell, useAutoCatch, useAutoWeather, useAutoMegalodon, useGPUSaver, useTeleportLoc
 
 if configExists then
     -- Config exists, use saved settings from JSON
     print("📂 [Config] Loading from saved file...")
-    useAutoFarm = config.autoFarm or false
-    useAutoSell = config.autoSell or false
-    useAutoCatch = config.autoCatch or false
-    useAutoWeather = config.autoWeather or false
-    useAutoMegalodon = config.autoMegalodon or false
-    useGPUSaver = config.gpuSaver or false
+    useAutoFarm = config.autoFarm
+    useAutoSell = config.autoSell
+    useAutoCatch = config.autoCatch
+    useAutoWeather = config.autoWeather
+    useAutoMegalodon = config.autoMegalodon
+    useGPUSaver = config.gpuSaver
     useTeleportLoc = config.teleportLocation or "Sisyphus Statue"
 
-    -- Load delays from config
-    chargeFishingDelay = config.chargeFishingDelay or 0.1
-    autoFishMainDelay = config.autoFishDelay or 0.9
-    autoSellDelay = config.autoSellDelay or 34
-    autoCatchDelay = config.autoCatchDelay or 0.2
-    weatherIdDelay = config.weatherIdDelay or 10
-    weatherCycleDelay = config.weatherCycleDelay or 30
+    -- Apply delays from config (using applyDelayConfig)
+    applyDelayConfig()
 
     print("✅ [Config] Loaded from JSON (ignoring main_noui.lua)")
 else
@@ -3101,11 +3097,11 @@ else
     useGPUSaver = GPU_SAVER or false
     useTeleportLoc = TELEPORT_LOCATION or "Sisyphus Statue"
 
-    -- Apply delays from loader
+    -- Apply delays from main_noui.lua
     chargeFishingDelay = CHARGE_ROD_DELAY or 0.1
-    autoFishMainDelay = AUTO_FISH_DELAY or 0.9
+    autoFishMainDelay = AUTO_FISH_DELAY or 0.1
     autoSellDelay = AUTO_SELL_DELAY or 34
-    autoCatchDelay = AUTO_CATCH_DELAY or 0.2
+    autoCatchDelay = AUTO_CATCH_DELAY or 0.1
     weatherIdDelay = WEATHER_ID_DELAY or 10
     weatherCycleDelay = WEATHER_CYCLE_DELAY or 30
 
