@@ -559,30 +559,21 @@ local function getConfigFileName()
     local fileName = "auto_fish_v58_config_" .. playerName .. "_" .. userId .. ".json"
     return CONFIG_FOLDER .. "/" .. fileName
 end
-local USE_SCRIPT_CONFIG = true
-
--- Script-based configuration (edit values below as needed)
-local scriptConfig = {
-    autoFarm = true,
-    autoSell = true,
-    autoCatch = true,
+local defaultConfig = {
+    autoFarm = false,
+    autoSell = false,
+    autoCatch = false,
     autoWeather = false,
     autoMegalodon = false,
     activePreset = "none",
     gpuSaver = false,
-    chargeFishingDelay = 0.1,
+    chargeFishingDelay = 0.01,
     autoFishMainDelay = 0.9,
-    autoSellDelay = 34,
+    autoSellDelay = 45,
     autoCatchDelay = 0.2,
-    weatherIdDelay = 10,
-    weatherCycleDelay = 30
+    weatherIdDelay = 33,
+    weatherCycleDelay = 100
 }
-
-local defaultConfig = {}
-for key, value in pairs(scriptConfig) do
-    defaultConfig[key] = value
-end
-
 local config = {}
 for key, value in pairs(defaultConfig) do
     config[key] = value
@@ -612,10 +603,6 @@ local function validateConfigStructure(loadedConfig)
 end
 
 local function saveConfig()
-    if USE_SCRIPT_CONFIG then
-        return
-    end
-
     if not writefile then
         return
     end
@@ -646,11 +633,6 @@ local function saveConfig()
 end
 
 local function loadConfig()
-    if USE_SCRIPT_CONFIG then
-        config = validateConfigStructure(scriptConfig)
-        return
-    end
-
     if not readfile or not isfile then
         config = {}
         for key, value in pairs(defaultConfig) do
@@ -697,10 +679,6 @@ local function loadConfig()
 end
 
 local function migrateOldConfig()
-    if USE_SCRIPT_CONFIG then
-        return false
-    end
-
     -- Check for old config file format and migrate if found
     if not readfile or not isfile then return end
 
@@ -3040,1026 +3018,80 @@ local function setDelaysForPreset(presetKey)
 end
 
 
--- ====== HEADLESS UI STUB ======
-local Library = { __headless = true }
+-- ====================================================================
+--                    AUTO-START (NO UI MODE)
+-- ====================================================================
+-- Configuration from main_noui.lua loader
 
-do
-    local function safeCallback(callback, ...)
-        if type(callback) == "function" then
-            local ok, err = pcall(callback, ...)
-            if not ok then
-                warn("[Auto Fish] Callback error: " .. tostring(err))
-            end
-        end
-    end
+print("🎣 [Auto Fish] Starting NO-UI mode...")
 
-    local SectionProto = {}
+-- Get config from loader
+local AUTO_PRESET = AUTO or 2
+local GPU_FPS_CAP = GPU_FPS_LIMIT or 8
 
-    function SectionProto:NewToggle(_, _, callback)
-        local toggle = { state = false }
-        function toggle:UpdateToggle(_, newState)
-            if type(newState) ~= "boolean" then
-                newState = not self.state
-            end
-            if self.state ~= newState then
-                self.state = newState
-                safeCallback(callback, newState)
-            end
-        end
-        function toggle:Set(state)
-            self:UpdateToggle(nil, state)
-        end
-        return toggle
-    end
-
-    function SectionProto:NewButton(_, _, callback)
-        return {
-            Activate = function()
-                safeCallback(callback)
-            end
-        }
-    end
-
-    function SectionProto:NewKeybind(_, _, _, callback)
-        return {
-            Trigger = function()
-                safeCallback(callback)
-            end
-        }
-    end
-
-    function SectionProto:NewDropdown(_, _, _, callback)
-        local dropdown = { value = nil }
-        function dropdown:Set(value)
-            self.value = value
-            safeCallback(callback, value)
-        end
-        return dropdown
-    end
-
-    function SectionProto:NewSlider(_, _, maxValue, minValue, callback)
-        local slider = { value = minValue or 0, min = minValue, max = maxValue }
-        function slider:Set(value)
-            local num = tonumber(value)
-            if not num then return end
-            if slider.min ~= nil then
-                num = math.max(slider.min, num)
-            end
-            if slider.max ~= nil then
-                num = math.min(slider.max, num)
-            end
-            slider.value = num
-            safeCallback(callback, num)
-        end
-        return slider
-    end
-
-    local TabProto = {}
-    function TabProto:NewSection(_, _)
-        local section = {}
-        return setmetatable(section, { __index = SectionProto })
-    end
-
-    local WindowProto = {}
-    function WindowProto:NewTab(_, _)
-        local tab = {}
-        return setmetatable(tab, { __index = TabProto })
-    end
-
-    function Library.CreateLib(_)
-        local window = {}
-        return setmetatable(window, { __index = WindowProto })
-    end
-
-    function Library:ToggleUI()
-    end
-
-    function Library:MinimizeUI()
-    end
+-- Convert AUTO number to preset string
+local SELECTED_PRESET = "auto2"  -- Default: Sisyphus
+if AUTO_PRESET == 1 then
+    SELECTED_PRESET = "auto1"  -- Crater Island
+    print("🎯 [Preset] AUTO 1 - Crater Island")
+elseif AUTO_PRESET == 2 then
+    SELECTED_PRESET = "auto2"  -- Sisyphus Statue
+    print("🎯 [Preset] AUTO 2 - Sisyphus Statue")
+elseif AUTO_PRESET == 3 then
+    SELECTED_PRESET = "auto3"  -- Kohana
+    print("🎯 [Preset] AUTO 3 - Kohana")
 end
 
-local Window = Library.CreateLib("🎣 Auto Fish v6.2 Enhanced")
-if Window then
-else
-    warn("⚠️ [Auto Fish] UI creation failed")
-end
+-- Apply delays from loader
+chargeFishingDelay = CHARGE_ROD_DELAY or 0.1
+autoFishMainDelay = AUTO_FISH_DELAY or 0.9
+autoSellDelay = AUTO_SELL_DELAY or 34
+autoCatchDelay = AUTO_CATCH_DELAY or 0.2
+weatherIdDelay = WEATHER_ID_DELAY or 10
+weatherCycleDelay = WEATHER_CYCLE_DELAY or 30
 
---TAB: Auto
-local TabAuto      = Window:NewTab("Auto Features")
-local SecMain      = TabAuto:NewSection("Main Features")
-local SecOther     = TabAuto:NewSection("Other Features")
-local SecDelays    = TabAuto:NewSection("Delay Settings")
+print("⏱️  [Delays] Fish:", autoFishMainDelay, "| Sell:", autoSellDelay, "| Catch:", autoCatchDelay)
 
-autoFarmToggle = SecMain:NewToggle("Auto Farm", "Auto equip rod + fishing (kombinasi)", function(state)
-    setAutoFarm(state)
-end)
+-- Auto-start function
+local function autoStartPreset()
+    task.wait(3)  -- Wait for everything to load
 
-autoSellToggle = SecMain:NewToggle("Auto Sell", "Auto jual hasil", function(state)
-    setSell(state)
-end)
+    print("⚙️  [Auto Start] Activating preset:", SELECTED_PRESET)
 
-autoCatchToggle = SecMain:NewToggle("Auto Catch", "Auto catch fish", function(state)
-    setAutoCatch(state)
-end)
-
-autoPreset1Toggle = SecMain:NewToggle("Auto 1 (Auto Crater)", "Enable core auto features with 0.5s stagger then teleport to Crater Island", function(state)
-    if state then
+    if SELECTED_PRESET == "auto1" then
         enablePreset("auto1", "Crater Island")
-    else
-        disablePreset("auto1")
+    elseif SELECTED_PRESET == "auto2" then
+        enablePreset("auto2", "Sisyphus Statue") 
+    elseif SELECTED_PRESET == "auto3" then
+        enablePreset("auto3", "Kohana")
     end
-end)
 
-autoPreset2Toggle = SecMain:NewToggle("Auto 2 (Auto Sisyphus)", "Enable core auto features with 0.5s stagger then teleport to Sisyphus State", function(state)
-    if state then
-        enablePreset("auto2", "Sisyphus State")
-    else
-        disablePreset("auto2")
-    end
-end)
-
-autoPreset3Toggle = SecMain:NewToggle("Auto 3 (Auto Kohana)", "Enable core auto features with 5s delay then teleport to Kohana Volcano", function(state)
-    if state then
-        enablePreset("auto3", "Kohana Volcano")
-    else
-        disablePreset("auto3")
-    end
-end)
-
-
-
-autoWeatherToggle = SecOther:NewToggle("Auto Weather", "Auto weather events", function(state)
-    setAutoWeather(state)
-end)
-
-chargeFishingSlider = SecDelays:NewSlider("Charge Rod Delay", "Delay setelah charge fishing rod (detik, min: 0.01)", 10, 0.1, function(value)
-    setChargeFishingDelay(value)
-end)
-
-autoFishMainSlider = SecDelays:NewSlider("Auto Fish Delay", "Delay loop utama auto fish (detik, min: 0.1)", 20, 0.1, function(value)
-    setAutoFishMainDelay(value)
-end)
-
-autoSellSlider = SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik, min: 1)", 180, 1, function(value)
-    setAutoSellDelay(value)
-end)
-
-autoCatchSlider = SecDelays:NewSlider("Auto Catch Delay", "Delay auto catch (detik, min: 0.1)", 10, 0.1, function(value)
-    setAutoCatchDelay(value)
-end)
-
-weatherIdSlider = SecDelays:NewSlider("Weather ID Delay", "Delay antar weather ID (detik, min: 1)", 60, 1, function(value)
-    setWeatherIdDelay(value)
-end)
-
-weatherCycleSlider = SecDelays:NewSlider("Weather Cycle Delay", "Delay siklus weather (detik, min: 10)", 600, 30, function(value)
-    setWeatherCycleDelay(value)
-end)
-
-task.defer(function()
-    task.wait(1)
-    if chargeFishingSlider then
-        chargeFishingSlider:Set(config.chargeFishingDelay or chargeFishingDelay)
-    end
-    if autoFishMainSlider then
-        autoFishMainSlider:Set(config.autoFishMainDelay or autoFishMainDelay)
-    end
-    if autoSellSlider then
-        autoSellSlider:Set(config.autoSellDelay or autoSellDelay)
-    end
-    if autoCatchSlider then
-        autoCatchSlider:Set(config.autoCatchDelay or autoCatchDelay)
-    end
-    if weatherIdSlider then
-        weatherIdSlider:Set(config.weatherIdDelay or weatherIdDelay)
-    end
-    if weatherCycleSlider then
-        weatherCycleSlider:Set(config.weatherCycleDelay or weatherCycleDelay)
-    end
-end)
-
-local TabTeleport = Window:NewTab("Teleport")
-local SecTP = TabTeleport:NewSection("All Locations")
-
--- Function to safely teleport
-local function teleportTo(locationName, cframe)
-    pcall(function()
-        local character = game.Players.LocalPlayer.Character
-        if character and character:FindFirstChild("HumanoidRootPart") then
-            character.HumanoidRootPart.CFrame = cframe
-        else
-            warn("[Teleport] ❌ Character or HumanoidRootPart not found!")
-        end
-    end)
+    print("✅ [Auto Fish] Fully active! Script running without UI.")
+    print("📊 [Monitor] Check console for status updates every 60s")
 end
 
--- Create individual teleport buttons for better UX
-SecTP:NewButton("🏠 Spawn", "Return to spawn area", function()
-    teleportTo("Spawn", CFrame.new(45.2788086, 252.562927, 2987.10913, 1, 0, 0, 0, 1, 0, 0, 0, 1))
-end)
+-- Run auto-start
+task.spawn(autoStartPreset)
 
--- Popular fishing locations section
-local SecPopular = TabTeleport:NewSection("Popular Fishing Spots")
-
-SecPopular:NewButton("🌋 Kohana Volcano", "Active volcano area with rare fish", function()
-    teleportTo("Kohana Volcano", CFrame.new(-572.879456, 22.4521465, 148.355331, -0.995764792, -6.67705606e-08, 0.0919371247, -5.74611505e-08, 1, 1.03905414e-07, -0.0919371247, 9.81825394e-08, -0.995764792))
-end)
-
-SecPopular:NewButton("🗿 Sisyphus Statue", "Deep sea location near the ancient statue", function()
-    teleportTo("Sisyphus Statue", CFrame.new(-3728.21606, -135.074417, -1012.12744, -0.977224171, 7.74980258e-09, -0.212209702, 1.566994e-08, 1, -3.5640408e-08, 0.212209702, -3.81539813e-08, -0.977224171))
-end)
-
-SecPopular:NewButton("🏝️ Crater Island", "Isolated crater island with unique catches", function()
-    teleportTo("Crater Island", CFrame.new(1016.49072, 20.0919304, 5069.27295, 0.838976264, 3.30379857e-09, -0.544168055, 2.63538391e-09, 1, 1.01344115e-08, 0.544168055, -9.93662219e-09, 0.838976264))
-end)
-
--- Deep sea locations section
-local SecDeep = TabTeleport:NewSection("Deep Sea Areas")
-
-SecDeep:NewButton("🌊 Esoteric Depths", "Deepest area with mysterious fish", function()
-    teleportTo("Esoteric Depths", CFrame.new(3248.37109, -1301.53027, 1403.82727, -0.920208454, 7.76270355e-08, 0.391428679, 4.56261056e-08, 1, -9.10549289e-08, -0.391428679, -6.5930152e-08, -0.920208454))
-end)
-
-SecDeep:NewButton("🪸 Coral Reefs", "Colorful reef system", function()
-    teleportTo("Coral Reefs", CFrame.new(-3114.78198, 1.32066584, 2237.52295, -0.304758579, 1.6556676e-08, -0.952429652, -8.50574935e-08, 1, 4.46003305e-08, 0.952429652, 9.46036067e-08, -0.304758579))
-end)
-
--- Special locations section
-local SecSpecial = TabTeleport:NewSection("Special Areas")
-
-SecSpecial:NewButton("🏝️ Lost Isle", "Mysterious lost island", function()
-    teleportTo("Lost Isle", CFrame.new(-3618.15698, 240.836655, -1317.45801, 1, 0, 0, 0, 1, 0, 0, 0, 1))
-end)
-
-SecSpecial:NewButton("🌴 Tropical Grove", "Lush tropical area", function()
-    teleportTo("Tropical Grove", CFrame.new(-2095.34106, 197.199997, 3718.08008))
-end)
-
-SecSpecial:NewButton("💎 Treasure Room", "Hidden treasure chamber", function()
-    teleportTo("Treasure Room", CFrame.new(-3606.34985, -266.57373, -1580.97339, 0.998743415, 1.12141152e-13, -0.0501160324, -1.56847693e-13, 1, -8.88127842e-13, 0.0501160324, 8.94872392e-13, 0.998743415))
-end)
-
--- Utility locations section
-local SecUtility = TabTeleport:NewSection("Utility Locations")
-
-SecUtility:NewButton("🌤️ Weather Machine", "Control weather patterns", function()
-    teleportTo("Weather Machine", CFrame.new(-1488.51196, 83.1732635, 1876.30298, 1, 0, 0, 0, 1, 0, 0, 0, 1))
-end)
-
-SecUtility:NewButton("🏘️ Kohana Village", "Main village area", function()
-    teleportTo("Kohana", CFrame.new(-663.904236, 3.04580712, 718.796875, -0.100799225, -2.14183729e-08, -0.994906783, -1.12300391e-08, 1, -2.03902459e-08, 0.994906783, 9.11752096e-09, -0.100799225))
-end)
-
--- Quick dropdown for legacy support
-local SecQuick = TabTeleport:NewSection("Quick Select (Legacy)")
-local tpNames = {}
-for _, loc in ipairs(teleportLocations) do
-    table.insert(tpNames, loc.Name)
-end
-
-SecQuick:NewDropdown("Location Selector", "Choose location from dropdown", tpNames, function(chosen)
-    for _, location in ipairs(teleportLocations) do
-        if location.Name == chosen then
-            teleportTo(chosen, location.CFrame)
-            break
-        end
-    end
-end)
-
-
-autoMegalodonToggle = SecOther:NewToggle("Auto Megalodon Hunt", "Auto teleport to Megalodon events", function(state)
-    setAutoMegalodon(state)
-end)
-
-upgradeRodToggle = SecOther:NewToggle("Auto Upgrade Rod", "Otomatis beli rod pancing selanjutnya", function(state)
-    setUpgradeRod(state)
-end)
-
-upgradeBaitToggle = SecOther:NewToggle("Auto Upgrade Bait", "Otomatis beli umpan selanjutnya", function(state)
-    setUpgradeBait(state)
-end)
-
-
-local function applyLoadedConfig()
-    if config.activePreset == "none" then
-        isApplyingConfig = true
-
-        if config.autoFarm and autoFarmToggle then
-            autoFarmToggle:UpdateToggle(nil, true)
-        end
-        if config.autoSell and autoSellToggle then
-            autoSellToggle:UpdateToggle(nil, true)
-        end
-        if config.autoCatch and autoCatchToggle then
-            autoCatchToggle:UpdateToggle(nil, true)
-        end
-        if config.autoWeather and autoWeatherToggle then
-            autoWeatherToggle:UpdateToggle(nil, true)
-        end
-        if config.autoMegalodon and autoMegalodonToggle then
-            autoMegalodonToggle:UpdateToggle(nil, true)
-        end
-        if config.gpuSaver then
-            enableGPUSaver()
-        end
-        if config.gpuSaver and gpuSaverToggle then
-            gpuSaverToggle:UpdateToggle(nil, true)
-        end
-
-        isApplyingConfig = false
-        syncConfigFromStates()
-        saveConfig()
-    end
-
-    if config.activePreset == "auto1" and autoPreset1Toggle then
-        autoPreset1Toggle:UpdateToggle(nil, true)
-    elseif config.activePreset == "auto2" and autoPreset2Toggle then
-        autoPreset2Toggle:UpdateToggle(nil, true)
-    elseif config.activePreset == "auto3" and autoPreset3Toggle then
-        autoPreset3Toggle:UpdateToggle(nil, true)
-    end
-end
-
-task.defer(applyLoadedConfig)
-
-
--- ====== PERFORMANCE TAB ====== 
-local TabPerformance = Window:NewTab("Performance")
-local SecGPU = TabPerformance:NewSection("GPU Saver Mode")
-
-gpuSaverToggle = SecGPU:NewToggle("GPU Saver Mode", "Enable white screen to save GPU/battery", function(state)
-    if state then
-        enableGPUSaver()
-    else
-        disableGPUSaver()
-    end
-    updateConfigField("gpuSaver", state)
-end)
-
-SecGPU:NewKeybind("GPU Saver Hotkey", "Quick toggle GPU saver", Enum.KeyCode.RightControl, function()
-    if gpuSaverEnabled then
-        disableGPUSaver()
-    else
-        enableGPUSaver()
-    end
-end)
-
-SecGPU:NewButton("Force Remove White Screen", "Emergency remove if stuck", function()
-    removeWhiteScreen()
-    gpuSaverEnabled = false
-end)
-
-
-
--- The "Advanced Modules" tab and its contents have been removed as per instructions.
-
--- ====== SHOP & UI CONTROLS ======
-local TabShop = Window:NewTab("Shop")
-local SecShop = TabShop:NewSection("Purchase Items")
-
--- Rod shop buttons
-SecShop:NewButton("Luck Rod - $350", "Purchase Luck Rod", function()
-    buyRod(rodDatabase.luck)
-end)
-
-SecShop:NewButton("Grass Rod - $1.5k", "Purchase Grass Rod", function()
-    buyRod(rodDatabase.grass)
-end)
-
-SecShop:NewButton("Carbon Rod - $3k", "Purchase Carbon Rod", function()
-    buyRod(rodDatabase.carbon)
-end)
-
-SecShop:NewButton("Demascus Rod - $3k", "Purchase Demascus Rod", function()
-    buyRod(rodDatabase.demascus)
-end)
-
-SecShop:NewButton("Ice Rod - $5k", "Purchase Ice Rod", function()
-    buyRod(rodDatabase.ice)
-end)
-
-SecShop:NewButton("Lucky Rod - $15k", "Purchase Lucky Rod", function()
-    buyRod(rodDatabase.lucky)
-end)
-
-SecShop:NewButton("Midnight Rod - $50k", "Purchase Midnight Rod", function()
-    buyRod(rodDatabase.midnight)
-end)
-
-SecShop:NewButton("Steampunk Rod - $215k", "Purchase Steampunk Rod", function()
-    buyRod(rodDatabase.steampunk)
-end)
-
-SecShop:NewButton("Chrome Rod - $437k", "Purchase Chrome Rod", function()
-    buyRod(rodDatabase.chrome)
-end)
-
-SecShop:NewButton("Astral Rod - $1M", "Purchase Astral Rod", function()
-    buyRod(rodDatabase.astral)
-end)
-
-SecShop:NewButton("Ares Rod - $2.5M", "Purchase Ares Rod (NEW!)", function()
-    buyRod(rodDatabase.ares)
-end)
-
--- Bait shop section
-local SecBait = TabShop:NewSection("Purchase Bait")
-
-SecBait:NewButton("TopWater Bait - $100", "Purchase TopWater Bait", function()
-    buyBait(baitDatabase.topwaterbait)
-end)
-
-SecBait:NewButton("Luck Bait - $1k", "Purchase Luck Bait", function()
-    buyBait(baitDatabase.luckbait)
-end)
-
-SecBait:NewButton("Midnight Bait - $3k", "Purchase Midnight Bait", function()
-    buyBait(baitDatabase.midnightbait)
-end)
-
-SecBait:NewButton("Deep Bait - $83.5k", "Purchase Deep Bait", function()
-    buyBait(baitDatabase.deepbait)
-end)
-
-SecBait:NewButton("Chroma Bait - $290k", "Purchase Chroma Bait", function()
-    buyBait(baitDatabase.chromabait)
-end)
-
-SecBait:NewButton("Dark Matter Bait - $630k", "Purchase Dark Matter Bait", function()
-    buyBait(baitDatabase.darkmatterbait)
-end)
-
-SecBait:NewButton("Corrupt Bait - $1.15M", "Purchase Corrupt Bait", function()
-    buyBait(baitDatabase.corruptbait)
-end)
-
-SecBait:NewButton("Aether Bait - $1M", "Purchase Aether Bait", function()
-    buyBait(baitDatabase.aetherbait)
-end)
-
--- UI Controls section in Shop tab
-local SecUI = TabShop:NewSection("Interface Controls")
-
-
--- ====== ENCHANT TAB ======
-local TabEnchant = Window:NewTab("Enchant")
-local SecEnchant = TabEnchant:NewSection("Enchant Items")
-
--- Placeholder enchant functions (you can implement the actual logic later)
-local function enchantRod(enchantType)
-    -- Add your enchant logic here
-    -- Example: call game RemoteFunction/RemoteEvent for enchanting
-end
-
-local function enchantBait(enchantType)
-    -- Add your enchant logic here
-end
-
--- Rod Enchant Section
-local SecRodEnchant = TabEnchant:NewSection("Rod Enchants")
-
-SecRodEnchant:NewButton("⚡ Speed Enchant", "Increase fishing speed", function()
-    enchantRod("Speed")
-end)
-
-SecRodEnchant:NewButton("💎 Luck Enchant", "Increase rare fish chance", function()
-    enchantRod("Luck")
-end)
-
-SecRodEnchant:NewButton("🌊 Deep Sea Enchant", "Better deep sea fishing", function()
-    enchantRod("DeepSea")
-end)
-
-SecRodEnchant:NewButton("⭐ Quality Enchant", "Increase fish quality", function()
-    enchantRod("Quality")
-end)
-
-SecRodEnchant:NewButton("💰 Value Enchant", "Increase fish value", function()
-    enchantRod("Value")
-end)
-
--- Bait Enchant Section
-local SecBaitEnchant = TabEnchant:NewSection("Bait Enchants")
-
-SecBaitEnchant:NewButton("🔥 Fire Enchant", "Attract fire-type fish", function()
-    enchantBait("Fire")
-end)
-
-SecBaitEnchant:NewButton("❄️ Ice Enchant", "Attract ice-type fish", function()
-    enchantBait("Ice")
-end)
-
-SecBaitEnchant:NewButton("⚡ Electric Enchant", "Attract electric-type fish", function()
-    enchantBait("Electric")
-end)
-
-SecBaitEnchant:NewButton("🌙 Lunar Enchant", "Attract night fish", function()
-    enchantBait("Lunar")
-end)
-
-SecBaitEnchant:NewButton("☀️ Solar Enchant", "Attract day fish", function()
-    enchantBait("Solar")
-end)
-
--- Advanced Enchant Section
-local SecAdvancedEnchant = TabEnchant:NewSection("Advanced Enchants")
-
-SecAdvancedEnchant:NewButton("💫 Cosmic Enchant", "Legendary enchant for cosmic fish", function()
-    enchantRod("Cosmic")
-end)
-
-SecAdvancedEnchant:NewButton("🌌 Void Enchant", "Mythical enchant for void fish", function()
-    enchantRod("Void")
-end)
-
-SecAdvancedEnchant:NewButton("🔮 Mystic Enchant", "Mystical enchant for rare catches", function()
-    enchantBait("Mystic")
-end)
-
--- Enchant Settings Section
-local SecEnchantSettings = TabEnchant:NewSection("Enchant Settings")
-
-SecEnchantSettings:NewToggle("Auto Enchant Rod", "Automatically enchant rod after purchase", function(state)
-    -- Add auto enchant logic here
-end)
-
-SecEnchantSettings:NewToggle("Auto Enchant Bait", "Automatically enchant bait after purchase", function(state)
-    -- Add auto enchant logic here
-end)
-
-SecEnchantSettings:NewDropdown("Default Rod Enchant", "Select default enchant for rods",
-    {"Speed", "Luck", "DeepSea", "Quality", "Value", "Cosmic", "Void"},
-    function(selected)
-    end
-)
-
-SecEnchantSettings:NewDropdown("Default Bait Enchant", "Select default enchant for bait",
-    {"Fire", "Ice", "Electric", "Lunar", "Solar", "Mystic"},
-    function(selected)
-    end
-)
-
-
--- ====== MINIMIZE SYSTEM ======
-if not Library.__headless then 
-local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
-
-local MiniGui = Instance.new("ScreenGui")
-MiniGui.Name = "AF_Minibar"
-MiniGui.ResetOnSpawn = false
-MiniGui.IgnoreGuiInset = true
-MiniGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-MiniGui.Parent = CoreGui
-
-local MiniBtn = Instance.new("TextButton")
-MiniBtn.Name = "RestoreButton"
-MiniBtn.Size = UDim2.new(0, 200, 0, 40)
-MiniBtn.Position = UDim2.new(0, 20, 0, 80)
-MiniBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-MiniBtn.BorderSizePixel = 0
-MiniBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-MiniBtn.TextSize = 14
-MiniBtn.Font = Enum.Font.GothamSemibold
-MiniBtn.Text = "🚜 Auto Fish v4.5 (Show)"
-MiniBtn.AutoButtonColor = true
-MiniBtn.Visible = false
-MiniBtn.Parent = MiniGui
-
--- Add status indicator
-local statusFrame = Instance.new("Frame")
-statusFrame.Size = UDim2.new(1, 0, 0, 3)
-statusFrame.Position = UDim2.new(0, 0, 1, -3)
-statusFrame.BorderSizePixel = 0
-statusFrame.Parent = MiniBtn
-
-local statusGradient = Instance.new("UIGradient")
-statusGradient.Color = ColorSequence.new{ 
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 0)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
-}
-statusGradient.Parent = statusFrame
-
--- Update status bar color based on active features
+-- Status reporter every 60 seconds
 task.spawn(function()
     while true do
-        if MiniBtn.Visible then
-            local activeCount = 0
-            if isAutoFarmOn then activeCount = activeCount + 1 end
-            if isAutoSellOn then activeCount = activeCount + 1 end
-            if isAutoCatchOn then activeCount = activeCount + 1 end
-            
-            local intensity = math.min(activeCount / 3, 1)
-            statusGradient.Offset = Vector2.new(-intensity, 0)
-            
-            -- Update button text with status
-            local statusText = ""
-            if isAutoFarmOn then statusText = statusText .. "🚜" end
-            if isAutoSellOn then statusText = statusText .. "💰" end
-            if isAutoCatchOn then statusText = statusText .. "🎯" end
-            
-            MiniBtn.Text = "Auto Fish v4.5 " .. statusText .. " (Show)"
+        task.wait(60)
+        if startTime then
+            local uptime = os.time() - startTime
+            local hours = math.floor(uptime / 3600)
+            local minutes = math.floor((uptime % 3600) / 60)
+            local seconds = uptime % 60
+            local fish = (sessionStats and sessionStats.totalFish) or 0
+            print(string.format("📊 [Status] Uptime: %02d:%02d:%02d | Fish: %d | Farm: %s | Sell: %s | Catch: %s",
+                hours, minutes, seconds,
+                fish,
+                isAutoFarmOn and "ON" or "OFF",
+                isAutoSellOn and "ON" or "OFF",
+                isAutoCatchOn and "ON" or "OFF"
+            ))
         end
-        task.wait(1)
     end
 end)
 
--- Drag functionality
-do
-    local dragging = false
-    local dragStart, startPos
-    MiniBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = MiniBtn.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
-            end)
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            MiniBtn.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-end
-
-local isMinimized = false
-local function minimizeUI()
-    if not isMinimized then
-        isMinimized = true
-        if MiniBtn then MiniBtn.Visible = true end
-        Library:ToggleUI()
-    end
-end
-
-local function restoreUI()
-    if isMinimized then
-        isMinimized = false
-        if MiniBtn then MiniBtn.Visible = false end
-        Library:ToggleUI()
-    end
-end
-
-MiniBtn.MouseButton1Click:Connect(restoreUI)
-
-SecUI:NewKeybind("Minimize/Restore (RightShift)", "Toggle UI cepat", Enum.KeyCode.RightShift, function()
-    if isMinimized then restoreUI() else minimizeUI() end
-end)
-
-SecUI:NewButton("Minimize UI", "Hide the interface", function()
-    minimizeUI()
-end)
-
--- Custom minimize button
-task.spawn(function()
-    task.wait(2) -- Wait longer for UI to fully load
-    
-    local possibleNames = {"Kavo UI", "KavoLibrary", "UI", "MainUI"}
-    local kavoGui = nil
-    
-    for _, name in pairs(possibleNames) do
-        kavoGui = CoreGui:FindFirstChild(name)
-        if kavoGui then break end
-    end
-    
-    if not kavoGui then
-        for _, gui in pairs(CoreGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name ~= "AF_Minibar" and gui.Name ~= "GPUSaverScreen" then
-                local frame = gui:FindFirstChildOfClass("Frame")
-                if frame and frame:FindFirstChild("Main") then
-                    kavoGui = gui
-                    break
-                end
-            end
-        end
-    end
-    
-    if not kavoGui then
-        warn("❌ Kavo GUI tidak ditemukan untuk minimize button")
-        return
-    end
-    
-    local mainFrame = kavoGui:FindFirstChild("Main") or kavoGui:FindFirstChildOfClass("Frame")
-    if not mainFrame then return end
-    
-    local titleBar = nil
-    for _, child in pairs(mainFrame:GetChildren()) do
-        if child:IsA("Frame") and (child.Name:lower():find("top") or child.Name:lower():find("title") or child.Size.Y.Offset < 40) then
-            titleBar = child
-            break
-        end
-    end
-    
-    if not titleBar then
-        local topMost = nil
-        local smallestY = math.huge
-        
-        for _, child in pairs(mainFrame:GetChildren()) do
-            if child:IsA("Frame") and child.Position.Y.Offset < smallestY then
-                smallestY = child.Position.Y.Offset
-                topMost = child
-            end
-        end
-        titleBar = topMost
-    end
-    
-    if not titleBar then
-        warn("❌ Title bar tidak ditemukan")
-        return
-    end
-    
-    local closeBtn = nil
-    for _, child in pairs(titleBar:GetDescendants()) do
-        if child:IsA("TextButton") and (child.Text == "X" or child.Text == "✕" or child.Text:find("close")) then
-            closeBtn = child
-            break
-        end
-    end
-    
-    local minimizeBtn = Instance.new("TextButton")
-    minimizeBtn.Name = "CustomMinimizeButton"
-    minimizeBtn.Size = UDim2.new(0, 20, 0, 20)
-    
-    if closeBtn then
-        minimizeBtn.Position = UDim2.new(0, closeBtn.Position.X.Offset - 25, 0, closeBtn.Position.Y.Offset)
-    else
-        minimizeBtn.Position = UDim2.new(1, -45, 0, 5)
-    end
-    
-    minimizeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    minimizeBtn.BorderSizePixel = 0
-    minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    minimizeBtn.TextSize = 12
-    minimizeBtn.Font = Enum.Font.GothamBold
-    minimizeBtn.Text = "−"
-    minimizeBtn.TextYAlignment = Enum.TextYAlignment.Center
-    minimizeBtn.ZIndex = 10
-    minimizeBtn.Parent = titleBar
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 2)
-    corner.Parent = minimizeBtn
-    
-    minimizeBtn.MouseEnter:Connect(function()
-        minimizeBtn.BackgroundColor3 = Color3.fromRGB(65, 65, 65)
-    end)
-    
-    minimizeBtn.MouseLeave:Connect(function()
-        minimizeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    end)
-    
-    minimizeBtn.MouseButton1Click:Connect(function()
-        minimizeUI()
-    end)
-    
-end)
-
-end
-
--- ====== AUTO LOOPS WITH ENHANCED LOGIC ======
-
--- Enhanced Auto Farm Loop (combines equip + fishing) with asset error protection
-task.spawn(function()
-    while true do
-        if isAutoFarmOn then
-            local success, err = pcall(function()
-                -- Check if rod is equipped by looking for tool in character
-                local character = player.Character
-                if character then
-                    local tool = character:FindFirstChildOfClass("Tool")
-                    if not tool then
-                        equipRod()
-                        task.wait(1) -- Wait for rod to equip
-                    end
-                end
-
-                -- Perform fishing sequence
-                chargeFishingRod()
-                task.wait(autoFishMainDelay)
-
-                if fishingEvent then
-                    fishingEvent:FireServer()
-                end
-            end)
-
-            if not success then
-                -- Check if it's an asset loading error
-                if string.find(tostring(err):lower(), "asset is not approved") or
-                   string.find(tostring(err):lower(), "failed to load sound") or
-                   string.find(tostring(err):lower(), "rbxassetid") then
-                    -- Silently continue, don't spam console
-                else
-                    warn("[Auto Farm] Loop error: " .. tostring(err))
-                end
-            end
-        end
-        task.wait(0.1)
-    end
-end)
-
--- Auto Sell Loop
-task.spawn(function()
-    while true do
-        if isAutoSellOn then
-            pcall(function()
-                if sellEvent then 
-                    sellEvent:InvokeServer() 
-                end
-            end)
-        end
-        task.wait(autoSellDelay)
-    end
-end)
-
-
-task.spawn(function()
-    while true do
-        task.wait(1) -- biar nggak error
-    end
-end)
-
-
--- Auto Weather Loop
-task.spawn(function()
-    while true do
-        if isAutoWeatherOn then
-            for _, id in ipairs(WeatherIDs) do
-                if not isAutoWeatherOn then break end
-                pcall(function()
-                    if WeatherEvent then
-                        WeatherEvent:InvokeServer(id)
-                    end
-                end)
-                local waited = 0
-                while isAutoWeatherOn and waited < weatherIdDelay do
-                    task.wait(0.1)
-                    waited = waited + 0.1
-                end
-            end
-            
-            local waitedCycle = 0
-            while isAutoWeatherOn and waitedCycle < weatherCycleDelay do
-                task.wait(0.1)
-                waitedCycle = waitedCycle + 0.1
-            end
-        end
-        task.wait(0.1)
-    end
-end)
-
--- Auto Catch Loop
-task.spawn(function()
-    while true do
-        if isAutoCatchOn then
-            performAutoCatch()
-        end
-        task.wait(autoCatchDelay)
-    end
-end)
-
--- Auto Megalodon Hunt Loop with enhanced error protection
-task.spawn(function()
-    while true do
-        if isAutoMegalodonOn then
-            local success, err = pcall(function()
-                autoDetectMegalodon()
-            end)
-
-            if not success then
-                -- Check if it's an asset loading error
-                if string.find(tostring(err):lower(), "asset is not approved") or
-                   string.find(tostring(err):lower(), "failed to load sound") then
-                    -- Silently continue, don't spam console
-                else
-                    warn("[Megalodon] Loop error: " .. tostring(err))
-                end
-            end
-        end
-        task.wait(12) -- Check every 12 seconds
-    end
-end)
-
-
--- The "Disconnect Notifier" section has been removed due to compatibility issues.
-
--- ============ SCRIPT INITIALIZATION ============
-
--- Initialize shop system
-shopAutoPurchaseOnStartup()
-
--- ====== AUTO UPGRADE LOOPS (From Fish v3) ======
-task.spawn(function()
-    while true do
-        if upgradeState.rod then
-            pcall(function()
-                local currentCurrency = getCurrentCoins()
-                local affordableRodId, rodPrice = getAffordableRod(currentCurrency)
-                if not affordableRodId then return end
-                
-                local wasAutoFarm = isAutoFarmOn
-                if wasAutoFarm then setAutoFarm(false) task.wait(1) end
-                
-                local success, guid = pcall(networkEvents.purchaseRodEvent.InvokeServer, networkEvents.purchaseRodEvent, affordableRodId)
-                
-                if success and guid and type(guid) == 'string' and #guid > 0 then
-                    pcall(networkEvents.equipItemEvent.FireServer, networkEvents.equipItemEvent, guid, "Fishing Rods")
-                    task.wait(1)
-                    failedRodAttempts[affordableRodId] = nil
-                    rodFailedCounts[affordableRodId] = 0
-                    currentRodTarget = findNextRodTarget()
-                else
-                    print("[AutoUpgrade] Rod " .. affordableRodId .. " purchase failed, marking as owned/failed.")
-                    rodFailedCounts[affordableRodId] = (rodFailedCounts[affordableRodId] or 0) + 1
-                    failedRodAttempts[affordableRodId] = tick()
-                    if (rodFailedCounts[affordableRodId] or 0) >= 3 then
-                        currentRodTarget = findNextRodTarget()
-                    end
-                end
-                
-                if wasAutoFarm then setAutoFarm(true) end
-            end)
-        end
-        task.wait(15) -- Check every 15 seconds
-    end
-end)
-
-task.spawn(function()
-    while true do
-        if upgradeState.bait then
-            pcall(function()
-                local currentCurrency = getCurrentCoins()
-                local affordableBaitId, baitPrice = getAffordableBait(currentCurrency)
-                if not affordableBaitId then return end
-
-                local wasAutoFarm = isAutoFarmOn
-                if wasAutoFarm then setAutoFarm(false) task.wait(1) end
-
-                local success, result = pcall(networkEvents.purchaseBaitEvent.InvokeServer, networkEvents.purchaseBaitEvent, affordableBaitId)
-
-                if success and result then
-                    pcall(networkEvents.equipBaitEvent.FireServer, networkEvents.equipBaitEvent, affordableBaitId)
-                    task.wait(1)
-                    failedBaitAttempts[affordableBaitId] = nil
-                    baitFailedCounts[affordableBaitId] = 0
-                    currentBaitTarget = findNextBaitTarget()
-                else
-                    print("[AutoUpgrade] Bait " .. affordableBaitId .. " purchase failed, marking as owned/failed.")
-                    baitFailedCounts[affordableBaitId] = (baitFailedCounts[affordableBaitId] or 0) + 1
-                    failedBaitAttempts[affordableBaitId] = tick()
-                    if (baitFailedCounts[affordableBaitId] or 0) >= 3 then
-                        currentBaitTarget = findNextBaitTarget()
-                    end
-                end
-
-                if wasAutoFarm then setAutoFarm(true) end
-            end)
-        end
-        task.wait(15) -- Check every 15 seconds
-    end
-end)
-
--- ====== SCRIPT COMPLETION & HEALTH CHECK ======
--- Validate all critical systems are ready
-local function performHealthCheck()
-    local healthStatus = {}
-
-    -- Check critical variables
-    healthStatus.autoFarmToggle = autoFarmToggle ~= nil
-    healthStatus.networkEvents = networkEvents ~= nil
-    healthStatus.discordMonitor = setupDisconnectNotifier ~= nil
-    healthStatus.uiSystem = Library ~= nil
-    healthStatus.webhookSystem = CONNECTION_WEBHOOK_URL ~= nil
-
-    -- Check LocalPlayer
-    healthStatus.localPlayer = (game:GetService("Players").LocalPlayer ~= nil)
-
-    return healthStatus
-end
-
-local health = performHealthCheck()
-local allSystemsReady = true
-
-for system, status in pairs(health) do
-    if not status then
-        allSystemsReady = false
-    end
-end
-
-if allSystemsReady then
-
-    -- Show Discord monitor status
-    if DISCORD_USER_ID and DISCORD_USER_ID ~= "YOUR_DISCORD_USER_ID_HERE" then
-    else
-        print("⚠️ Discord notifications disabled (no User ID configured)")
-    end
-
-else
-    warn("⚠️ [Auto Fish] Some systems failed health check. Script may not function properly.")
-    warn("⚠️ Check the error messages above and ensure all dependencies are available.")
-end
+print("🚀 [Auto Fish] Initialization complete!")
