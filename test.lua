@@ -536,12 +536,9 @@ local isAutoCatchOn = false
 local isAutoWeatherOn = false
 local gpuSaverEnabled = false
 local isAutoMegalodonOn = false
-local megalodonSavedPosition = nil -- Will store full CFrame (position + orientation)
-local megalodonLockedCFrame = nil -- Store the locked position during event
+local megalodonSavedPosition = nil
+local megalodonLockedCFrame = nil
 local hasTeleportedToMegalodon = false
-local currentBodyPosition = nil
-local currentBodyGyro = nil
-local currentBodyVelocity = nil
 
 local isAutoPreset1On = false
 local isAutoPreset2On = false
@@ -1887,214 +1884,82 @@ local function unequipRod()
 end
 
 
--- ====== MEGALODON HUNT FUNCTIONS ======
-local megalodonLockLoop = nil -- Store the lock loop connection
+-- ====== MEGALODON HUNT FUNCTIONS (OPTIMIZED) ======
+local megalodonLockLoop = nil
 
-local function teleportToMegalodon(position, isEventTeleport)
-    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") then
-        local humanoid = player.Character.Humanoid
-        local rootPart = player.Character.HumanoidRootPart
+function teleportToMegalodon(pos, isEvent)
+    local char = player.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not root or not hum then return end
 
-        -- Save FULL CFrame (position + orientation) before teleport to event
-        if isEventTeleport and not hasTeleportedToMegalodon then
-            megalodonSavedPosition = rootPart.CFrame -- Save full CFrame, not just position
-            hasTeleportedToMegalodon = true
-            print("[Megalodon] Saved player CFrame before event teleport")
-        end
+    -- Save position before event
+    if isEvent and not hasTeleportedToMegalodon then
+        megalodonSavedPosition = root.CFrame
+        hasTeleportedToMegalodon = true
+        print("[Megalodon] Position saved")
+    end
 
-        -- Remove old lock before teleport if exists
-        if currentBodyPosition then
-            pcall(function() currentBodyPosition:Destroy() end)
-            currentBodyPosition = nil
-        end
+    -- Stop old lock
+    if megalodonLockLoop then
+        megalodonLockLoop:Disconnect()
+        megalodonLockLoop = nil
+    end
 
-        -- Remove old BodyVelocity if exists
-        if currentBodyVelocity then
-            pcall(function() currentBodyVelocity:Destroy() end)
-            currentBodyVelocity = nil
-        end
+    -- Calculate teleport position
+    local tPos = pos
+    if type(pos) == "userdata" and pos.X then
+        tPos = pos + Vector3.new(0, 5, 0)
+    elseif type(pos) == "userdata" and pos.Position then
+        tPos = pos.Position + Vector3.new(0, 5, 0)
+    end
 
-        -- Remove old BodyGyro if exists
-        if currentBodyGyro then
-            pcall(function() currentBodyGyro:Destroy() end)
-            currentBodyGyro = nil
-        end
+    if isEvent then
+        -- Store locked position
+        megalodonLockedCFrame = CFrame.new(tPos)
+        root.CFrame = megalodonLockedCFrame
+        root.Anchored = true
 
-        -- Disconnect old lock loop if exists
-        if megalodonLockLoop then
-            megalodonLockLoop:Disconnect()
-            megalodonLockLoop = nil
-        end
+        print("[Megalodon] 🔒 Position LOCKED (Anchored)")
 
-        -- Calculate initial teleport position (closer to water for better fishing)
-        local teleportPos
-        if type(position) == "userdata" and position.X then
-            -- If position is a Vector3 - use optimal height for fishing
-            teleportPos = position + Vector3.new(0, 5, 0) -- Reduced to 5 studs for better fishing range
-        elseif type(position) == "userdata" and position.Position then
-            -- If position is already a CFrame
-            teleportPos = position.Position + Vector3.new(0, 5, 0)
-        else
-            -- Fallback
-            teleportPos = position + Vector3.new(0, 5, 0)
-        end
-
-        -- Enable floating/lock position for event teleports
-        if isEventTeleport then
-            -- Store the locked CFrame globally
-            megalodonLockedCFrame = CFrame.new(teleportPos)
-
-            -- Set initial position
-            rootPart.CFrame = megalodonLockedCFrame
-            print("[Megalodon] Teleported to position (Y: " .. math.floor(teleportPos.Y) .. ")")
-
-            -- METHOD 1: Anchor the HumanoidRootPart (Strongest lock)
-            rootPart.Anchored = true
-            print("[Megalodon] 🔒 RootPart ANCHORED - Ultimate lock active")
-
-            -- METHOD 2: Disable all character states that could move player
-            pcall(function()
-                humanoid.PlatformStand = true
-                humanoid.AutoRotate = false
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Flying, false)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, false)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, false)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-            end)
-
-            -- METHOD 3: Backup lock with RenderStepped (in case anchored gets disabled somehow)
-            megalodonLockLoop = RunService.RenderStepped:Connect(function()
-                if rootPart and rootPart.Parent and humanoid and humanoid.Parent then
-                    -- CRITICAL: Re-anchor if somehow unanchored
-                    if not rootPart.Anchored then
-                        rootPart.Anchored = true
-                        print("[Megalodon] ⚠️ Anchored was disabled! Re-anchoring...")
-                    end
-
-                    -- Force position back to locked CFrame as backup
-                    if (rootPart.Position - megalodonLockedCFrame.Position).Magnitude > 0.5 then
-                        rootPart.CFrame = megalodonLockedCFrame
-                        print("[Megalodon] ⚠️ Position drift detected! Correcting...")
-                    end
-
-                    -- Zero out any velocities (should not happen when anchored, but just in case)
-                    rootPart.Velocity = Vector3.new(0, 0, 0)
-                    rootPart.RotVelocity = Vector3.new(0, 0, 0)
-                    rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                    rootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                else
-                    -- Character destroyed, stop loop
-                    if megalodonLockLoop then
-                        megalodonLockLoop:Disconnect()
-                        megalodonLockLoop = nil
-                    end
+        -- Simple backup loop
+        megalodonLockLoop = RunService.Heartbeat:Connect(function()
+            if root and root.Parent then
+                if not root.Anchored then root.Anchored = true end
+                if (root.Position - megalodonLockedCFrame.Position).Magnitude > 1 then
+                    root.CFrame = megalodonLockedCFrame
                 end
-            end)
-
-            task.wait(0.2)
-
-            print("[Megalodon] ✅ Position LOCKED at height: " .. math.floor(teleportPos.Y))
-            print("[Megalodon] ✅ METHOD: Anchored RootPart + State Disable + RenderStepped backup")
-            print("[Megalodon] ✅ Player is now FULLY LOCKED and can fish safely")
-            print("[Megalodon] ✅ No forces can move the player now!")
-        end
+            else
+                if megalodonLockLoop then megalodonLockLoop:Disconnect() megalodonLockLoop = nil end
+            end
+        end)
     end
 end
 
-local function disableMegalodonLock()
+function disableMegalodonLock()
     pcall(function()
-        print("[Megalodon] 🔓 Disabling all locks...")
-
-        -- Disconnect RenderStepped lock loop (DO THIS FIRST)
         if megalodonLockLoop then
             megalodonLockLoop:Disconnect()
             megalodonLockLoop = nil
-            print("[Megalodon] ✅ RenderStepped lock loop disconnected")
         end
 
-        -- Access character parts
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local rootPart = player.Character.HumanoidRootPart
-            local humanoid = player.Character:FindFirstChild("Humanoid")
-
-            -- CRITICAL: Unanchor the RootPart FIRST
-            if rootPart.Anchored then
-                rootPart.Anchored = false
-                print("[Megalodon] ✅ RootPart UNANCHORED")
-            end
-
-            -- Re-enable character states
-            if humanoid then
-                pcall(function()
-                    humanoid.PlatformStand = false
-                    humanoid.AutoRotate = true
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Flying, true)
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, true)
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-                end)
-                print("[Megalodon] ✅ All humanoid states restored")
-            end
-
-            -- Cleanup any leftover physics objects (from old method)
-            pcall(function()
-                if currentBodyPosition then
-                    currentBodyPosition:Destroy()
-                    currentBodyPosition = nil
+        local char = player.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                root.Anchored = false
+                if megalodonSavedPosition then
+                    task.wait(0.1)
+                    root.CFrame = megalodonSavedPosition
+                    megalodonSavedPosition = nil
                 end
-            end)
-
-            pcall(function()
-                if currentBodyVelocity then
-                    currentBodyVelocity:Destroy()
-                    currentBodyVelocity = nil
-                end
-            end)
-
-            pcall(function()
-                if currentBodyGyro then
-                    currentBodyGyro:Destroy()
-                    currentBodyGyro = nil
-                end
-            end)
-
-            -- Fallback cleanup
-            for _, obj in ipairs(rootPart:GetChildren()) do
-                if obj.Name:match("Megalodon") then
-                    obj:Destroy()
-                    print("[Megalodon] ✅ Removed leftover: " .. obj.Name)
-                end
-            end
-
-            -- Reset velocities
-            rootPart.Velocity = Vector3.new(0, 0, 0)
-            rootPart.RotVelocity = Vector3.new(0, 0, 0)
-            rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-            rootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-
-            -- Return to saved position if available
-            if megalodonSavedPosition then
-                task.wait(0.2)
-                rootPart.CFrame = megalodonSavedPosition
-                print("[Megalodon] ✅ Player returned to saved position")
-
-                hasTeleportedToMegalodon = false
-                megalodonSavedPosition = nil
             end
         end
 
-        -- Clear stored CFrame
+        hasTeleportedToMegalodon = false
         megalodonLockedCFrame = nil
-
-        print("[Megalodon] ✅ All locks removed - Player returned to normal state")
+        print("[Megalodon] 🔓 Lock removed")
     end)
 end
 
