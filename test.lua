@@ -538,6 +538,7 @@ local isAutoMegalodonOn = false
 local megalodonSavedPosition = nil -- Will store full CFrame (position + orientation)
 local hasTeleportedToMegalodon = false
 local currentBodyPosition = nil
+local currentBodyGyro = nil
 
 local isAutoPreset1On = false
 local isAutoPreset2On = false
@@ -1883,7 +1884,7 @@ local function unequipRod()
 end
 
 
--- ====== MEGALODON HUNT FUNCTIONS ====== 
+-- ====== MEGALODON HUNT FUNCTIONS ======
 local function teleportToMegalodon(position, isEventTeleport)
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") then
         local humanoid = player.Character.Humanoid
@@ -1896,46 +1897,119 @@ local function teleportToMegalodon(position, isEventTeleport)
             print("[Megalodon] Saved player CFrame before event teleport")
         end
 
-        -- Remove lock before teleport if exists
+        -- Remove old lock before teleport if exists
         if currentBodyPosition then
             currentBodyPosition:Destroy()
             currentBodyPosition = nil
         end
 
-        -- Teleport to position with proper orientation
+        -- Remove old BodyGyro if exists
+        if currentBodyGyro then
+            currentBodyGyro:Destroy()
+            currentBodyGyro = nil
+        end
+
+        -- Calculate initial teleport position (above water to prevent drowning)
+        local teleportPos
         if type(position) == "userdata" and position.X then
-            -- If position is a Vector3, create new CFrame with default orientation
-            rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+            -- If position is a Vector3
+            teleportPos = position + Vector3.new(0, 8, 0) -- Start 8 studs above
         elseif type(position) == "userdata" and position.Position then
-            -- If position is already a CFrame, use it directly
-            rootPart.CFrame = position + Vector3.new(0, 5, 0)
+            -- If position is already a CFrame
+            teleportPos = position.Position + Vector3.new(0, 8, 0)
         else
             -- Fallback
-            rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+            teleportPos = position + Vector3.new(0, 8, 0)
         end
-        task.wait(0.1)
 
-        -- Jump once
+        -- Initial teleport above water
+        rootPart.CFrame = CFrame.new(teleportPos)
+        task.wait(0.15)
+
+        -- First jump
+        print("[Megalodon] Jump 1/2")
         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        task.wait(0.5)
+        task.wait(0.3)
+
+        -- Move CFrame up after first jump (additional 5 studs)
+        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 5, 0)
+        task.wait(0.2)
+
+        -- Second jump
+        print("[Megalodon] Jump 2/2")
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        task.wait(0.3)
+
+        -- Move CFrame up after second jump (additional 5 studs) - total ~18 studs above water
+        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 5, 0)
+        task.wait(0.2)
 
         -- Enable floating/lock position only for event teleports
         if isEventTeleport then
+            -- Get final locked position
+            local finalPosition = rootPart.Position
+
+            -- Create BodyPosition to lock player in air (fly effect)
             currentBodyPosition = Instance.new("BodyPosition")
             currentBodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            currentBodyPosition.Position = (type(position) == "userdata" and position.Position and position.Position or position) + Vector3.new(0, 5, 0)
+            currentBodyPosition.Position = finalPosition
             currentBodyPosition.P = 10000
             currentBodyPosition.D = 1000
             currentBodyPosition.Parent = rootPart
+
+            -- Create BodyGyro to prevent rotation/flipping
+            currentBodyGyro = Instance.new("BodyGyro")
+            currentBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            currentBodyGyro.CFrame = rootPart.CFrame
+            currentBodyGyro.P = 10000
+            currentBodyGyro.D = 500
+            currentBodyGyro.Parent = rootPart
+            currentBodyGyro.Name = "MegalodonGyro"
+
+            print("[Megalodon] Fly mode enabled - Position locked at height: " .. math.floor(finalPosition.Y))
         end
     end
 end
 
 local function disableMegalodonLock()
-    if currentBodyPosition then
-        currentBodyPosition:Destroy()
-        currentBodyPosition = nil
-    end
+    pcall(function()
+        -- Remove BodyPosition (fly lock)
+        if currentBodyPosition then
+            currentBodyPosition:Destroy()
+            currentBodyPosition = nil
+            print("[Megalodon] BodyPosition removed")
+        end
+
+        -- Remove BodyGyro (rotation lock) using global variable
+        if currentBodyGyro then
+            currentBodyGyro:Destroy()
+            currentBodyGyro = nil
+            print("[Megalodon] BodyGyro removed (global)")
+        end
+
+        -- Fallback: Check for any remaining BodyGyro in character
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local rootPart = player.Character.HumanoidRootPart
+            local gyro = rootPart:FindFirstChild("MegalodonGyro")
+            if gyro then
+                gyro:Destroy()
+                print("[Megalodon] BodyGyro removed (fallback)")
+            end
+        end
+
+        -- Return to saved position if available
+        if megalodonSavedPosition and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            task.wait(0.3) -- Small delay to ensure physics objects are removed
+            player.Character.HumanoidRootPart.CFrame = megalodonSavedPosition
+            print("[Megalodon] Player returned to saved position")
+
+            -- Reset flags
+            hasTeleportedToMegalodon = false
+            megalodonSavedPosition = nil
+        end
+
+        print("[Megalodon] Fly mode disabled - Player returned to normal state")
+    end)
 end
 
 local function formatDuration(seconds)
