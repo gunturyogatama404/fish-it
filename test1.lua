@@ -507,6 +507,8 @@ local isAutoCatchOn = false
 local isAutoWeatherOn = false
 local gpuSaverEnabled = false
 local isAutoMegalodonOn = false
+local megalodonLockActive = false
+local megalodonLockConnection = nil
 
 local isAutoPreset1On = false
 local isAutoPreset2On = false
@@ -1733,7 +1735,7 @@ local function unequipRod()
 end
 
 
--- ====== MEGALODON HUNT FUNCTIONS (SIMPLIFIED) ======
+-- ====== MEGALODON HUNT FUNCTIONS (WITH JUMP LOCK) ======
 function teleportToMegalodon(pos, isEvent)
     local char = player.Character
     if not char then return end
@@ -1749,8 +1751,92 @@ function teleportToMegalodon(pos, isEvent)
         tPos = pos.Position + Vector3.new(0, 5, 0)
     end
 
-    -- Simple teleport only
-    root.CFrame = CFrame.new(tPos)
+    if isEvent then
+        -- Teleport to position
+        root.CFrame = CFrame.new(tPos)
+
+        -- Wait a moment for teleport to settle
+        task.wait(0.1)
+
+        -- Jump once
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+
+        -- Wait for jump to reach peak
+        task.wait(0.3)
+
+        -- Lock position at peak of jump (slightly higher to stay above water)
+        local lockPosition = root.Position + Vector3.new(0, 2, 0)
+
+        -- Disable existing lock if any
+        if megalodonLockConnection then
+            megalodonLockConnection:Disconnect()
+            megalodonLockConnection = nil
+        end
+
+        -- Create lock using bodyposition method (smooth and stable)
+        local bodyPos = Instance.new("BodyPosition")
+        bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bodyPos.Position = lockPosition
+        bodyPos.P = 10000
+        bodyPos.D = 500
+        bodyPos.Parent = root
+
+        -- Also create bodygyro to prevent rotation
+        local bodyGyro = Instance.new("BodyGyro")
+        bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bodyGyro.CFrame = root.CFrame
+        bodyGyro.P = 10000
+        bodyGyro.D = 500
+        bodyGyro.Parent = root
+
+        megalodonLockActive = true
+
+        -- Backup: Monitor and maintain lock
+        megalodonLockConnection = RunService.Heartbeat:Connect(function()
+            if not root or not root.Parent or not megalodonLockActive then
+                if megalodonLockConnection then
+                    megalodonLockConnection:Disconnect()
+                    megalodonLockConnection = nil
+                end
+                return
+            end
+
+            -- Ensure bodyposition stays active
+            if not root:FindFirstChildOfClass("BodyPosition") then
+                bodyPos.Parent = root
+            end
+            if not root:FindFirstChildOfClass("BodyGyro") then
+                bodyGyro.Parent = root
+            end
+        end)
+    else
+        -- Manual teleport without lock
+        root.CFrame = CFrame.new(tPos)
+    end
+end
+
+function disableMegalodonLock()
+    megalodonLockActive = false
+
+    if megalodonLockConnection then
+        megalodonLockConnection:Disconnect()
+        megalodonLockConnection = nil
+    end
+
+    -- Remove body movers
+    pcall(function()
+        local char = player.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                for _, obj in pairs(root:GetChildren()) do
+                    if obj:IsA("BodyPosition") or obj:IsA("BodyGyro") then
+                        obj:Destroy()
+                    end
+                end
+            end
+        end
+    end)
 end
 
 local function formatDuration(seconds)
@@ -2011,8 +2097,8 @@ local function autoDetectMegalodon()
         local wasActive = megalodonEventActive
         if wasActive then
             megalodonEventActive = false
+            disableMegalodonLock()
         end
-
 
         if wasActive then
             if not megalodonEventEndAlertSent then
@@ -2048,6 +2134,7 @@ local function setAutoMegalodon(state)
     updateConfigField("autoMegalodon", state)
     if not state then
         -- Reset megalodon state
+        disableMegalodonLock()
         megalodonMissingAlertSent = false
         megalodonEventActive = false
         megalodonEventStartedAt = 0
