@@ -567,8 +567,9 @@ local defaultConfig = {
     autoMegalodon = false,
     activePreset = "none",
     gpuSaver = false,
+    teleportLocation = "Sisyphus Statue",
     chargeFishingDelay = 0.01,
-    autoFishMainDelay = 0.9,
+    autoFishDelay = 0.9,
     autoSellDelay = 45,
     autoCatchDelay = 0.2,
     weatherIdDelay = 33,
@@ -1740,6 +1741,7 @@ local megalodonLockedCFrame = nil
 local megalodonPositionLocked = false
 local megalodonBodyVelocity = nil
 local megalodonBodyGyro = nil
+local megalodonCurrentEventPos = nil
 
 function teleportToMegalodon(pos, isEvent)
     local char = player.Character
@@ -1757,83 +1759,61 @@ function teleportToMegalodon(pos, isEvent)
     end
 
     if isEvent then
-        -- Only do initial setup if not already locked
-        if not megalodonPositionLocked then
-            -- Teleport to position (8 studs above water to avoid invisible blocks)
-            local finalPos = tPos + Vector3.new(0, 8, 0)
-            root.CFrame = CFrame.new(finalPos)
-            task.wait(0.15)
+        -- Check if this is the same event position (avoid re-teleporting)
+        if megalodonCurrentEventPos and (tPos - megalodonCurrentEventPos).Magnitude < 5 then
+            -- Same event, already locked, do nothing
+            return
+        end
 
-            -- Store locked position
-            megalodonLockedCFrame = root.CFrame
-            megalodonPositionLocked = true
+        -- New event or first time, setup lock
+        megalodonCurrentEventPos = tPos
 
-            -- Disable existing lock if any
-            if megalodonLockConnection then
-                megalodonLockConnection:Disconnect()
-                megalodonLockConnection = nil
-            end
+        -- Clean up old lock if exists
+        disableMegalodonLock()
 
-            -- Remove old BodyVelocity/BodyGyro if they exist
-            if megalodonBodyVelocity then
-                megalodonBodyVelocity:Destroy()
-                megalodonBodyVelocity = nil
-            end
-            if megalodonBodyGyro then
-                megalodonBodyGyro:Destroy()
-                megalodonBodyGyro = nil
-            end
+        -- Teleport to position (8 studs above water to avoid invisible blocks)
+        local finalPos = tPos + Vector3.new(0, 8, 0)
+        root.CFrame = CFrame.new(finalPos)
+        task.wait(0.2)
 
-            megalodonLockActive = true
+        -- Store locked position
+        megalodonLockedCFrame = root.CFrame
+        megalodonPositionLocked = true
+        megalodonLockActive = true
 
-            -- Create BodyVelocity to lock position (smooth, no shaking)
-            megalodonBodyVelocity = Instance.new("BodyVelocity")
-            megalodonBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-            megalodonBodyVelocity.MaxForce = Vector3.new(100000, 100000, 100000)
-            megalodonBodyVelocity.P = 10000
-            megalodonBodyVelocity.Parent = root
+        -- Create BodyVelocity to lock position (smooth, no shaking)
+        megalodonBodyVelocity = Instance.new("BodyVelocity")
+        megalodonBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        megalodonBodyVelocity.MaxForce = Vector3.new(100000, 100000, 100000)
+        megalodonBodyVelocity.P = 10000
+        megalodonBodyVelocity.Parent = root
 
-            -- Create BodyGyro to prevent rotation
-            megalodonBodyGyro = Instance.new("BodyGyro")
-            megalodonBodyGyro.CFrame = megalodonLockedCFrame
-            megalodonBodyGyro.MaxTorque = Vector3.new(100000, 100000, 100000)
-            megalodonBodyGyro.P = 10000
-            megalodonBodyGyro.Parent = root
+        -- Create BodyGyro to prevent rotation
+        megalodonBodyGyro = Instance.new("BodyGyro")
+        megalodonBodyGyro.CFrame = megalodonLockedCFrame
+        megalodonBodyGyro.MaxTorque = Vector3.new(100000, 100000, 100000)
+        megalodonBodyGyro.P = 10000
+        megalodonBodyGyro.Parent = root
 
-            -- Use lighter position correction (only when really far)
-            megalodonLockConnection = RunService.Heartbeat:Connect(function()
-                if not root or not root.Parent or not megalodonLockActive then
-                    if megalodonLockConnection then
-                        megalodonLockConnection:Disconnect()
-                        megalodonLockConnection = nil
-                    end
-                    return
+        -- Minimal position correction (only when very far)
+        megalodonLockConnection = RunService.Heartbeat:Connect(function()
+            if not root or not root.Parent or not megalodonLockActive then
+                if megalodonLockConnection then
+                    megalodonLockConnection:Disconnect()
+                    megalodonLockConnection = nil
                 end
+                return
+            end
 
-                -- Only correct if drifted very far (> 10 studs)
-                -- BodyVelocity handles small drifts smoothly
-                if (root.Position - megalodonLockedCFrame.Position).Magnitude > 10 then
-                    root.CFrame = megalodonLockedCFrame
-                    if megalodonBodyVelocity then
-                        megalodonBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-                    end
-                end
-            end)
-        else
-            -- Already locked, just update position if event moved significantly
-            local newTargetPos = tPos + Vector3.new(0, 8, 0)
-            if (newTargetPos - megalodonLockedCFrame.Position).Magnitude > 15 then
-                -- Event moved significantly, update locked position
-                megalodonLockedCFrame = CFrame.new(newTargetPos)
+            -- Only correct if drifted extremely far (> 15 studs)
+            -- BodyVelocity handles all normal drifts
+            if (root.Position - megalodonLockedCFrame.Position).Magnitude > 15 then
                 root.CFrame = megalodonLockedCFrame
-                if megalodonBodyGyro then
-                    megalodonBodyGyro.CFrame = megalodonLockedCFrame
-                end
                 if megalodonBodyVelocity then
                     megalodonBodyVelocity.Velocity = Vector3.new(0, 0, 0)
                 end
             end
-        end
+        end)
     else
         -- Manual teleport without lock
         root.CFrame = CFrame.new(tPos)
@@ -1844,6 +1824,7 @@ function disableMegalodonLock()
     megalodonLockActive = false
     megalodonLockedCFrame = nil
     megalodonPositionLocked = false
+    megalodonCurrentEventPos = nil
 
     if megalodonLockConnection then
         megalodonLockConnection:Disconnect()
@@ -3072,20 +3053,82 @@ end
 -- ====================================================================
 --                    AUTO-START (NO UI MODE - MANUAL CONFIG)
 -- ====================================================================
--- Configuration from main_noui.lua loader
+-- Configuration from main_noui.lua loader OR saved config.json
 
 print("🎣 [Auto Fish] Starting NO-UI mode (Manual Config)...")
 
--- Get config from loader
-local GPU_FPS_CAP = GPU_FPS_LIMIT or 8
+-- First, try to load existing config from JSON
+loadConfig()
 
--- Apply delays from loader
-chargeFishingDelay = CHARGE_ROD_DELAY or 0.1
-autoFishMainDelay = AUTO_FISH_DELAY or 0.9
-autoSellDelay = AUTO_SELL_DELAY or 34
-autoCatchDelay = AUTO_CATCH_DELAY or 0.2
-weatherIdDelay = WEATHER_ID_DELAY or 10
-weatherCycleDelay = WEATHER_CYCLE_DELAY or 30
+-- Check if config file exists
+local configExists = false
+if isfile then
+    local configFile = getConfigFileName()
+    configExists = isfile(configFile)
+end
+
+-- Variables to use (either from JSON or from main_noui.lua)
+local useAutoFarm, useAutoSell, useAutoCatch, useAutoWeather, useAutoMegalodon, useGPUSaver, useTeleportLoc
+
+if configExists then
+    -- Config exists, use saved settings from JSON
+    print("📂 [Config] Loading from saved file...")
+    useAutoFarm = config.autoFarm or false
+    useAutoSell = config.autoSell or false
+    useAutoCatch = config.autoCatch or false
+    useAutoWeather = config.autoWeather or false
+    useAutoMegalodon = config.autoMegalodon or false
+    useGPUSaver = config.gpuSaver or false
+    useTeleportLoc = config.teleportLocation or "Sisyphus Statue"
+
+    -- Load delays from config
+    chargeFishingDelay = config.chargeFishingDelay or 0.1
+    autoFishMainDelay = config.autoFishDelay or 0.9
+    autoSellDelay = config.autoSellDelay or 34
+    autoCatchDelay = config.autoCatchDelay or 0.2
+    weatherIdDelay = config.weatherIdDelay or 10
+    weatherCycleDelay = config.weatherCycleDelay or 30
+
+    print("✅ [Config] Loaded from JSON (ignoring main_noui.lua)")
+else
+    -- No config file, use settings from main_noui.lua and save them
+    print("📝 [Config] No saved file found, using main_noui.lua settings...")
+    useAutoFarm = AUTO_FARM or false
+    useAutoSell = AUTO_SELL or false
+    useAutoCatch = AUTO_CATCH or false
+    useAutoWeather = AUTO_WEATHER or false
+    useAutoMegalodon = AUTO_MEGALODON or false
+    useGPUSaver = GPU_SAVER or false
+    useTeleportLoc = TELEPORT_LOCATION or "Sisyphus Statue"
+
+    -- Apply delays from loader
+    chargeFishingDelay = CHARGE_ROD_DELAY or 0.1
+    autoFishMainDelay = AUTO_FISH_DELAY or 0.9
+    autoSellDelay = AUTO_SELL_DELAY or 34
+    autoCatchDelay = AUTO_CATCH_DELAY or 0.2
+    weatherIdDelay = WEATHER_ID_DELAY or 10
+    weatherCycleDelay = WEATHER_CYCLE_DELAY or 30
+
+    -- Save to config for next time
+    config.autoFarm = useAutoFarm
+    config.autoSell = useAutoSell
+    config.autoCatch = useAutoCatch
+    config.autoWeather = useAutoWeather
+    config.autoMegalodon = useAutoMegalodon
+    config.gpuSaver = useGPUSaver
+    config.teleportLocation = useTeleportLoc
+    config.chargeFishingDelay = chargeFishingDelay
+    config.autoFishDelay = autoFishMainDelay
+    config.autoSellDelay = autoSellDelay
+    config.autoCatchDelay = autoCatchDelay
+    config.weatherIdDelay = weatherIdDelay
+    config.weatherCycleDelay = weatherCycleDelay
+
+    saveConfig()
+    print("💾 [Config] Saved to JSON for future sessions")
+end
+
+local GPU_FPS_CAP = GPU_FPS_LIMIT or 8
 
 print("⏱️  [Delays] Fish:", autoFishMainDelay, "| Sell:", autoSellDelay, "| Catch:", autoCatchDelay)
 
@@ -3094,52 +3137,49 @@ local function startManualConfig()
     task.wait(3)  -- Wait for everything to load
 
     print("⚙️  [Manual Config] Starting features...")
-
-    -- Get teleport location
-    local teleportLoc = TELEPORT_LOCATION or "Sisyphus Statue"
-    print("📍 [Teleport] Target:", teleportLoc)
+    print("📍 [Teleport] Target:", useTeleportLoc)
 
     -- Teleport first
-    teleportToNamedLocation(teleportLoc)
+    teleportToNamedLocation(useTeleportLoc)
     task.wait(2)
 
     -- Enable GPU Saver if configured
-    if GPU_SAVER then
+    if useGPUSaver then
         enableGPUSaver()
         print("🎨 [GPU Saver] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Farm if configured
-    if AUTO_FARM then
+    if useAutoFarm then
         setAutoFarm(true)
         print("🎣 [Auto Farm] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Sell if configured
-    if AUTO_SELL then
+    if useAutoSell then
         setSell(true)
         print("💰 [Auto Sell] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Catch if configured
-    if AUTO_CATCH then
+    if useAutoCatch then
         setAutoCatch(true)
         print("🐟 [Auto Catch] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Weather if configured
-    if AUTO_WEATHER then
+    if useAutoWeather then
         setAutoWeather(true)
         print("🌤️  [Auto Weather] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Megalodon if configured
-    if AUTO_MEGALODON then
+    if useAutoMegalodon then
         setAutoMegalodon(true)
         print("🦈 [Auto Megalodon] ✅ Enabled")
         task.wait(0.5)
@@ -3149,13 +3189,13 @@ local function startManualConfig()
     print("📊 [Monitor] Check console for status updates every 60s")
     print("")
     print("Current Config:")
-    print("  - Auto Farm:", AUTO_FARM and "ON" or "OFF")
-    print("  - Auto Sell:", AUTO_SELL and "ON" or "OFF")
-    print("  - Auto Catch:", AUTO_CATCH and "ON" or "OFF")
-    print("  - Auto Weather:", AUTO_WEATHER and "ON" or "OFF")
-    print("  - Auto Megalodon:", AUTO_MEGALODON and "ON" or "OFF")
-    print("  - GPU Saver:", GPU_SAVER and "ON" or "OFF")
-    print("  - Location:", teleportLoc)
+    print("  - Auto Farm:", useAutoFarm and "ON" or "OFF")
+    print("  - Auto Sell:", useAutoSell and "ON" or "OFF")
+    print("  - Auto Catch:", useAutoCatch and "ON" or "OFF")
+    print("  - Auto Weather:", useAutoWeather and "ON" or "OFF")
+    print("  - Auto Megalodon:", useAutoMegalodon and "ON" or "OFF")
+    print("  - GPU Saver:", useGPUSaver and "ON" or "OFF")
+    print("  - Location:", useTeleportLoc)
 end
 
 -- ====================================================================
