@@ -3019,28 +3019,14 @@ end
 
 
 -- ====================================================================
---                    AUTO-START (NO UI MODE)
+--                    AUTO-START (NO UI MODE - MANUAL CONFIG)
 -- ====================================================================
 -- Configuration from main_noui.lua loader
 
-print("🎣 [Auto Fish] Starting NO-UI mode...")
+print("🎣 [Auto Fish] Starting NO-UI mode (Manual Config)...")
 
 -- Get config from loader
-local AUTO_PRESET = AUTO or 2
 local GPU_FPS_CAP = GPU_FPS_LIMIT or 8
-
--- Convert AUTO number to preset string
-local SELECTED_PRESET = "auto2"  -- Default: Sisyphus
-if AUTO_PRESET == 1 then
-    SELECTED_PRESET = "auto1"  -- Crater Island
-    print("🎯 [Preset] AUTO 1 - Crater Island")
-elseif AUTO_PRESET == 2 then
-    SELECTED_PRESET = "auto2"  -- Sisyphus Statue
-    print("🎯 [Preset] AUTO 2 - Sisyphus Statue")
-elseif AUTO_PRESET == 3 then
-    SELECTED_PRESET = "auto3"  -- Kohana
-    print("🎯 [Preset] AUTO 3 - Kohana")
-end
 
 -- Apply delays from loader
 chargeFishingDelay = CHARGE_ROD_DELAY or 0.1
@@ -3052,79 +3038,73 @@ weatherCycleDelay = WEATHER_CYCLE_DELAY or 30
 
 print("⏱️  [Delays] Fish:", autoFishMainDelay, "| Sell:", autoSellDelay, "| Catch:", autoCatchDelay)
 
--- NO-UI VERSION: Direct preset activation without toggles
-local function enablePresetNoUI(presetKey, locationName)
-    print("⚙️  [Preset] Activating:", presetKey)
-
-    -- Disable all first
-    setAutoFarm(false)
-    task.wait(0.5)
-    setSell(false)
-    task.wait(0.5)
-    setAutoCatch(false)
-    task.wait(0.5)
-    setAutoWeather(false)
-    task.wait(0.5)
-    setAutoMegalodon(false)
-    task.wait(0.5)
-
-    -- Set delays based on preset
-    if presetKey == "auto1" or presetKey == "auto2" then
-        autoFishMainDelay = 0.1
-        autoCatchDelay = 0.1
-        print("⏱️  [Preset Delays] Fast mode: Fish 0.1s, Catch 0.1s")
-    elseif presetKey == "auto3" then
-        autoFishMainDelay = 5
-        autoCatchDelay = 0.6
-        print("⏱️  [Preset Delays] Stable mode: Fish 5s, Catch 0.6s")
-    end
-
-    -- Enable features
-    setAutoFarm(true)
-    task.wait(0.5)
-    setSell(true)
-    task.wait(0.5)
-    setAutoCatch(true)
-    task.wait(0.5)
-
-    -- Weather and Megalodon only for auto1 and auto2
-    if presetKey ~= "auto3" then
-        setAutoWeather(true)
-        task.wait(0.5)
-        setAutoMegalodon(true)
-        task.wait(0.5)
-    end
-
-    -- Enable GPU Saver
-    enableGPUSaver()
-    task.wait(0.5)
-
-    -- Update config
-    config.activePreset = presetKey
-    saveConfig()
-
-    -- Teleport to location
-    teleportToNamedLocation(locationName)
-
-    print("✅ [Preset] Activated:", presetKey, "at", locationName)
-end
-
--- Auto-start function
-local function autoStartPreset()
+-- Manual configuration function
+local function startManualConfig()
     task.wait(3)  -- Wait for everything to load
 
-    print("⚙️  [Auto Start] Starting preset:", SELECTED_PRESET)
+    print("⚙️  [Manual Config] Starting features...")
 
-    if SELECTED_PRESET == "auto1" then
-        enablePresetNoUI("auto1", "Crater Island")
-    elseif SELECTED_PRESET == "auto2" then
-        enablePresetNoUI("auto2", "Sisyphus Statue")
-    elseif SELECTED_PRESET == "auto3" then
-        enablePresetNoUI("auto3", "Kohana")
+    -- Get teleport location
+    local teleportLoc = TELEPORT_LOCATION or "Sisyphus Statue"
+    print("📍 [Teleport] Target:", teleportLoc)
+
+    -- Teleport first
+    teleportToNamedLocation(teleportLoc)
+    task.wait(2)
+
+    -- Enable GPU Saver if configured
+    if GPU_SAVER then
+        enableGPUSaver()
+        print("🎨 [GPU Saver] ✅ Enabled")
+        task.wait(0.5)
     end
 
-    print("✅ [Auto Fish] Fully active! Script running without UI.")
+    -- Enable Auto Farm if configured
+    if AUTO_FARM then
+        setAutoFarm(true)
+        print("🎣 [Auto Farm] ✅ Enabled")
+        task.wait(0.5)
+    end
+
+    -- Enable Auto Sell if configured
+    if AUTO_SELL then
+        setSell(true)
+        print("💰 [Auto Sell] ✅ Enabled")
+        task.wait(0.5)
+    end
+
+    -- Enable Auto Catch if configured
+    if AUTO_CATCH then
+        setAutoCatch(true)
+        print("🐟 [Auto Catch] ✅ Enabled")
+        task.wait(0.5)
+    end
+
+    -- Enable Auto Weather if configured
+    if AUTO_WEATHER then
+        setAutoWeather(true)
+        print("🌤️  [Auto Weather] ✅ Enabled")
+        task.wait(0.5)
+    end
+
+    -- Enable Auto Megalodon if configured
+    if AUTO_MEGALODON then
+        setAutoMegalodon(true)
+        print("🦈 [Auto Megalodon] ✅ Enabled")
+        task.wait(0.5)
+    end
+
+    print("✅ [Auto Fish] All configured features active!")
     print("📊 [Monitor] Check console for status updates every 60s")
+    print("")
+    print("Current Config:")
+    print("  - Auto Farm:", AUTO_FARM and "ON" or "OFF")
+    print("  - Auto Sell:", AUTO_SELL and "ON" or "OFF")
+    print("  - Auto Catch:", AUTO_CATCH and "ON" or "OFF")
+    print("  - Auto Weather:", AUTO_WEATHER and "ON" or "OFF")
+    print("  - Auto Megalodon:", AUTO_MEGALODON and "ON" or "OFF")
+    print("  - GPU Saver:", GPU_SAVER and "ON" or "OFF")
+    print("  - Location:", teleportLoc)
 end
 
 -- ====================================================================
@@ -3241,8 +3221,8 @@ end)
 
 print("✅ [Auto Loops] All loops started!")
 
--- Run auto-start
-task.spawn(autoStartPreset)
+-- Run manual config auto-start
+task.spawn(startManualConfig)
 
 -- Status reporter every 60 seconds
 task.spawn(function()
