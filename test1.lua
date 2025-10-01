@@ -3379,11 +3379,7 @@ task.spawn(function()
     if AUTO_CATCH_DELAY then setAutoCatchDelay(AUTO_CATCH_DELAY) end
     if WEATHER_ID_DELAY then setWeatherIdDelay(WEATHER_ID_DELAY) end
     if WEATHER_CYCLE_DELAY then setWeatherCycleDelay(WEATHER_CYCLE_DELAY) end
-
-    -- Apply upgrade settings
-    if AUTO_UPGRADE_ROD ~= nil then setUpgradeRod(AUTO_UPGRADE_ROD) end
-    if AUTO_UPGRADE_BAIT ~= nil then setUpgradeBait(AUTO_UPGRADE_BAIT) end
-
+        
     -- Apply Discord webhooks
     if webhook2 then CONNECTION_WEBHOOK_URL = webhook2 end
     if webhook3 then DISCONNECT_WEBHOOK_URL = webhook3 end
