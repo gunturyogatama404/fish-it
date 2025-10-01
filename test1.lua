@@ -1735,9 +1735,11 @@ local function unequipRod()
 end
 
 
--- ====== MEGALODON HUNT FUNCTIONS (JUMP + CFRAME FREEZE) ======
+-- ====== MEGALODON HUNT FUNCTIONS (BODYVELOCITY LOCK) ======
 local megalodonLockedCFrame = nil
 local megalodonPositionLocked = false
+local megalodonBodyVelocity = nil
+local megalodonBodyGyro = nil
 
 function teleportToMegalodon(pos, isEvent)
     local char = player.Character
@@ -1757,23 +1759,10 @@ function teleportToMegalodon(pos, isEvent)
     if isEvent then
         -- Only do initial setup if not already locked
         if not megalodonPositionLocked then
-            -- Teleport to position (already 5 studs above water)
-            root.CFrame = CFrame.new(tPos)
-            task.wait(0.1)
-
-            -- Try to get above invisible blocks with multiple small adjustments
-            -- Instead of jumping, directly set position higher
+            -- Teleport to position (8 studs above water to avoid invisible blocks)
             local finalPos = tPos + Vector3.new(0, 8, 0)
             root.CFrame = CFrame.new(finalPos)
-            task.wait(0.05)
-
-            -- Verify position and adjust if needed
-            if root.Position.Y < (tPos.Y + 6) then
-                -- If we're still too low, force higher position
-                finalPos = tPos + Vector3.new(0, 10, 0)
-                root.CFrame = CFrame.new(finalPos)
-                task.wait(0.05)
-            end
+            task.wait(0.15)
 
             -- Store locked position
             megalodonLockedCFrame = root.CFrame
@@ -1785,9 +1774,33 @@ function teleportToMegalodon(pos, isEvent)
                 megalodonLockConnection = nil
             end
 
+            -- Remove old BodyVelocity/BodyGyro if they exist
+            if megalodonBodyVelocity then
+                megalodonBodyVelocity:Destroy()
+                megalodonBodyVelocity = nil
+            end
+            if megalodonBodyGyro then
+                megalodonBodyGyro:Destroy()
+                megalodonBodyGyro = nil
+            end
+
             megalodonLockActive = true
 
-            -- Lock using CFrame reset loop (allows fishing activities)
+            -- Create BodyVelocity to lock position (smooth, no shaking)
+            megalodonBodyVelocity = Instance.new("BodyVelocity")
+            megalodonBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            megalodonBodyVelocity.MaxForce = Vector3.new(100000, 100000, 100000)
+            megalodonBodyVelocity.P = 10000
+            megalodonBodyVelocity.Parent = root
+
+            -- Create BodyGyro to prevent rotation
+            megalodonBodyGyro = Instance.new("BodyGyro")
+            megalodonBodyGyro.CFrame = megalodonLockedCFrame
+            megalodonBodyGyro.MaxTorque = Vector3.new(100000, 100000, 100000)
+            megalodonBodyGyro.P = 10000
+            megalodonBodyGyro.Parent = root
+
+            -- Use lighter position correction (only when really far)
             megalodonLockConnection = RunService.Heartbeat:Connect(function()
                 if not root or not root.Parent or not megalodonLockActive then
                     if megalodonLockConnection then
@@ -1797,20 +1810,28 @@ function teleportToMegalodon(pos, isEvent)
                     return
                 end
 
-                -- Only reset position if player drifted too far (> 4 studs)
-                -- This allows small movements needed for fishing animations
-                if (root.Position - megalodonLockedCFrame.Position).Magnitude > 4 then
+                -- Only correct if drifted very far (> 10 studs)
+                -- BodyVelocity handles small drifts smoothly
+                if (root.Position - megalodonLockedCFrame.Position).Magnitude > 10 then
                     root.CFrame = megalodonLockedCFrame
+                    if megalodonBodyVelocity then
+                        megalodonBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+                    end
                 end
             end)
         else
-            -- Already locked, just maintain position silently
-            -- Update locked position to current event position if significantly different
+            -- Already locked, just update position if event moved significantly
             local newTargetPos = tPos + Vector3.new(0, 8, 0)
             if (newTargetPos - megalodonLockedCFrame.Position).Magnitude > 15 then
                 -- Event moved significantly, update locked position
                 megalodonLockedCFrame = CFrame.new(newTargetPos)
                 root.CFrame = megalodonLockedCFrame
+                if megalodonBodyGyro then
+                    megalodonBodyGyro.CFrame = megalodonLockedCFrame
+                end
+                if megalodonBodyVelocity then
+                    megalodonBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+                end
             end
         end
     else
@@ -1827,6 +1848,16 @@ function disableMegalodonLock()
     if megalodonLockConnection then
         megalodonLockConnection:Disconnect()
         megalodonLockConnection = nil
+    end
+
+    -- Remove BodyVelocity and BodyGyro
+    if megalodonBodyVelocity then
+        megalodonBodyVelocity:Destroy()
+        megalodonBodyVelocity = nil
+    end
+    if megalodonBodyGyro then
+        megalodonBodyGyro:Destroy()
+        megalodonBodyGyro = nil
     end
 end
 
