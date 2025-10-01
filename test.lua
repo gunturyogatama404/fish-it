@@ -497,12 +497,8 @@ local sessionStats = {
     fishTypes = {}
 }
 
--- ====== STUCK DETECTION VARIABLES ======
-local lastFishCaughtTime = os.time()
-local STUCK_TIMEOUT = 120 -- 2 minutes in seconds
-local stuckCheckEnabled = true -- ENABLED by default
-local lastStuckNotificationTime = 0
-local STUCK_NOTIFICATION_COOLDOWN = 300 -- 5 minutes cooldown for stuck notifications
+-- ====== STUCK DETECTION DISABLED ======
+-- Removed to reduce complexity and register usage
 
 -- ====== FPS TRACKING VARIABLES ====== 
 local RunService = game:GetService("RunService")
@@ -1455,7 +1451,7 @@ end
 
 -- ====== FISH CAUGHT EVENT HANDLER ======
 local function setupFishTracking()
-    print("Fish tracking active - monitoring catch count and stuck detection")
+    print("Fish tracking active - monitoring catch count")
 
     task.spawn(function()
         task.wait(2)
@@ -1466,9 +1462,6 @@ local function setupFishTracking()
                 local increase = newValue - lastCaught
                 if increase > 0 then
                     sessionStats.totalFish = sessionStats.totalFish + increase
-                    -- Update last fish caught time for stuck detection
-                    lastFishCaughtTime = os.time()
-                    print("[StuckDetection] Fish caught, timer reset")
                 end
                 lastCaught = newValue
             end)
@@ -1476,110 +1469,8 @@ local function setupFishTracking()
     end)
 end
 
--- ====== STUCK DETECTION SYSTEM ======
-local function sendStuckNotification()
-    local currentTime = os.time()
-    if currentTime - lastStuckNotificationTime < STUCK_NOTIFICATION_COOLDOWN then
-        return -- Still in cooldown
-    end
-
-    local timeSinceLastFish = currentTime - lastFishCaughtTime
-    local timeString = math.floor(timeSinceLastFish / 60) .. "m " .. (timeSinceLastFish % 60) .. "s ago"
-
-    sendUnifiedWebhook("account_stuck", {
-        timeSinceLastFish = timeString
-    })
-
-    lastStuckNotificationTime = currentTime
-    print("[StuckDetection] Notification sent to Discord")
-end
-
-local function restartAutoFarm()
-    print("[StuckDetection] Attempting to restart based on active preset...")
-
-    -- Check which preset is active
-    local activePreset = config.activePreset or "none"
-
-    if activePreset == "auto1" then
-        print("[StuckDetection] Restarting Auto Preset 1...")
-        -- Turn off preset first
-        if autoPreset1Toggle then
-            autoPreset1Toggle:UpdateToggle(nil, false)
-        end
-        task.wait(2)
-        -- Turn it back on
-        if autoPreset1Toggle then
-            autoPreset1Toggle:UpdateToggle(nil, true)
-        end
-        print("[StuckDetection] Auto Preset 1 restarted")
-
-    elseif activePreset == "auto2" then
-        print("[StuckDetection] Restarting Auto Preset 2...")
-        -- Turn off preset first
-        if autoPreset2Toggle then
-            autoPreset2Toggle:UpdateToggle(nil, false)
-        end
-        task.wait(2)
-        -- Turn it back on
-        if autoPreset2Toggle then
-            autoPreset2Toggle:UpdateToggle(nil, true)
-        end
-        print("[StuckDetection] Auto Preset 2 restarted")
-
-    elseif activePreset == "auto3" then
-        print("[StuckDetection] Restarting Auto Preset 3...")
-        -- Turn off preset first
-        if autoPreset3Toggle then
-            autoPreset3Toggle:UpdateToggle(nil, false)
-        end
-        task.wait(2)
-        -- Turn it back on
-        if autoPreset3Toggle then
-            autoPreset3Toggle:UpdateToggle(nil, true)
-        end
-        print("[StuckDetection] Auto Preset 3 restarted")
-
-    else
-        -- Fallback: restart auto farm only if no preset is active
-        print("[StuckDetection] No preset active, restarting Auto Farm only...")
-        if isAutoFarmOn then
-            setAutoFarm(false)
-            task.wait(2)
-        end
-        setAutoFarm(true)
-        print("[StuckDetection] Auto Farm restarted")
-    end
-end
-
-local function checkForStuckState()
-    if not stuckCheckEnabled or not isAutoFarmOn then
-        return
-    end
-
-    local currentTime = os.time()
-    local timeSinceLastFish = currentTime - lastFishCaughtTime
-
-    if timeSinceLastFish >= STUCK_TIMEOUT then
-        print("[StuckDetection] STUCK DETECTED! No fish caught for " .. timeSinceLastFish .. " seconds")
-
-        -- Send notification
-        sendStuckNotification()
-
-        -- Restart auto farm
-        restartAutoFarm()
-
-        -- Reset timer to prevent immediate re-trigger
-        lastFishCaughtTime = currentTime
-    end
-end
-
--- Start stuck monitoring
-task.spawn(function()
-    while true do
-        task.wait(30) -- Check every 30 seconds
-        checkForStuckState()
-    end
-end)
+-- ====== STUCK DETECTION REMOVED ======
+-- Removed entire stuck detection system to reduce complexity
 
 -- Call this function
 setupFishTracking()
@@ -2007,7 +1898,7 @@ local maxRetryAttempts = 3
 
 -- ====== UNIFIED WEBHOOK CONFIGURATION ======
 -- Use webhook2 from main.lua if available, otherwise use empty fallback
-local UNIFIED_WEBHOOK_URL = webhook2  -- Uses webhook2 from loadstring
+local UNIFIED_WEBHOOK_URL = type(webhook2) == "string" and webhook2 or ""
 
 -- ====== UNIFIED WEBHOOK FUNCTION ======
 local function sendUnifiedWebhook(webhookType, data)
@@ -2056,20 +1947,6 @@ local function sendUnifiedWebhook(webhookType, data)
                 { name = "Duration", value = formatDuration(duration), inline = true },
             },
             footer = { text = 'Megalodon Watch - Auto Fish' }
-        }
-
-    elseif webhookType == "account_stuck" then
-        embed = {
-            title = '⚠️ [Alert] Account Stuck Detected',
-            description = 'Account appears to be stuck - no fish caught in 2+ minutes. Auto-restart attempted.',
-            color = 16776960, -- Yellow/Orange
-            fields = {
-                { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
-                { name = "🕒 Detected At", value = os.date("%H:%M:%S"), inline = true },
-                { name = "⏱️ Last Fish", value = data and data.timeSinceLastFish or "2+ minutes ago", inline = true },
-                { name = "🔄 Action Taken", value = "Auto Farm restarted", inline = false }
-            },
-            footer = { text = 'Stuck Detection - Auto Fish' }
         }
 
     elseif webhookType == "fish_found" then
@@ -2314,14 +2191,14 @@ end
 -- Contoh konfigurasi di main.lua:
 -- webhook3 = "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
 -- discordid = "123456789012345678"  -- Discord User ID (18 digit number)
-local CONNECTION_WEBHOOK_URL = webhook3 or ""  -- URL webhook khusus untuk status koneksi
+local CONNECTION_WEBHOOK_URL = type(webhook3) == "string" and webhook3 or ""  -- URL webhook khusus untuk status koneksi
 
 local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
 local PING_THRESHOLD = 1000  -- ms, ping monitoring (webhook disabled, console log only)
 local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
-local DISCORD_USER_ID = discordid or "701247227959574567"  -- Fallback jika discordid tidak terdefinisi
+local DISCORD_USER_ID = type(discordid) == "string" and discordid or "701247227959574567"  -- Fallback jika discordid tidak terdefinisi
 
 -- QUEUE SYSTEM untuk multiple accounts (mencegah rate limiting)
 local webhookQueue = {}
