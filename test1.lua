@@ -1831,16 +1831,45 @@ end
 
 local function resumeFarmingAfterMegalodon(previousAutoFarmState)
     task.spawn(function()
-        local shouldResume = previousAutoFarmState
-        if shouldResume == nil then
-            shouldResume = config.autoFarm
-        end
+        task.wait(1) -- Wait a moment before resuming
 
-        if shouldResume then
-            if not isAutoFarmOn then
-                setAutoFarm(true)
-            else
-                equipRod()
+        -- Check which preset was active
+        local activePreset = config.activePreset
+
+        if activePreset == "auto1" then
+            -- Re-activate Auto 1 (Crater Island)
+            if autoPreset1Toggle then
+                autoPreset1Toggle:UpdateToggle(nil, false)
+                task.wait(0.5)
+                autoPreset1Toggle:UpdateToggle(nil, true)
+            end
+        elseif activePreset == "auto2" then
+            -- Re-activate Auto 2 (Sisyphus)
+            if autoPreset2Toggle then
+                autoPreset2Toggle:UpdateToggle(nil, false)
+                task.wait(0.5)
+                autoPreset2Toggle:UpdateToggle(nil, true)
+            end
+        elseif activePreset == "auto3" then
+            -- Re-activate Auto 3 (Kohana)
+            if autoPreset3Toggle then
+                autoPreset3Toggle:UpdateToggle(nil, false)
+                task.wait(0.5)
+                autoPreset3Toggle:UpdateToggle(nil, true)
+            end
+        else
+            -- No preset active, just resume farming if it was on
+            local shouldResume = previousAutoFarmState
+            if shouldResume == nil then
+                shouldResume = config.autoFarm
+            end
+
+            if shouldResume then
+                if not isAutoFarmOn then
+                    setAutoFarm(true)
+                else
+                    equipRod()
+                end
             end
         end
     end)
