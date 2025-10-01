@@ -874,6 +874,57 @@ local function setWeatherCycleDelay(value)
     updateConfigField("weatherCycleDelay", clamped)
 end
 
+-- ====== AUTO FEATURE TOGGLE FUNCTIONS ======
+local function setAutoFarm(state)
+    isAutoFarmOn = state
+    updateConfigField("autoFarm", state)
+
+    if state then
+        equipRod() -- Auto equip rod when starting
+    else
+        cancelFishing()
+        unequipRod() -- Auto unequip when stopping
+    end
+end
+
+local function setSell(state)
+    isAutoSellOn = state
+    updateConfigField("autoSell", state)
+end
+
+local function setAutoSell(state)
+    setSell(state)
+end
+
+local function setAutoCatch(state)
+    isAutoCatchOn = state
+    updateConfigField("autoCatch", state)
+end
+
+local function setAutoWeather(state)
+    isAutoWeatherOn = state
+    updateConfigField("autoWeather", state)
+end
+
+local function setAutoMegalodon(state)
+    isAutoMegalodonOn = state
+    updateConfigField("autoMegalodon", state)
+end
+
+function setUpgradeRod(state)
+    upgradeState.rod = state
+    if state then
+        currentRodTarget = findNextRodTarget()
+    end
+end
+
+function setUpgradeBait(state)
+    upgradeState.bait = state
+    if state then
+        currentBaitTarget = findNextBaitTarget()
+    end
+end
+
 -- Try to migrate old config first, then load current config
 if not migrateOldConfig() then
     loadConfig()
@@ -883,6 +934,11 @@ applyDelayConfig()
 
 -- Player identification info
 
+-- UI Toggle references (nil in NO-UI mode, available in UI mode)
+local autoFarmToggle
+local autoSellToggle
+local autoCatchToggle
+local autoWeatherToggle
 local autoMegalodonToggle
 local autoPreset1Toggle
 local autoPreset2Toggle
@@ -1334,32 +1390,35 @@ end
 function enableGPUSaver()
     if gpuSaverEnabled then return end
     gpuSaverEnabled = true
-    
+
+    -- Get FPS limit from global config or use default
+    local fpsLimit = tonumber(GPU_FPS_LIMIT) or 8
+
     -- Store original settings
     originalSettings.GlobalShadows = Lighting.GlobalShadows
     originalSettings.FogEnd = Lighting.FogEnd
     originalSettings.Brightness = Lighting.Brightness
     originalSettings.QualityLevel = settings().Rendering.QualityLevel
-    
+
     -- Apply GPU saving settings
     pcall(function()
         settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 1
         Lighting.Brightness = 0
-        
+
         for _, v in pairs(Lighting:GetChildren()) do
             if v:IsA("PostEffect") or v:IsA("Atmosphere") or v:IsA("Sky") then
                 v.Enabled = false
             end
         end
-        
-        pcall(function() setfpscap(8) end) -- Limit FPS to 8
+
+        pcall(function() setfpscap(fpsLimit) end)
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
 
-    -- Create FPS cap monitor to ensure it stays at 8 FPS
+    -- Create FPS cap monitor to ensure it stays at configured FPS
     if fpsCapConnection then
         fpsCapConnection:Disconnect()
         fpsCapConnection = nil
@@ -1369,7 +1428,7 @@ function enableGPUSaver()
         if gpuSaverEnabled then
             pcall(function()
                 if setfpscap then
-                    setfpscap(8)
+                    setfpscap(fpsLimit)
                 end
             end)
         end
@@ -1516,6 +1575,34 @@ local function runPresetSequence(steps)
 
     if not success then
         warn("[AutoFish] Preset sequence error:", err)
+    end
+end
+
+local function setDelaysForPreset(presetKey)
+    if presetKey == "auto1" or presetKey == "auto2" then
+        -- Auto 1 dan Auto 2: Auto Fish Delay 0.1s, Auto Catch Delay 0.1s
+        if autoFishMainSlider then
+            autoFishMainSlider:Set(0.1)
+        else
+            setAutoFishMainDelay(0.1)
+        end
+        if autoCatchSlider then
+            autoCatchSlider:Set(0.1)
+        else
+            setAutoCatchDelay(0.1)
+        end
+    elseif presetKey == "auto3" then
+        -- Auto 3: Auto Fish Delay 5s, Auto Catch Delay 0.6s
+        if autoFishMainSlider then
+            autoFishMainSlider:Set(5)
+        else
+            setAutoFishMainDelay(5)
+        end
+        if autoCatchSlider then
+            autoCatchSlider:Set(0.6)
+        else
+            setAutoCatchDelay(0.6)
+        end
     end
 end
 
@@ -3300,18 +3387,12 @@ task.spawn(function()
 end)
 
 -- ====== SCRIPT COMPLETION & HEALTH CHECK ======
--- Validate all critical systems are ready
+-- Validate all critical systems are ready (NO-UI Compatible)
 local function performHealthCheck()
     local healthStatus = {}
 
-    -- Check critical variables
-    healthStatus.autoFarmToggle = autoFarmToggle ~= nil
+    -- Check critical variables (NO-UI compatible)
     healthStatus.networkEvents = networkEvents ~= nil
-    healthStatus.discordMonitor = setupDisconnectNotifier ~= nil
-    healthStatus.uiSystem = Library ~= nil
-    healthStatus.webhookSystem = CONNECTION_WEBHOOK_URL ~= nil
-
-    -- Check LocalPlayer
     healthStatus.localPlayer = (game:GetService("Players").LocalPlayer ~= nil)
 
     return healthStatus
@@ -3323,20 +3404,12 @@ local allSystemsReady = true
 for system, status in pairs(health) do
     if not status then
         allSystemsReady = false
+        warn("⚠️ [Auto Fish] Health check failed for: " .. system)
     end
 end
 
-if allSystemsReady then
-
-    -- Show Discord monitor status
-    if DISCORD_USER_ID and DISCORD_USER_ID ~= "YOUR_DISCORD_USER_ID_HERE" then
-    else
-        print("⚠️ Discord notifications disabled (no User ID configured)")
-    end
-
-else
+if not allSystemsReady then
     warn("⚠️ [Auto Fish] Some systems failed health check. Script may not function properly.")
-    warn("⚠️ Check the error messages above and ensure all dependencies are available.")
 end
 
 -- ====================================================================
@@ -3379,7 +3452,11 @@ task.spawn(function()
     if AUTO_CATCH_DELAY then setAutoCatchDelay(AUTO_CATCH_DELAY) end
     if WEATHER_ID_DELAY then setWeatherIdDelay(WEATHER_ID_DELAY) end
     if WEATHER_CYCLE_DELAY then setWeatherCycleDelay(WEATHER_CYCLE_DELAY) end
-        
+
+    -- Apply upgrade settings
+    if AUTO_UPGRADE_ROD ~= nil then setUpgradeRod(AUTO_UPGRADE_ROD) end
+    if AUTO_UPGRADE_BAIT ~= nil then setUpgradeBait(AUTO_UPGRADE_BAIT) end
+
     -- Apply Discord webhooks
     if webhook2 then CONNECTION_WEBHOOK_URL = webhook2 end
     if webhook3 then DISCONNECT_WEBHOOK_URL = webhook3 end
