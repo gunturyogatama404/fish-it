@@ -986,10 +986,11 @@ function getQuestText(a)local b,c=pcall(function()local d=workspace:FindFirstChi
 function FormatTime(a)a=tonumber(a)or 0;a=math.max(0,math.floor(a))local b=math.floor(a/3600)local c=math.floor((a%3600)/60)local d=a%60;return string.format("%02d:%02d:%02d",b,c,d)end
 function FormatNumber(a)local b=tonumber(a)or 0;local c=tostring(math.floor(b))local d;while true do c,d=string.gsub(c,"^(-?%d+)(%d%d%d)",'%1,%2')if d==0 then break end end;return c end
 
--- ====== GPU SAVER VARIABLES ====== 
+-- ====== GPU SAVER VARIABLES ======
 local originalSettings = {}
 local whiteScreenGui = nil
 local connections = {}
+local fpsCapConnection = nil
 
 -- ====== DELAY VARIABLES ====== 
 local chargeFishingDelay = 0.01
@@ -1401,13 +1402,29 @@ function enableGPUSaver()
             end
         end
         
-        pcall(function() setfpscap(8) end) -- Limit FPS to 5
+        pcall(function() setfpscap(8) end) -- Limit FPS to 8
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
-    
+
+    -- Create FPS cap monitor to ensure it stays at 8 FPS
+    if fpsCapConnection then
+        fpsCapConnection:Disconnect()
+        fpsCapConnection = nil
+    end
+
+    fpsCapConnection = RunService.Heartbeat:Connect(function()
+        if gpuSaverEnabled then
+            pcall(function()
+                if setfpscap then
+                    setfpscap(8)
+                end
+            end)
+        end
+    end)
+
     createWhiteScreen()
-    print("⚡ GPU Saver Mode: ENABLED")
+    print("⚡ GPU Saver Mode: ENABLED (FPS locked at 8)")
 
     -- Update toggle if available
     if gpuSaverToggle and not isApplyingConfig then
@@ -1418,28 +1435,34 @@ end
 function disableGPUSaver()
     if not gpuSaverEnabled then return end
     gpuSaverEnabled = false
-    
+
+    -- Disconnect FPS cap monitor
+    if fpsCapConnection then
+        fpsCapConnection:Disconnect()
+        fpsCapConnection = nil
+    end
+
     -- Restore settings
     pcall(function()
         if originalSettings.QualityLevel then
             settings().Rendering.QualityLevel = originalSettings.QualityLevel
         end
-        
+
         Lighting.GlobalShadows = originalSettings.GlobalShadows or true
         Lighting.FogEnd = originalSettings.FogEnd or 100000
         Lighting.Brightness = originalSettings.Brightness or 1
-        
+
         for _, v in pairs(Lighting:GetChildren()) do
             if v:IsA("PostEffect") or v:IsA("Atmosphere") or v:IsA("Sky") then
                 v.Enabled = true
             end
         end
-        
-        pcall(function() setfpscap(8) end) -- Remove FPS limit
+
+        pcall(function() setfpscap(0) end) -- Remove FPS limit
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, true)
         workspace.CurrentCamera.FieldOfView = 70
     end)
-    
+
     removeWhiteScreen()
     print("⚡ GPU Saver Mode: DISABLED")
 
