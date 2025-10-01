@@ -1735,7 +1735,9 @@ local function unequipRod()
 end
 
 
--- ====== MEGALODON HUNT FUNCTIONS (WITH JUMP LOCK) ======
+-- ====== MEGALODON HUNT FUNCTIONS (JUMP + CFRAME FREEZE) ======
+local megalodonLockedCFrame = nil
+
 function teleportToMegalodon(pos, isEvent)
     local char = player.Character
     if not char then return end
@@ -1758,14 +1760,14 @@ function teleportToMegalodon(pos, isEvent)
         -- Wait a moment for teleport to settle
         task.wait(0.1)
 
-        -- Jump once
+        -- Jump once to get above water
         hum:ChangeState(Enum.HumanoidStateType.Jumping)
 
         -- Wait for jump to reach peak
-        task.wait(0.3)
+        task.wait(0.35)
 
-        -- Lock position at peak of jump (slightly higher to stay above water)
-        local lockPosition = root.Position + Vector3.new(0, 2, 0)
+        -- Store locked position at peak (above water)
+        megalodonLockedCFrame = root.CFrame + Vector3.new(0, 2, 0)
 
         -- Disable existing lock if any
         if megalodonLockConnection then
@@ -1773,25 +1775,10 @@ function teleportToMegalodon(pos, isEvent)
             megalodonLockConnection = nil
         end
 
-        -- Create lock using bodyposition method (smooth and stable)
-        local bodyPos = Instance.new("BodyPosition")
-        bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bodyPos.Position = lockPosition
-        bodyPos.P = 10000
-        bodyPos.D = 500
-        bodyPos.Parent = root
-
-        -- Also create bodygyro to prevent rotation
-        local bodyGyro = Instance.new("BodyGyro")
-        bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bodyGyro.CFrame = root.CFrame
-        bodyGyro.P = 10000
-        bodyGyro.D = 500
-        bodyGyro.Parent = root
-
         megalodonLockActive = true
 
-        -- Backup: Monitor and maintain lock
+        -- Lock using CFrame reset loop (allows fishing activities)
+        -- This method only resets position when player moves too far
         megalodonLockConnection = RunService.Heartbeat:Connect(function()
             if not root or not root.Parent or not megalodonLockActive then
                 if megalodonLockConnection then
@@ -1801,12 +1788,10 @@ function teleportToMegalodon(pos, isEvent)
                 return
             end
 
-            -- Ensure bodyposition stays active
-            if not root:FindFirstChildOfClass("BodyPosition") then
-                bodyPos.Parent = root
-            end
-            if not root:FindFirstChildOfClass("BodyGyro") then
-                bodyGyro.Parent = root
+            -- Only reset position if player drifted too far (> 3 studs)
+            -- This allows small movements needed for fishing animations
+            if (root.Position - megalodonLockedCFrame.Position).Magnitude > 3 then
+                root.CFrame = megalodonLockedCFrame
             end
         end)
     else
@@ -1817,26 +1802,12 @@ end
 
 function disableMegalodonLock()
     megalodonLockActive = false
+    megalodonLockedCFrame = nil
 
     if megalodonLockConnection then
         megalodonLockConnection:Disconnect()
         megalodonLockConnection = nil
     end
-
-    -- Remove body movers
-    pcall(function()
-        local char = player.Character
-        if char then
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if root then
-                for _, obj in pairs(root:GetChildren()) do
-                    if obj:IsA("BodyPosition") or obj:IsA("BodyGyro") then
-                        obj:Destroy()
-                    end
-                end
-            end
-        end
-    end)
 end
 
 local function formatDuration(seconds)
