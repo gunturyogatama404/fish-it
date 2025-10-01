@@ -172,7 +172,8 @@ Webhook Usage:
 Traditional Connection Features (still active):
 ✅ Sends "Player Connected" when script starts successfully
 ❌ Sends "Player Disconnected" with detailed reason when issues occur
-📊 Includes session duration, ping monitoring, and freeze detection
+📊 Includes session duration and freeze detection
+⚠️ Ping monitoring enabled (high ping webhook DISABLED - console log only)
 
 Note: All status notifications are sent to webhook3 only
 --]]
@@ -496,12 +497,8 @@ local sessionStats = {
     fishTypes = {}
 }
 
--- ====== STUCK DETECTION VARIABLES ======
-local lastFishCaughtTime = os.time()
-local STUCK_TIMEOUT = 120 -- 2 minutes in seconds
-local stuckCheckEnabled = true -- ENABLED by default
-local lastStuckNotificationTime = 0
-local STUCK_NOTIFICATION_COOLDOWN = 300 -- 5 minutes cooldown for stuck notifications
+-- ====== STUCK DETECTION DISABLED ======
+-- Removed to reduce complexity and register usage
 
 -- ====== FPS TRACKING VARIABLES ====== 
 local RunService = game:GetService("RunService")
@@ -535,9 +532,9 @@ local isAutoCatchOn = false
 local isAutoWeatherOn = false
 local gpuSaverEnabled = false
 local isAutoMegalodonOn = false
-local megalodonSavedPosition = nil -- Will store full CFrame (position + orientation)
+local megalodonSavedPosition = nil
+local megalodonLockedCFrame = nil
 local hasTeleportedToMegalodon = false
-local currentBodyPosition = nil
 
 local isAutoPreset1On = false
 local isAutoPreset2On = false
@@ -1404,7 +1401,7 @@ function enableGPUSaver()
             end
         end
         
-        pcall(function() setfpscap(40) end) -- Limit FPS to 5
+        pcall(function() setfpscap(50) end) -- Limit FPS to 5
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
@@ -1454,7 +1451,7 @@ end
 
 -- ====== FISH CAUGHT EVENT HANDLER ======
 local function setupFishTracking()
-    print("Fish tracking active - monitoring catch count and stuck detection")
+    print("Fish tracking active - monitoring catch count")
 
     task.spawn(function()
         task.wait(2)
@@ -1465,9 +1462,6 @@ local function setupFishTracking()
                 local increase = newValue - lastCaught
                 if increase > 0 then
                     sessionStats.totalFish = sessionStats.totalFish + increase
-                    -- Update last fish caught time for stuck detection
-                    lastFishCaughtTime = os.time()
-                    print("[StuckDetection] Fish caught, timer reset")
                 end
                 lastCaught = newValue
             end)
@@ -1475,67 +1469,8 @@ local function setupFishTracking()
     end)
 end
 
--- ====== STUCK DETECTION SYSTEM ======
-local function sendStuckNotification()
-    local currentTime = os.time()
-    if currentTime - lastStuckNotificationTime < STUCK_NOTIFICATION_COOLDOWN then
-        return -- Still in cooldown
-    end
-
-    local timeSinceLastFish = currentTime - lastFishCaughtTime
-    local timeString = math.floor(timeSinceLastFish / 60) .. "m " .. (timeSinceLastFish % 60) .. "s ago"
-
-    sendUnifiedWebhook("account_stuck", {
-        timeSinceLastFish = timeString
-    })
-
-    lastStuckNotificationTime = currentTime
-    print("[StuckDetection] Notification sent to Discord")
-end
-
-local function restartAutoFarm()
-    print("[StuckDetection] Attempting to restart Auto Farm...")
-
-    -- Turn off auto farm first
-    if isAutoFarmOn then
-        setAutoFarm(false)
-        task.wait(2)
-    end
-
-    -- Turn it back on
-    setAutoFarm(true)
-    print("[StuckDetection] Auto Farm restarted")
-end
-
-local function checkForStuckState()
-    if not stuckCheckEnabled or not isAutoFarmOn then
-        return
-    end
-
-    local currentTime = os.time()
-    local timeSinceLastFish = currentTime - lastFishCaughtTime
-
-    if timeSinceLastFish >= STUCK_TIMEOUT then
-        print("[StuckDetection] STUCK DETECTED! No fish caught for " .. timeSinceLastFish .. " seconds")
-
-        -- Send notification
-        sendStuckNotification()
-
-        -- Restart auto farm
-        restartAutoFarm()
-
-        -- Reset timer to prevent immediate re-trigger
-        lastFishCaughtTime = currentTime
-    end
-end
-
--- Start stuck monitoring
-task.spawn(function()
-    while true do
-        task.wait(30) -- Check every 30 seconds
-        checkForStuckState()
-    end
-end)
+-- ====== STUCK DETECTION REMOVED ======
+-- Removed entire stuck detection system to reduce complexity
 
 -- Call this function
 setupFishTracking()
@@ -1840,59 +1775,83 @@ local function unequipRod()
 end
 
 
--- ====== MEGALODON HUNT FUNCTIONS ====== 
-local function teleportToMegalodon(position, isEventTeleport)
-    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") then
-        local humanoid = player.Character.Humanoid
-        local rootPart = player.Character.HumanoidRootPart
+-- ====== MEGALODON HUNT FUNCTIONS (OPTIMIZED) ======
+local megalodonLockLoop = nil
 
-        -- Save FULL CFrame (position + orientation) before teleport to event
-        if isEventTeleport and not hasTeleportedToMegalodon then
-            megalodonSavedPosition = rootPart.CFrame -- Save full CFrame, not just position
-            hasTeleportedToMegalodon = true
-            print("[Megalodon] Saved player CFrame before event teleport")
-        end
+function teleportToMegalodon(pos, isEvent)
+    local char = player.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not root or not hum then return end
 
-        -- Remove lock before teleport if exists
-        if currentBodyPosition then
-            currentBodyPosition:Destroy()
-            currentBodyPosition = nil
-        end
+    -- Save position before event
+    if isEvent and not hasTeleportedToMegalodon then
+        megalodonSavedPosition = root.CFrame
+        hasTeleportedToMegalodon = true
+        print("[Megalodon] Position saved")
+    end
 
-        -- Teleport to position with proper orientation
-        if type(position) == "userdata" and position.X then
-            -- If position is a Vector3, create new CFrame with default orientation
-            rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
-        elseif type(position) == "userdata" and position.Position then
-            -- If position is already a CFrame, use it directly
-            rootPart.CFrame = position + Vector3.new(0, 5, 0)
-        else
-            -- Fallback
-            rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
-        end
-        task.wait(0.1)
+    -- Stop old lock
+    if megalodonLockLoop then
+        megalodonLockLoop:Disconnect()
+        megalodonLockLoop = nil
+    end
 
-        -- Jump once
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        task.wait(0.5)
+    -- Calculate teleport position
+    local tPos = pos
+    if type(pos) == "userdata" and pos.X then
+        tPos = pos + Vector3.new(0, 5, 0)
+    elseif type(pos) == "userdata" and pos.Position then
+        tPos = pos.Position + Vector3.new(0, 5, 0)
+    end
 
-        -- Enable floating/lock position only for event teleports
-        if isEventTeleport then
-            currentBodyPosition = Instance.new("BodyPosition")
-            currentBodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            currentBodyPosition.Position = (type(position) == "userdata" and position.Position and position.Position or position) + Vector3.new(0, 5, 0)
-            currentBodyPosition.P = 10000
-            currentBodyPosition.D = 1000
-            currentBodyPosition.Parent = rootPart
-        end
+    if isEvent then
+        -- Store locked position
+        megalodonLockedCFrame = CFrame.new(tPos)
+        root.CFrame = megalodonLockedCFrame
+        root.Anchored = true
+
+        print("[Megalodon] 🔒 Position LOCKED (Anchored)")
+
+        -- Simple backup loop
+        megalodonLockLoop = RunService.Heartbeat:Connect(function()
+            if root and root.Parent then
+                if not root.Anchored then root.Anchored = true end
+                if (root.Position - megalodonLockedCFrame.Position).Magnitude > 1 then
+                    root.CFrame = megalodonLockedCFrame
+                end
+            else
+                if megalodonLockLoop then megalodonLockLoop:Disconnect() megalodonLockLoop = nil end
+            end
+        end)
     end
 end
 
-local function disableMegalodonLock()
-    if currentBodyPosition then
-        currentBodyPosition:Destroy()
-        currentBodyPosition = nil
-    end
+function disableMegalodonLock()
+    pcall(function()
+        if megalodonLockLoop then
+            megalodonLockLoop:Disconnect()
+            megalodonLockLoop = nil
+        end
+
+        local char = player.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                root.Anchored = false
+                if megalodonSavedPosition then
+                    task.wait(0.1)
+                    root.CFrame = megalodonSavedPosition
+                    megalodonSavedPosition = nil
+                end
+            end
+        end
+
+        hasTeleportedToMegalodon = false
+        megalodonLockedCFrame = nil
+        print("[Megalodon] 🔓 Lock removed")
+    end)
 end
 
 local function formatDuration(seconds)
@@ -1939,7 +1898,7 @@ local maxRetryAttempts = 3
 
 -- ====== UNIFIED WEBHOOK CONFIGURATION ======
 -- Use webhook2 from main.lua if available, otherwise use empty fallback
-local UNIFIED_WEBHOOK_URL = webhook2  -- Uses webhook2 from loadstring
+local UNIFIED_WEBHOOK_URL = type(webhook2) == "string" and webhook2 or ""
 
 -- ====== UNIFIED WEBHOOK FUNCTION ======
 local function sendUnifiedWebhook(webhookType, data)
@@ -1988,20 +1947,6 @@ local function sendUnifiedWebhook(webhookType, data)
                 { name = "Duration", value = formatDuration(duration), inline = true },
             },
             footer = { text = 'Megalodon Watch - Auto Fish' }
-        }
-
-    elseif webhookType == "account_stuck" then
-        embed = {
-            title = '⚠️ [Alert] Account Stuck Detected',
-            description = 'Account appears to be stuck - no fish caught in 2+ minutes. Auto-restart attempted.',
-            color = 16776960, -- Yellow/Orange
-            fields = {
-                { name = "👤 Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
-                { name = "🕒 Detected At", value = os.date("%H:%M:%S"), inline = true },
-                { name = "⏱️ Last Fish", value = data and data.timeSinceLastFish or "2+ minutes ago", inline = true },
-                { name = "🔄 Action Taken", value = "Auto Farm restarted", inline = false }
-            },
-            footer = { text = 'Stuck Detection - Auto Fish' }
         }
 
     elseif webhookType == "fish_found" then
@@ -2172,8 +2117,8 @@ local function autoDetectMegalodon()
 
         if not hasTeleportedToMegalodon then
             teleportToMegalodon(eventPosition, true)
-            task.wait(0.5)
-            disableMegalodonLock()
+            -- REMOVED: disableMegalodonLock() - Lock stays active during entire event!
+            print("[Megalodon] ✅ Lock will remain active until event ends")
         end
     else
         -- Handle event end or missing props
@@ -2246,14 +2191,14 @@ end
 -- Contoh konfigurasi di main.lua:
 -- webhook3 = "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
 -- discordid = "123456789012345678"  -- Discord User ID (18 digit number)
-local CONNECTION_WEBHOOK_URL = webhook3 or ""  -- URL webhook khusus untuk status koneksi
+local CONNECTION_WEBHOOK_URL = type(webhook3) == "string" and webhook3 or ""  -- URL webhook khusus untuk status koneksi
 
 local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
-local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
+local PING_THRESHOLD = 1000  -- ms, ping monitoring (webhook disabled, console log only)
 local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
-local DISCORD_USER_ID = discordid or "701247227959574567"  -- Fallback jika discordid tidak terdefinisi
+local DISCORD_USER_ID = type(discordid) == "string" and discordid or "701247227959574567"  -- Fallback jika discordid tidak terdefinisi
 
 -- QUEUE SYSTEM untuk multiple accounts (mencegah rate limiting)
 local webhookQueue = {}
@@ -2854,7 +2799,7 @@ local function setupDisconnectNotifier()
         end
     end)
 
-    -- Monitor network ping for connection issues
+    -- Monitor network ping for connection issues (HIGH PING WEBHOOK DISABLED)
     task.spawn(function()
         local consecutiveFailures = 0
         local maxConsecutiveFailures = 3  -- Fail 3 times before disconnect
@@ -2881,12 +2826,10 @@ local function setupDisconnectNotifier()
                     print("[Disconnect Monitor] Connection recovered")
                 end
 
+                -- HIGH PING DETECTION DISABLED - No webhook sent for high ping
+                -- Just log it to console
                 if ping > PING_THRESHOLD then
-                    print("[Disconnect Monitor] High ping detected: " .. math.floor(ping) .. "ms")
-                    task.spawn(function()
-                        sendDisconnectWebhook(username, "High Ping Detected (" .. math.floor(ping) .. "ms) - Possible connection issue")
-                    end)
-                    break -- Stop monitoring after sending notification
+                    print("[Disconnect Monitor] High ping detected: " .. math.floor(ping) .. "ms (webhook disabled)")
                 end
             end
 
@@ -2985,7 +2928,7 @@ local function setupDisconnectNotifier()
     print("[Disconnect Monitor] All monitoring systems active:")
     print("  - Error message monitoring: ✅")
     print("  - Player removal monitoring: ✅")
-    print("  - Network ping monitoring: ✅")
+    print("  - Network ping monitoring: ✅ (webhook disabled for high ping)")
     print("  - Game freeze detection: ✅")
     print("  - Script error monitoring: ✅")
     print("  - Heartbeat monitoring: ✅")
