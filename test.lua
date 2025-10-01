@@ -172,7 +172,8 @@ Webhook Usage:
 Traditional Connection Features (still active):
 ✅ Sends "Player Connected" when script starts successfully
 ❌ Sends "Player Disconnected" with detailed reason when issues occur
-📊 Includes session duration, ping monitoring, and freeze detection
+📊 Includes session duration and freeze detection
+⚠️ Ping monitoring enabled (high ping webhook DISABLED - console log only)
 
 Note: All status notifications are sent to webhook3 only
 --]]
@@ -1913,46 +1914,25 @@ local function teleportToMegalodon(position, isEventTeleport)
         local teleportPos
         if type(position) == "userdata" and position.X then
             -- If position is a Vector3
-            teleportPos = position + Vector3.new(0, 8, 0) -- Start 8 studs above
+            teleportPos = position + Vector3.new(0, 15, 0) -- Start 15 studs above water
         elseif type(position) == "userdata" and position.Position then
             -- If position is already a CFrame
-            teleportPos = position.Position + Vector3.new(0, 8, 0)
+            teleportPos = position.Position + Vector3.new(0, 15, 0)
         else
             -- Fallback
-            teleportPos = position + Vector3.new(0, 8, 0)
+            teleportPos = position + Vector3.new(0, 15, 0)
         end
 
-        -- Initial teleport above water
+        -- Teleport above water
         rootPart.CFrame = CFrame.new(teleportPos)
-        task.wait(0.15)
+        print("[Megalodon] Teleported to position (Y: " .. math.floor(teleportPos.Y) .. ")")
 
-        -- First jump
-        print("[Megalodon] Jump 1/2")
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        task.wait(0.3)
-
-        -- Move CFrame up after first jump (additional 5 studs)
-        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 5, 0)
-        task.wait(0.2)
-
-        -- Second jump
-        print("[Megalodon] Jump 2/2")
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        task.wait(0.3)
-
-        -- Move CFrame up after second jump (additional 5 studs) - total ~18 studs above water
-        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 5, 0)
-        task.wait(0.2)
-
-        -- Enable floating/lock position only for event teleports
+        -- Enable floating/lock position IMMEDIATELY for event teleports (BEFORE jump)
         if isEventTeleport then
-            -- Get final locked position
-            local finalPosition = rootPart.Position
-
-            -- Create BodyPosition to lock player in air (fly effect)
+            -- Create BodyPosition FIRST to prevent falling
             currentBodyPosition = Instance.new("BodyPosition")
             currentBodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            currentBodyPosition.Position = finalPosition
+            currentBodyPosition.Position = teleportPos
             currentBodyPosition.P = 10000
             currentBodyPosition.D = 1000
             currentBodyPosition.Parent = rootPart
@@ -1966,7 +1946,16 @@ local function teleportToMegalodon(position, isEventTeleport)
             currentBodyGyro.Parent = rootPart
             currentBodyGyro.Name = "MegalodonGyro"
 
-            print("[Megalodon] Fly mode enabled - Position locked at height: " .. math.floor(finalPosition.Y))
+            print("[Megalodon] Fly mode enabled - Position locked IMMEDIATELY")
+
+            -- Wait a moment for physics to settle
+            task.wait(0.2)
+
+            -- Single jump for visual effect (optional, won't affect locked position)
+            print("[Megalodon] Performing jump animation")
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+
+            print("[Megalodon] Position locked at height: " .. math.floor(teleportPos.Y))
         end
     end
 end
@@ -2366,7 +2355,7 @@ end
 local CONNECTION_WEBHOOK_URL = webhook3 or ""  -- URL webhook khusus untuk status koneksi
 
 local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
-local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
+local PING_THRESHOLD = 1000  -- ms, ping monitoring (webhook disabled, console log only)
 local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
@@ -2971,7 +2960,7 @@ local function setupDisconnectNotifier()
         end
     end)
 
-    -- Monitor network ping for connection issues
+    -- Monitor network ping for connection issues (HIGH PING WEBHOOK DISABLED)
     task.spawn(function()
         local consecutiveFailures = 0
         local maxConsecutiveFailures = 3  -- Fail 3 times before disconnect
@@ -2998,12 +2987,10 @@ local function setupDisconnectNotifier()
                     print("[Disconnect Monitor] Connection recovered")
                 end
 
+                -- HIGH PING DETECTION DISABLED - No webhook sent for high ping
+                -- Just log it to console
                 if ping > PING_THRESHOLD then
-                    print("[Disconnect Monitor] High ping detected: " .. math.floor(ping) .. "ms")
-                    task.spawn(function()
-                        sendDisconnectWebhook(username, "High Ping Detected (" .. math.floor(ping) .. "ms) - Possible connection issue")
-                    end)
-                    break -- Stop monitoring after sending notification
+                    print("[Disconnect Monitor] High ping detected: " .. math.floor(ping) .. "ms (webhook disabled)")
                 end
             end
 
@@ -3102,7 +3089,7 @@ local function setupDisconnectNotifier()
     print("[Disconnect Monitor] All monitoring systems active:")
     print("  - Error message monitoring: ✅")
     print("  - Player removal monitoring: ✅")
-    print("  - Network ping monitoring: ✅")
+    print("  - Network ping monitoring: ✅ (webhook disabled for high ping)")
     print("  - Game freeze detection: ✅")
     print("  - Script error monitoring: ✅")
     print("  - Heartbeat monitoring: ✅")
