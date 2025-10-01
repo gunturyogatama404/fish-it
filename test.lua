@@ -1494,17 +1494,60 @@ local function sendStuckNotification()
 end
 
 local function restartAutoFarm()
-    print("[StuckDetection] Attempting to restart Auto Farm...")
+    print("[StuckDetection] Attempting to restart based on active preset...")
 
-    -- Turn off auto farm first
-    if isAutoFarmOn then
-        setAutoFarm(false)
+    -- Check which preset is active
+    local activePreset = config.activePreset or "none"
+
+    if activePreset == "auto1" then
+        print("[StuckDetection] Restarting Auto Preset 1...")
+        -- Turn off preset first
+        if autoPreset1Toggle then
+            autoPreset1Toggle:UpdateToggle(nil, false)
+        end
         task.wait(2)
-    end
+        -- Turn it back on
+        if autoPreset1Toggle then
+            autoPreset1Toggle:UpdateToggle(nil, true)
+        end
+        print("[StuckDetection] Auto Preset 1 restarted")
 
-    -- Turn it back on
-    setAutoFarm(true)
-    print("[StuckDetection] Auto Farm restarted")
+    elseif activePreset == "auto2" then
+        print("[StuckDetection] Restarting Auto Preset 2...")
+        -- Turn off preset first
+        if autoPreset2Toggle then
+            autoPreset2Toggle:UpdateToggle(nil, false)
+        end
+        task.wait(2)
+        -- Turn it back on
+        if autoPreset2Toggle then
+            autoPreset2Toggle:UpdateToggle(nil, true)
+        end
+        print("[StuckDetection] Auto Preset 2 restarted")
+
+    elseif activePreset == "auto3" then
+        print("[StuckDetection] Restarting Auto Preset 3...")
+        -- Turn off preset first
+        if autoPreset3Toggle then
+            autoPreset3Toggle:UpdateToggle(nil, false)
+        end
+        task.wait(2)
+        -- Turn it back on
+        if autoPreset3Toggle then
+            autoPreset3Toggle:UpdateToggle(nil, true)
+        end
+        print("[StuckDetection] Auto Preset 3 restarted")
+
+    else
+        -- Fallback: restart auto farm only if no preset is active
+        print("[StuckDetection] No preset active, restarting Auto Farm only...")
+        if isAutoFarmOn then
+            setAutoFarm(false)
+            task.wait(2)
+        end
+        setAutoFarm(true)
+        print("[StuckDetection] Auto Farm restarted")
+    end
 end
 
 local function checkForStuckState()
