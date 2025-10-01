@@ -540,6 +540,7 @@ local megalodonSavedPosition = nil -- Will store full CFrame (position + orienta
 local hasTeleportedToMegalodon = false
 local currentBodyPosition = nil
 local currentBodyGyro = nil
+local currentBodyVelocity = nil
 
 local isAutoPreset1On = false
 local isAutoPreset2On = false
@@ -1887,7 +1888,6 @@ end
 
 -- ====== MEGALODON HUNT FUNCTIONS ======
 local megalodonLockLoop = nil -- Store the lock loop connection
-local currentBodyVelocity = nil -- Store BodyVelocity for cleanup
 
 local function teleportToMegalodon(position, isEventTeleport)
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") then
