@@ -1866,6 +1866,11 @@ local function resumeFarmingAfterMegalodon(previousAutoFarmState)
     task.spawn(function()
         task.wait(1) -- Wait a moment before resuming
 
+        -- Teleport back to original farming location
+        local farmLocation = config.teleportLocation or "Sisyphus Statue"
+        teleportToNamedLocation(farmLocation)
+        task.wait(2)
+
         -- Check which preset was active
         local activePreset = config.activePreset
 
@@ -3056,7 +3061,7 @@ end
 -- ====================================================================
 -- Configuration from main_noui.lua loader OR saved config.json
 
-print("🎣 [Auto Fish] Starting NO-UI mode (Manual Config)...")
+-- Starting NO-UI mode
 
 -- First, load config (will load from JSON if exists, otherwise use defaults)
 loadConfig()
@@ -3073,7 +3078,6 @@ local useAutoFarm, useAutoSell, useAutoCatch, useAutoWeather, useAutoMegalodon, 
 
 if configExists then
     -- Config exists, use saved settings from JSON
-    print("📂 [Config] Loading from saved file...")
     useAutoFarm = config.autoFarm
     useAutoSell = config.autoSell
     useAutoCatch = config.autoCatch
@@ -3084,11 +3088,8 @@ if configExists then
 
     -- Apply delays from config (using applyDelayConfig)
     applyDelayConfig()
-
-    print("✅ [Config] Loaded from JSON (ignoring main_noui.lua)")
 else
     -- No config file, use settings from main_noui.lua and save them
-    print("📝 [Config] No saved file found, using main_noui.lua settings...")
     useAutoFarm = AUTO_FARM or false
     useAutoSell = AUTO_SELL or false
     useAutoCatch = AUTO_CATCH or false
@@ -3121,19 +3122,13 @@ else
     config.weatherCycleDelay = weatherCycleDelay
 
     saveConfig()
-    print("💾 [Config] Saved to JSON for future sessions")
 end
 
 local GPU_FPS_CAP = GPU_FPS_LIMIT or 8
 
-print("⏱️  [Delays] Fish:", autoFishMainDelay, "| Sell:", autoSellDelay, "| Catch:", autoCatchDelay)
-
 -- Manual configuration function
 local function startManualConfig()
     task.wait(3)  -- Wait for everything to load
-
-    print("⚙️  [Manual Config] Starting features...")
-    print("📍 [Teleport] Target:", useTeleportLoc)
 
     -- Teleport first
     teleportToNamedLocation(useTeleportLoc)
@@ -3142,56 +3137,38 @@ local function startManualConfig()
     -- Enable GPU Saver if configured
     if useGPUSaver then
         enableGPUSaver()
-        print("🎨 [GPU Saver] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Farm if configured
     if useAutoFarm then
         setAutoFarm(true)
-        print("🎣 [Auto Farm] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Sell if configured
     if useAutoSell then
         setSell(true)
-        print("💰 [Auto Sell] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Catch if configured
     if useAutoCatch then
         setAutoCatch(true)
-        print("🐟 [Auto Catch] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Weather if configured
     if useAutoWeather then
         setAutoWeather(true)
-        print("🌤️  [Auto Weather] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Megalodon if configured
     if useAutoMegalodon then
         setAutoMegalodon(true)
-        print("🦈 [Auto Megalodon] ✅ Enabled")
         task.wait(0.5)
     end
-
-    print("✅ [Auto Fish] All configured features active!")
-    print("📊 [Monitor] Check console for status updates every 60s")
-    print("")
-    print("Current Config:")
-    print("  - Auto Farm:", useAutoFarm and "ON" or "OFF")
-    print("  - Auto Sell:", useAutoSell and "ON" or "OFF")
-    print("  - Auto Catch:", useAutoCatch and "ON" or "OFF")
-    print("  - Auto Weather:", useAutoWeather and "ON" or "OFF")
-    print("  - Auto Megalodon:", useAutoMegalodon and "ON" or "OFF")
-    print("  - GPU Saver:", useGPUSaver and "ON" or "OFF")
-    print("  - Location:", useTeleportLoc)
 end
 
 -- ====================================================================
@@ -3240,7 +3217,6 @@ task.spawn(function()
             pcall(function()
                 if sellEvent then
                     sellEvent:InvokeServer()
-                    print("💰 [Auto Sell] Sold fish")
                 end
             end)
         end
@@ -3267,7 +3243,6 @@ task.spawn(function()
                 pcall(function()
                     if WeatherEvent then
                         WeatherEvent:InvokeServer(id)
-                        print("🌤️  [Auto Weather] Bought:", id)
                     end
                 end)
                 local waited = 0
@@ -3306,33 +3281,12 @@ task.spawn(function()
     end
 end)
 
-print("✅ [Auto Loops] All loops started!")
+-- Auto loops started
 
 -- Run manual config auto-start
 task.spawn(startManualConfig)
 
--- Status reporter every 60 seconds
-task.spawn(function()
-    while true do
-        task.wait(60)
-        if startTime then
-            local uptime = os.time() - startTime
-            local hours = math.floor(uptime / 3600)
-            local minutes = math.floor((uptime % 3600) / 60)
-            local seconds = uptime % 60
-            local fish = (sessionStats and sessionStats.totalFish) or 0
-            print(string.format("📊 [Status] Uptime: %02d:%02d:%02d | Fish: %d | Farm: %s | Sell: %s | Catch: %s",
-                hours, minutes, seconds,
-                fish,
-                isAutoFarmOn and "ON" or "OFF",
-                isAutoSellOn and "ON" or "OFF",
-                isAutoCatchOn and "ON" or "OFF"
-            ))
-        end
-    end
-end)
-
-print("🚀 [Auto Fish] Initialization complete!")
+-- Initialization complete (no status reporter to save CPU/RAM)
 
 -- ====================================================================
 --                    SIMPLE GPU SAVER UI
@@ -3391,13 +3345,11 @@ task.spawn(function()
                 toggleButton.BackgroundColor3 = Color3.fromRGB(183, 28, 28)
                 toggleButton.Text = "🎨 GPU Saver: OFF"
                 config.gpuSaver = false
-                print("🎨 [GPU Saver] ❌ Disabled via UI")
             else
                 enableGPUSaver()
                 toggleButton.BackgroundColor3 = Color3.fromRGB(46, 125, 50)
                 toggleButton.Text = "🎨 GPU Saver: ON"
                 config.gpuSaver = true
-                print("🎨 [GPU Saver] ✅ Enabled via UI")
             end
 
             -- Save config
@@ -3442,8 +3394,6 @@ task.spawn(function()
 
         -- Parent to CoreGui
         screenGui.Parent = CoreGui
-
-        print("🎨 [GPU Saver UI] Loaded! Toggle button visible on screen")
     end)
 
     if not success then
