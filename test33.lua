@@ -1,3 +1,37 @@
+-- ====== SCRIPT INITIALIZATION SAFETY CHECK ======
+
+-- Critical dependency validation
+local success, errorMsg = pcall(function()
+    -- Validate critical services
+    local services = {
+        game = game,
+        workspace = workspace,
+        Players = game:GetService("Players"),
+        RunService = game:GetService("RunService"),
+        ReplicatedStorage = game:GetService("ReplicatedStorage"),
+        HttpService = game:GetService("HttpService")
+    }
+
+    for serviceName, service in pairs(services) do
+        if not service then
+            error("Critical service missing: " .. serviceName)
+        end
+    end
+
+    -- Validate LocalPlayer
+    local LocalPlayer = game:GetService("Players").LocalPlayer
+    if not LocalPlayer then
+        error("LocalPlayer not available")
+    end
+
+    return true
+end)
+
+if not success then
+    error("❌ [Auto Fish] Critical dependency check failed: " .. tostring(errorMsg))
+    return
+end
+
 -- ====== ERROR HANDLING SETUP ======
 -- Suppress asset loading errors (like sound approval issues)
 local function suppressAssetErrors()
@@ -24,7 +58,12 @@ local function suppressAssetErrors()
         oldError(...)
     end
 end
-suppressAssetErrors()
+
+-- Apply error suppression
+local suppressSuccess = pcall(suppressAssetErrors)
+if not suppressSuccess then
+    warn("⚠️ [Auto Fish] Error suppression setup failed")
+end
 
 -- ====== AUTOMATIC PERFORMANCE OPTIMIZATION ======
 local function ultimatePerformance()
@@ -49,9 +88,47 @@ local function ultimatePerformance()
             end
         end
     end)
-    print("🚀 Graphics Optimized")
 end
-ultimatePerformance()
+
+-- Safe execution of performance optimization
+local perfSuccess = pcall(ultimatePerformance)
+if not perfSuccess then
+    warn("⚠️ [Auto Fish] Performance optimization failed, continuing...")
+end
+
+-- ====== ANTI-AFK SYSTEM ======
+-- Prevents Roblox from disconnecting due to 20 minute idle timeout
+local function setupAntiAFK()
+    local VirtualUser = game:GetService("VirtualUser")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Method 1: Hook into Roblox's idle detection
+    LocalPlayer.Idled:Connect(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+
+    -- Method 2: Periodic random movements (every 5 minutes as backup)
+    task.spawn(function()
+        while true do
+            task.wait(300) -- Every 5 minutes
+            pcall(function()
+                local character = LocalPlayer.Character
+                if character and character:FindFirstChild("Humanoid") then
+                    -- Small jump to show activity
+                    character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+            end)
+        end
+    end)
+end
+
+-- Initialize Anti-AFK
+local antiAfkSuccess = pcall(setupAntiAFK)
+if not antiAfkSuccess then
+    warn("⚠️ [Auto Fish] Anti-AFK setup failed, continuing...")
+end
 
 -- ====================================================================
 --                        WEBHOOK CONFIGURATION
@@ -61,7 +138,7 @@ IMPORTANT: Configure your webhooks before running this script!
 
 Required webhook variables (set these in your main.lua or loadstring):
 - webhook2: Main webhook for fish notifications and general alerts
-- webhook3: Dedicated webhook for connection status (Connect/Disconnect)
+- webhook3: Dedicated webhook for connection status (Connect/Disconnect/Online Status)
 
 Example usage in your main.lua:
 webhook2 = "https://discord.com/api/webhooks/YOUR_MAIN_WEBHOOK_URL"
@@ -69,14 +146,23 @@ webhook3 = "https://discord.com/api/webhooks/YOUR_CONNECTION_WEBHOOK_URL"
 
 Webhook Usage:
 - webhook2: Fish notifications, megalodon alerts
-- webhook3: Connection status only (Connect/Disconnect)
+- webhook3: Connection status and online monitoring
 
-Connection Status Features:
+🆕 NEW ONLINE STATUS SYSTEM Features:
+🟢 SMART MESSAGE EDITING: Each account gets its own message that updates every 8 seconds
+📝 PERSISTENT MESSAGE ID: Message IDs are saved and reused across sessions
+⏰ REAL-TIME UPDATES: Shows uptime, fish count, coins, level with live timestamps
+🔄 AUTO RECOVERY: Creates new message if old one becomes invalid
+📊 RICH STATUS INFO: Displays comprehensive player statistics
+🔴 OFFLINE DETECTION: Automatically updates message to offline when disconnected
+
+Traditional Connection Features (still active):
 ✅ Sends "Player Connected" when script starts successfully
 ❌ Sends "Player Disconnected" with detailed reason when issues occur
-📊 Includes session duration, ping monitoring, and freeze detection
+📊 Includes session duration and freeze detection
+⚠️ Ping monitoring enabled (high ping webhook DISABLED - console log only)
 
-Note: Disconnect notifications are sent ONLY to webhook3 (not webhook2)
+Note: All status notifications are sent to webhook3 only
 --]]
 
 -- ====================================================================
@@ -119,7 +205,6 @@ do
         originalDestroyTiles = ctrl.DestroyTiles
         ctrl.DestroyTiles = function() return end
         isInventoryHooked = true
-        print("[Inv] Controller hooked. Tile destruction prevented.")
         return true
     end
 
@@ -163,14 +248,12 @@ do
         task.wait(0.5)
         inventoryGUI.Enabled = previousEnabled
         mainFrame.Visible = previousVisible
-        print("[Inv] Initial load complete.")
         if onCompleteCallback then pcall(onCompleteCallback) end
         isLoading = false
     end
 
     function LightweightInventory.start(onRefreshCallback)
         if isInventoryHooked then return end
-        print("[Inv] Starting Background Inventory v2.0...")
         task.spawn(function()
             if hookInventoryController() then
                 task.wait(1)
@@ -182,7 +265,6 @@ do
                     GuiControl.GuiUnfocusedSignal:Connect(function(closedGui)
                         if closedGui == invGUI then task.delay(0.5, function() refreshInventoryTiles(onRefreshCallback) end) end
                     end)
-                    print("[Inv] Listening for manual-close.")
                 end)
 
                 pcall(function()
@@ -190,7 +272,6 @@ do
                     fishCaughtEvent.OnClientEvent:Connect(function()
                         task.delay(1, function() refreshInventoryTiles(onRefreshCallback) end)
                     end)
-                    print("[Inv] Listening for new fish.")
                 end)
             end
         end)
@@ -277,8 +358,6 @@ do
         if imageUrl and imageUrl ~= "" then
             local rawImageUrl = convertToRawGitHubUrl(imageUrl)
             embed.thumbnail = { url = rawImageUrl }
-        else
-            print("[Notifier] Peringatan: Tidak ada URL gambar untuk item '" .. itemData.baseName .. "' di CONFIG.FISH_IMAGES.")
         end
 
         local payload = { embeds = {embed} }
@@ -287,7 +366,6 @@ do
             if req then
                 req({ Url=WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode(payload) })
                 lastWebhookTime = tick()
-                print("[Notifier] Sent notification for: " .. itemData.fullName)
             end
         end)
     end
@@ -343,7 +421,6 @@ do
         if isInitialScan then
             trackedItemCounts = currentItemCounts
             isInitialScan = false
-            print("[Notifier] Initial scan complete. Monitoring for new items.")
             return
         end
 
@@ -362,9 +439,16 @@ end
 --                        INISIALISASI & SISA SCRIPT
 -- ====================================================================
 
--- Memulai sistem inventory dan notifier setelah game siap
+-- Initialize inventory and notifier systems after game is ready
 task.wait(5)
-LightweightInventory.start(DiscordNotifier.scanInventory)
+
+local invSuccess = pcall(function()
+    LightweightInventory.start(DiscordNotifier.scanInventory)
+end)
+
+if not invSuccess then
+    warn("⚠️ [Auto Fish] Inventory system failed to load")
+end
 
 -- Sisa script zfish v6.2.lua...
 local player = game.Players.LocalPlayer
@@ -387,6 +471,9 @@ local sessionStats = {
     bestFish = {name = "None", value = 0},
     fishTypes = {}
 }
+
+-- ====== STUCK DETECTION DISABLED ======
+-- Removed to reduce complexity and register usage
 
 -- ====== FPS TRACKING VARIABLES ====== 
 local RunService = game:GetService("RunService")
@@ -420,9 +507,8 @@ local isAutoCatchOn = false
 local isAutoWeatherOn = false
 local gpuSaverEnabled = false
 local isAutoMegalodonOn = false
-local megalodonSavedPosition = nil
-local hasTeleportedToMegalodon = false
-local currentBodyPosition = nil
+local megalodonLockActive = false
+local megalodonLockConnection = nil
 
 local isAutoPreset1On = false
 local isAutoPreset2On = false
@@ -432,6 +518,8 @@ local isAutoPreset3On = false
 local megalodonEventActive = false
 local megalodonMissingAlertSent = false
 local megalodonEventStartedAt = 0
+local megalodonEventEndAlertSent = false
+local megalodonPreEventFarmState = nil
 
 local HttpService = game:GetService("HttpService")
 
@@ -451,7 +539,6 @@ local function ensureConfigFolder()
         end)
 
         if success then
-            print("[Config] Created config folder: " .. CONFIG_FOLDER)
             return true
         else
             warn("[Config] Failed to create config folder")
@@ -480,11 +567,12 @@ local defaultConfig = {
     autoMegalodon = false,
     activePreset = "none",
     gpuSaver = false,
+    teleportLocation = "Sisyphus Statue",
     chargeFishingDelay = 0.01,
-    autoFishMainDelay = 0.9,
-    autoSellDelay = 34,
+    autoFishDelay = 0.9,
+    autoSellDelay = 45,
     autoCatchDelay = 0.2,
-    weatherIdDelay = 20,
+    weatherIdDelay = 33,
     weatherCycleDelay = 100
 }
 local config = {}
@@ -517,7 +605,6 @@ end
 
 local function saveConfig()
     if not writefile then
-        print("[Config] Write function not available")
         return
     end
 
@@ -538,8 +625,6 @@ local function saveConfig()
         end)
 
         if writeSuccess then
-            print("[Config] Successfully saved config for player: " .. LocalPlayer.Name)
-            print("[Config] Saved to: " .. configFile)
         else
             warn("[Config] Failed to write config file")
         end
@@ -550,7 +635,6 @@ end
 
 local function loadConfig()
     if not readfile or not isfile then
-        print("[Config] File system not available, using defaults")
         config = {}
         for key, value in pairs(defaultConfig) do
             config[key] = value
@@ -562,7 +646,6 @@ local function loadConfig()
     ensureConfigFolder()
 
     local configFile = getConfigFileName()
-    print("[Config] Loading from: " .. configFile)
 
     local success, content = pcall(function()
         if isfile(configFile) then
@@ -577,7 +660,6 @@ local function loadConfig()
         end)
 
         if ok and type(decoded) == "table" then
-            print("[Config] Successfully loaded config for player: " .. LocalPlayer.Name)
             config = validateConfigStructure(decoded)
         else
             print("[Config] Failed to decode JSON, using defaults")
@@ -587,15 +669,13 @@ local function loadConfig()
             end
         end
     else
-        print("[Config] No existing config found for player: " .. LocalPlayer.Name .. ", creating new one")
         config = {}
         for key, value in pairs(defaultConfig) do
             config[key] = value
         end
     end
 
-    -- Always save after loading to ensure file exists and is up to date
-    saveConfig()
+    -- Don't auto-save here, let the manual config section handle it
 end
 
 local function migrateOldConfig()
@@ -613,7 +693,6 @@ local function migrateOldConfig()
 
     for _, oldConfigFile in ipairs(oldConfigFiles) do
         if isfile(oldConfigFile) then
-            print("[Config] Found old config format, migrating: " .. oldConfigFile)
 
             local success, content = pcall(function()
                 return readfile(oldConfigFile)
@@ -633,11 +712,9 @@ local function migrateOldConfig()
                     pcall(function()
                         if delfile then
                             delfile(oldConfigFile)
-                            print("[Config] Old config file deleted after migration: " .. oldConfigFile)
                         end
                     end)
 
-                    print("[Config] Migration completed successfully")
                     return true
                 end
             end
@@ -693,10 +770,12 @@ local function applyDelayConfig()
 
     local function applyField(field, minValue, defaultValue)
         local value = tonumber(config[field])
-        if value == nil then
-            value = defaultValue
+        if value == nil or value == 0 then
+            value = defaultValue or 0.1
             updated = true
         end
+        -- Ensure we have a valid number before math.max
+        value = tonumber(value) or defaultValue or 0.1
         local clamped = math.max(minValue, value)
         if clamped ~= value then
             updated = true
@@ -705,19 +784,18 @@ local function applyDelayConfig()
         return clamped
     end
 
-    chargeFishingDelay = applyField("chargeFishingDelay", 0.1, defaultConfig.chargeFishingDelay)
-    autoFishMainDelay = applyField("autoFishMainDelay", 0.1, defaultConfig.autoFishMainDelay)
-    autoSellDelay = applyField("autoSellDelay", 36, defaultConfig.autoSellDelay)
-    autoCatchDelay = applyField("autoCatchDelay", 0.1, defaultConfig.autoCatchDelay)
+    chargeFishingDelay = applyField("chargeFishingDelay", 0.01, defaultConfig.chargeFishingDelay)
+    autoFishMainDelay = applyField("autoFishDelay", 0.1, defaultConfig.autoFishDelay)
+    autoSellDelay = applyField("autoSellDelay", 30, defaultConfig.autoSellDelay)
+    autoCatchDelay = applyField("autoCatchDelay", 0.01, defaultConfig.autoCatchDelay)
     weatherIdDelay = applyField("weatherIdDelay", 1, defaultConfig.weatherIdDelay)
-    weatherCycleDelay = applyField("weatherCycleDelay", 35, defaultConfig.weatherCycleDelay)
+    weatherCycleDelay = applyField("weatherCycleDelay", 10, defaultConfig.weatherCycleDelay)
 
     if updated then
         pcall(saveConfig)
     end
 
     isApplyingConfig = previousState
-    print("[Config] Delay settings applied from config")
 end
 
 local function roundDelay(value)
@@ -733,7 +811,6 @@ local function setChargeFishingDelay(value)
     end
     chargeFishingDelay = clamped
     updateConfigField("chargeFishingDelay", clamped)
-    print(string.format("[Delays] Charge Fishing Delay: %.2fs", clamped))
 end
 
 local function setAutoFishMainDelay(value)
@@ -745,7 +822,6 @@ local function setAutoFishMainDelay(value)
     end
     autoFishMainDelay = clamped
     updateConfigField("autoFishMainDelay", clamped)
-    print(string.format("[Delays] Auto Fish Main Delay: %.2fs", clamped))
 end
 
 local function setAutoSellDelay(value)
@@ -757,7 +833,6 @@ local function setAutoSellDelay(value)
     end
     autoSellDelay = clamped
     updateConfigField("autoSellDelay", clamped)
-    print(string.format("[Delays] Auto Sell Delay: %.2fs", clamped))
 end
 
 local function setAutoCatchDelay(value)
@@ -769,7 +844,6 @@ local function setAutoCatchDelay(value)
     end
     autoCatchDelay = clamped
     updateConfigField("autoCatchDelay", clamped)
-    print(string.format("[Delays] Auto Catch Delay: %.2fs", clamped))
 end
 
 local function setWeatherIdDelay(value)
@@ -781,7 +855,6 @@ local function setWeatherIdDelay(value)
     end
     weatherIdDelay = clamped
     updateConfigField("weatherIdDelay", clamped)
-    print(string.format("[Delays] Weather ID Delay: %.2fs", clamped))
 end
 
 local function setWeatherCycleDelay(value)
@@ -793,7 +866,6 @@ local function setWeatherCycleDelay(value)
     end
     weatherCycleDelay = clamped
     updateConfigField("weatherCycleDelay", clamped)
-    print(string.format("[Delays] Weather Cycle Delay: %.2fs", clamped))
 end
 
 -- Try to migrate old config first, then load current config
@@ -804,10 +876,6 @@ end
 applyDelayConfig()
 
 -- Player identification info
-print("[Config] Player identification:")
-print("  Username: " .. (LocalPlayer.Name or "Unknown"))
-print("  UserID: " .. (LocalPlayer.UserId or 0))
-print("  Config file: " .. getConfigFileName())
 
 local autoMegalodonToggle
 local autoPreset1Toggle
@@ -824,183 +892,63 @@ local upgradeRodToggle
 local upgradeBaitToggle
 
 -- ====== AUTO UPGRADE STATE & DATA (From Fish v3) ======
-local upgradeState = { rod = false, bait = false }
-local rodIDs = {79, 76, 85, 77, 78, 4, 80, 6, 7, 5}
-local baitIDs = {10, 2, 3, 17, 6, 8, 15, 16}
-local rodPrices = {[79]=350,[76]=3000,[85]=1500,[77]=3000,[78]=5000,[4]=15000,[80]=50000,[6]=215000,[7]=437000,[5]=1000000}
-local baitPrices = {[10]=100,[2]=1000,[3]=3000,[17]=83500,[6]=290000,[8]=630000,[15]=1150000,[16]=1000000}
-local failedRodAttempts, failedBaitAttempts, rodFailedCounts, baitFailedCounts = {}, {}, {}, {}
-local currentRodTarget, currentBaitTarget = nil, nil
+-- Convert upgrade system to globals to save local register space
+upgradeState = { rod = false, bait = false }
+rodIDs = {79, 76, 85, 77, 78, 4, 80, 6, 7, 5, 126}
+baitIDs = {10, 2, 3, 17, 6, 8, 15, 16}
+rodPrices = {[79]=350,[76]=3000,[85]=1500,[77]=3000,[78]=5000,[4]=15000,[80]=50000,[6]=215000,[7]=437000,[5]=1000000,[126]=2500000}
+baitPrices = {[10]=100,[2]=1000,[3]=3000,[17]=83500,[6]=290000,[8]=630000,[15]=1150000,[16]=1000000}
+failedRodAttempts, failedBaitAttempts, rodFailedCounts, baitFailedCounts = {}, {}, {}, {}
+currentRodTarget, currentBaitTarget = nil, nil
 
-local function findNextRodTarget()
-    local a=1;if currentRodTarget then for c=1,#rodIDs do if rodIDs[c]==currentRodTarget then a=c+1;break end end end;for c=a,#rodIDs do local b=rodIDs[c];if rodPrices[b]and(not rodFailedCounts[b]or rodFailedCounts[b]<3)then return b end end;return nil
-end
-local function findNextBaitTarget()
-    local a=1;if currentBaitTarget then for c=1,#baitIDs do if baitIDs[c]==currentBaitTarget then a=c+1;break end end end;for c=a,#baitIDs do local b=baitIDs[c];if baitPrices[b]and(not baitFailedCounts[b]or baitFailedCounts[b]<3)then return b end end;return nil
-end
-local function initializeTargets()
-    currentRodTarget=findNextRodTarget();currentBaitTarget=findNextBaitTarget()
-    if currentRodTarget then print("[AutoUpgrade] Initial rod target: ID "..tostring(currentRodTarget))end
-    if currentBaitTarget then print("[AutoUpgrade] Initial bait target: ID "..tostring(currentBaitTarget))end
-end
-local function getAffordableRod(a)
-    if not currentRodTarget then return end;local b=rodPrices[currentRodTarget];if not b then currentRodTarget=findNextRodTarget();return end
-    if failedRodAttempts[currentRodTarget]and tick()-failedRodAttempts[currentRodTarget]<30 then return end;if a>=b then return currentRodTarget,b end
-end
-local function getAffordableBait(a)
-    if not currentBaitTarget then return end;local b=baitPrices[currentBaitTarget];if not b then currentBaitTarget=findNextBaitTarget();return end
-    if failedBaitAttempts[currentBaitTarget]and tick()-failedBaitAttempts[currentBaitTarget]<30 then return end;if a>=b then return currentBaitTarget,b end
-end
-
-local function setUpgradeRod(a)
-    if upgradeState.rod==a then return end;upgradeState.rod=a;if upgradeRodToggle then upgradeRodToggle:UpdateToggle(nil,a)end;if a then initializeTargets()end;print("🔧 Auto Upgrade Rod: "..(a and "ENABLED" or "DISABLED"))
-end
-local function setUpgradeBait(a)
-    if upgradeState.bait==a then return end;upgradeState.bait=a;if upgradeBaitToggle then upgradeBaitToggle:UpdateToggle(nil,a)end;if a then initializeTargets()end;print("🔧 Auto Upgrade Bait: "..(a and "ENABLED" or "DISABLED"))
-end
+function findNextRodTarget()local a=1;if currentRodTarget then for c=1,#rodIDs do if rodIDs[c]==currentRodTarget then a=c+1;break end end end;for c=a,#rodIDs do local b=rodIDs[c];if rodPrices[b]and(not rodFailedCounts[b]or rodFailedCounts[b]<3)then return b end end;return nil end
+function findNextBaitTarget()local a=1;if currentBaitTarget then for c=1,#baitIDs do if baitIDs[c]==currentBaitTarget then a=c+1;break end end end;for c=a,#baitIDs do local b=baitIDs[c];if baitPrices[b]and(not baitFailedCounts[b]or baitFailedCounts[b]<3)then return b end end;return nil end
+function getAffordableRod(a)if not currentRodTarget then return end;local b=rodPrices[currentRodTarget];if not b then currentRodTarget=findNextRodTarget();return end;if failedRodAttempts[currentRodTarget]and tick()-failedRodAttempts[currentRodTarget]<30 then return end;if a>=b then return currentRodTarget,b end end
+function getAffordableBait(a)if not currentBaitTarget then return end;local b=baitPrices[currentBaitTarget];if not b then currentBaitTarget=findNextBaitTarget();return end;if failedBaitAttempts[currentBaitTarget]and tick()-failedBaitAttempts[currentBaitTarget]<30 then return end;if a>=b then return currentBaitTarget,b end end
 -- ====== END AUTO UPGRADE ======
 
--- ====== FUNGSI UNTUK MENDAPATKAN COIN DAN LEVEL ====== 
-local function getCurrentCoins()
-    local currencyText = "0"
-    local success, result = pcall(function()
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        local events = playerGui and playerGui:FindFirstChild("Events")
-        local frame = events and events:FindFirstChild("Frame")
-        local currencyCounter = frame and frame:FindFirstChild("CurrencyCounter")
-        local counter = currencyCounter and currencyCounter:FindFirstChild("Counter")
-        return counter and counter.Text
-    end)
+-- ====== SHOP PURCHASE FUNCTIONS (GLOBALS TO SAVE LOCAL REGISTERS) ======
+rodDatabase = {luck=79,carbon=76,grass=85,demascus=77,ice=78,lucky=4,midnight=80,steampunk=6,chrome=7,astral=5,ares=126}
+baitDatabase = {topwaterbait=10,luckbait=2,midnightbait=3,deepbait=17,chromabait=6,darkmatterbait=8,corruptbait=15,aetherbait=16}
 
-    if success and result then
-        currencyText = result
-    end
-
-    local cleanText = currencyText:gsub(",", "")
-    local numResult = 0
-    if cleanText:lower():find("k") then
-        local numPart = cleanText:lower():gsub("k", "")
-        numResult = (tonumber(numPart) or 0) * 1000
-    elseif cleanText:lower():find("m") then
-        local numPart = cleanText:lower():gsub("m", "")
-        numResult = (tonumber(numPart) or 0) * 1000000
-    else
-        numResult = tonumber(cleanText) or 0
-    end
-    return numResult
+-- Manual purchase functions (globals to reduce local register usage)
+function buyRod(a)
 end
-
-local function getCurrentLevel()
-    local success, result = pcall(function()
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        if not playerGui then return "Lvl 0" end
-        
-        local xp = playerGui:FindFirstChild("XP")
-        if not xp then return "Lvl 0" end
-        
-        local frame = xp:FindFirstChild("Frame")
-        if not frame then return "Lvl 0" end
-        
-        local levelCount = frame:FindFirstChild("LevelCount")
-        if not levelCount then return "Lvl 0" end
-        
-        return levelCount.Text or "Lvl 0"
-    end)
-    
-    return success and result or "Lvl 0"
+function buyBait(a)
 end
-
--- ====== HELPER FUNCTIONS FOR WEB MONITOR ====== 
-local function getFishCaught()
-    local success, fishCaught = pcall(function()
-        if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then
-            return LocalPlayer.leaderstats.Caught.Value
-        end
-        return 0
-    end)
-
-    return success and fishCaught or 0
+function shopAutoPurchaseOnStartup()
+    -- buyRod(rodDatabase.ares) -- Ares Rod
 end
+--- ====== END SHOP FUNCTIONS ======
 
-local function getBestFish()
-    local success, bestFish = pcall(function()
-        if LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] then
-            return LocalPlayer.leaderstats["Rarest Fish"].Value
-        end
-        return "None"
-    end)
+-- ====== COIN/LEVEL FUNCTIONS (GLOBAL TO SAVE REGISTERS) ======
+function getCurrentCoins()local a="0";local b,c=pcall(function()local d=LocalPlayer:FindFirstChild("PlayerGui")local e=d and d:FindFirstChild("Events")local f=e and e:FindFirstChild("Frame")local g=f and f:FindFirstChild("CurrencyCounter")local h=g and g:FindFirstChild("Counter")return h and h.Text end)if b and c then a=c end;local i=a:gsub(",","")local j=0;if i:lower():find("k")then local k=i:lower():gsub("k","")j=(tonumber(k)or 0)*1000 elseif i:lower():find("m")then local k=i:lower():gsub("m","")j=(tonumber(k)or 0)*1000000 else j=tonumber(i)or 0 end;return j end
+function getCurrentLevel()local a,b=pcall(function()local c=LocalPlayer:FindFirstChild("PlayerGui")if not c then return"Lvl 0"end;local d=c:FindFirstChild("XP")if not d then return"Lvl 0"end;local e=d:FindFirstChild("Frame")if not e then return"Lvl 0"end;local f=e:FindFirstChild("LevelCount")if not f then return"Lvl 0"end;return f.Text or"Lvl 0"end)return a and b or"Lvl 0"end
 
-    return success and bestFish or "None"
-end
+-- ====== HELPER FUNCTIONS (GLOBAL TO SAVE REGISTERS) ======
+function getFishCaught()local a,b=pcall(function()if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then return LocalPlayer.leaderstats.Caught.Value end;return 0 end)return a and b or 0 end
+function getBestFish()local a,b=pcall(function()if LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"]then return LocalPlayer.leaderstats["Rarest Fish"].Value end;return"None"end)return a and b or"None"end
+function getQuestText(a)local b,c=pcall(function()local d=workspace:FindFirstChild("!!! MENU RINGS")if not d then return"Quest not found"end;local e=d:FindFirstChild("Deep Sea Tracker")if not e then return"Quest not found"end;local f=e:FindFirstChild("Board")if not f then return"Quest not found"end;local g=f:FindFirstChild("Gui")if not g then return"Quest not found"end;local h=g:FindFirstChild("Content")if not h then return"Quest not found"end;local i=h:FindFirstChild(a)if not i then return"Quest not found"end;return i.Text or"No data"end)return b and c or"Error fetching quest"end
 
--- fungsi quest
+-- ====== STATS/FORMAT FUNCTIONS (GLOBAL TO SAVE REGISTERS) ======
+function FormatTime(a)a=tonumber(a)or 0;a=math.max(0,math.floor(a))local b=math.floor(a/3600)local c=math.floor((a%3600)/60)local d=a%60;return string.format("%02d:%02d:%02d",b,c,d)end
+function FormatNumber(a)local b=tonumber(a)or 0;local c=tostring(math.floor(b))local d;while true do c,d=string.gsub(c,"^(-?%d+)(%d%d%d)",'%1,%2')if d==0 then break end end;return c end
 
-local function getQuestText(labelName)
-    local success, result = pcall(function()
-        local menuRings = workspace:FindFirstChild("!!! MENU RINGS")
-        if not menuRings then return "Quest not found" end
-        
-        local deepSeaTracker = menuRings:FindFirstChild("Deep Sea Tracker")
-        if not deepSeaTracker then return "Quest not found" end
-        
-        local board = deepSeaTracker:FindFirstChild("Board")
-        if not board then return "Quest not found" end
-        
-        local gui = board:FindFirstChild("Gui")
-        if not gui then return "Quest not found" end
-        
-        local content = gui:FindFirstChild("Content")
-        if not content then return "Quest not found" end
-        
-        local label = content:FindFirstChild(labelName)
-        if not label then return "Quest not found" end
-        
-        return label.Text or "No data"
-    end)
-    
-    return success and result or "Error fetching quest"
-end
-
--- ====== FISHING STATS FUNCTIONS ====== 
--- Format waktu
-local function FormatTime(seconds)
-    -- Ensure we have a valid number
-    seconds = tonumber(seconds) or 0
-    seconds = math.max(0, math.floor(seconds))
-
-    local hours = math.floor(seconds / 3600)
-    local minutes = math.floor((seconds % 3600) / 60)
-    local secs = seconds % 60
-    return string.format("%02d:%02d:%02d", hours, minutes, secs)
-end
-
--- Format angka dengan koma
-local function FormatNumber(num)
-    -- Ensure we have a valid number
-    local number = tonumber(num) or 0
-    local formatted = tostring(math.floor(number))
-    local k
-    while true do  
-        formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
-        if k == 0 then break end
-    end
-    return formatted
-end
-
--- ====== GPU SAVER VARIABLES ====== 
+-- ====== GPU SAVER VARIABLES ======
 local originalSettings = {}
 local whiteScreenGui = nil
 local connections = {}
+local fpsCapConnection = nil
 
 -- ====== DELAY VARIABLES ====== 
 local chargeFishingDelay = 0.01
 local autoFishMainDelay = 0.9
-local autoSellDelay = 34
+local autoSellDelay = 45
 local autoCatchDelay = 0.2
-local weatherIdDelay = 20
+local weatherIdDelay = 33
 local weatherCycleDelay = 100
 
-local HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool
+HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool (global)
 
 
 local function getNetworkEvents()
@@ -1037,8 +985,9 @@ end
 -- Get all network events with proper error handling
 local networkEvents = getNetworkEvents()
 if not networkEvents then
-    error("Failed to initialize network events. Script cannot continue.")
+    error("❌ [Auto Fish] Failed to initialize network events. Script cannot continue.")
     return
+else
 end
 
 -- Extract events for easier access
@@ -1399,13 +1348,28 @@ function enableGPUSaver()
             end
         end
         
-        pcall(function() setfpscap(7) end) -- Limit FPS to 5
+        pcall(function() setfpscap(8) end) -- Limit FPS to 8
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
-    
+
+    -- Create FPS cap monitor to ensure it stays at 8 FPS
+    if fpsCapConnection then
+        fpsCapConnection:Disconnect()
+        fpsCapConnection = nil
+    end
+
+    fpsCapConnection = RunService.Heartbeat:Connect(function()
+        if gpuSaverEnabled then
+            pcall(function()
+                if setfpscap then
+                    setfpscap(8)
+                end
+            end)
+        end
+    end)
+
     createWhiteScreen()
-    print("⚡ GPU Saver Mode: ENABLED")
 
     -- Update toggle if available
     if gpuSaverToggle and not isApplyingConfig then
@@ -1416,30 +1380,35 @@ end
 function disableGPUSaver()
     if not gpuSaverEnabled then return end
     gpuSaverEnabled = false
-    
+
+    -- Disconnect FPS cap monitor
+    if fpsCapConnection then
+        fpsCapConnection:Disconnect()
+        fpsCapConnection = nil
+    end
+
     -- Restore settings
     pcall(function()
         if originalSettings.QualityLevel then
             settings().Rendering.QualityLevel = originalSettings.QualityLevel
         end
-        
+
         Lighting.GlobalShadows = originalSettings.GlobalShadows or true
         Lighting.FogEnd = originalSettings.FogEnd or 100000
         Lighting.Brightness = originalSettings.Brightness or 1
-        
+
         for _, v in pairs(Lighting:GetChildren()) do
             if v:IsA("PostEffect") or v:IsA("Atmosphere") or v:IsA("Sky") then
                 v.Enabled = true
             end
         end
-        
+
         pcall(function() setfpscap(0) end) -- Remove FPS limit
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, true)
         workspace.CurrentCamera.FieldOfView = 70
     end)
-    
+
     removeWhiteScreen()
-    print("⚡ GPU Saver Mode: DISABLED")
 
     -- Update toggle if available
     if gpuSaverToggle and not isApplyingConfig then
@@ -1447,15 +1416,14 @@ function disableGPUSaver()
     end
 end
 
--- ====== FISH CAUGHT EVENT HANDLER ====== 
-local function setupFishTracking() 
-    print("Fish tracking active - monitoring catch count only")
-    
+-- ====== FISH CAUGHT EVENT HANDLER ======
+local function setupFishTracking()
+
     task.spawn(function()
         task.wait(2)
         if LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught then
             local lastCaught = LocalPlayer.leaderstats.Caught.Value
-            
+
             LocalPlayer.leaderstats.Caught.Changed:Connect(function(newValue)
                 local increase = newValue - lastCaught
                 if increase > 0 then
@@ -1466,6 +1434,9 @@ local function setupFishTracking()
         end
     end)
 end
+
+-- ====== STUCK DETECTION REMOVED ======
+-- Removed entire stuck detection system to reduce complexity
 
 -- Call this function
 setupFishTracking()
@@ -1503,7 +1474,6 @@ local function teleportToNamedLocation(targetName)
         for _, location in ipairs(teleportLocations) do
             if location.Name == targetName and location.CFrame then
                 rootPart.CFrame = location.CFrame
-                print("[AutoFish] Teleported to: " .. targetName)
                 break
             end
         end
@@ -1605,24 +1575,14 @@ local function enablePreset(presetKey, locationName)
             end)
         end
 
-        table.insert(steps, function() 
+        table.insert(steps, function()
             enableGPUSaver()
         end)
 
-        -- Set custom delays for presets
-        if presetKey == "auto1" or presetKey == "auto2" then
-            table.insert(steps, function()
-                if autoFishMainSlider then autoFishMainSlider:Set(0.1) else setAutoFishMainDelay(0.1) end
-                if autoCatchSlider then autoCatchSlider:Set(0.1) else setAutoCatchDelay(0.1) end
-                print("[Preset] Delays set for " .. presetKey .. ": Fish(0.1s), Catch(0.1s)")
-            end)
-        elseif presetKey == "auto3" then
-            table.insert(steps, function()
-                if autoFishMainSlider then autoFishMainSlider:Set(5.5) else setAutoFishMainDelay(5.5) end
-                if autoCatchSlider then autoCatchSlider:Set(0.6) else setAutoCatchDelay(0.6) end
-                print("[Preset] Delays set for " .. presetKey .. ": Fish(5.5s), Catch(0.6s)")
-            end)
-        end
+        -- Set custom delays for each preset
+        table.insert(steps, function()
+            setDelaysForPreset(presetKey)
+        end)
 
         runPresetSequence(steps)
 
@@ -1694,22 +1654,20 @@ local function disablePreset(presetKey)
             end,
         }
 
-        -- Reset delays to default
-        if presetKey == "auto1" or presetKey == "auto2" or presetKey == "auto3" then
-            table.insert(steps, function()
-                if autoFishMainSlider then
-                    autoFishMainSlider:Set(defaultConfig.autoFishMainDelay)
-                else
-                    setAutoFishMainDelay(defaultConfig.autoFishMainDelay)
-                end
-                if autoCatchSlider then
-                    autoCatchSlider:Set(defaultConfig.autoCatchDelay)
-                else
-                    setAutoCatchDelay(defaultConfig.autoCatchDelay)
-                end
-                print("[Preset] Delays reset to default: Fish(" .. defaultConfig.autoFishMainDelay .. "s), Catch(" .. defaultConfig.autoCatchDelay .. "s)")
-            end)
-        end
+        -- Reset delays when disabling preset
+        table.insert(steps, function()
+            -- Reset to default delays
+            if autoFishMainSlider then
+                autoFishMainSlider:Set(0.9)
+            else
+                setAutoFishMainDelay(0.9)
+            end
+            if autoCatchSlider then
+                autoCatchSlider:Set(0.2)
+            else
+                setAutoCatchDelay(0.2)
+            end
+        end)
 
         runPresetSequence(steps)
 
@@ -1766,7 +1724,6 @@ local function equipRod()
     pcall(function() 
         if equipEvent then 
             equipEvent:FireServer(1)
-            print("🎣 Rod equipped")
         end 
     end)
 end
@@ -1775,53 +1732,180 @@ local function unequipRod()
     pcall(function() 
         if unequipEvent then 
             unequipEvent:FireServer()
-            print("🎣 Rod unequipped")
         end 
     end)
 end
 
 
--- ====== MEGALODON HUNT FUNCTIONS ====== 
-local function teleportToMegalodon(position, isEventTeleport)
-    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") then
-        local humanoid = player.Character.Humanoid
-        local rootPart = player.Character.HumanoidRootPart
+-- ====== MEGALODON HUNT FUNCTIONS (BODYVELOCITY LOCK) ======
+local megalodonLockedCFrame = nil
+local megalodonPositionLocked = false
+local megalodonBodyVelocity = nil
+local megalodonBodyGyro = nil
+local megalodonCurrentEventPos = nil
 
-        -- Save position before teleport to event
-        if isEventTeleport and not hasTeleportedToMegalodon then
-            megalodonSavedPosition = rootPart.Position
-            hasTeleportedToMegalodon = true
+function teleportToMegalodon(pos, isEvent)
+    local char = player.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not root or not hum then return end
+
+    -- Calculate teleport position
+    local tPos = pos
+    if type(pos) == "userdata" and pos.X then
+        tPos = pos + Vector3.new(0, 5, 0)
+    elseif type(pos) == "userdata" and pos.Position then
+        tPos = pos.Position + Vector3.new(0, 5, 0)
+    end
+
+    if isEvent then
+        -- Check if this is the same event position (avoid re-teleporting)
+        if megalodonCurrentEventPos and (tPos - megalodonCurrentEventPos).Magnitude < 5 then
+            -- Same event, already locked, do nothing
+            return
         end
 
-        -- Remove lock before teleport if exists
-        if currentBodyPosition then
-            currentBodyPosition:Destroy()
-            currentBodyPosition = nil
-        end
+        -- New event or first time, setup lock
+        megalodonCurrentEventPos = tPos
 
-        -- Teleport to position
-        rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
-        task.wait(0.1)
+        -- Clean up old lock if exists
+        disableMegalodonLock()
 
-        -- Jump once
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        task.wait(0.5)
+        -- Teleport to position (8 studs above water to avoid invisible blocks)
+        local finalPos = tPos + Vector3.new(0, 8, 0)
+        root.CFrame = CFrame.new(finalPos)
+        task.wait(0.2)
 
-        -- Enable floating/lock position
-        currentBodyPosition = Instance.new("BodyPosition")
-        currentBodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        currentBodyPosition.Position = position + Vector3.new(0, 5, 0)
-        currentBodyPosition.P = 10000
-        currentBodyPosition.D = 1000
-        currentBodyPosition.Parent = rootPart
+        -- Store locked position
+        megalodonLockedCFrame = root.CFrame
+        megalodonPositionLocked = true
+        megalodonLockActive = true
+
+        -- Create BodyVelocity to lock position (smooth, no shaking)
+        megalodonBodyVelocity = Instance.new("BodyVelocity")
+        megalodonBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        megalodonBodyVelocity.MaxForce = Vector3.new(100000, 100000, 100000)
+        megalodonBodyVelocity.P = 10000
+        megalodonBodyVelocity.Parent = root
+
+        -- Create BodyGyro to prevent rotation
+        megalodonBodyGyro = Instance.new("BodyGyro")
+        megalodonBodyGyro.CFrame = megalodonLockedCFrame
+        megalodonBodyGyro.MaxTorque = Vector3.new(100000, 100000, 100000)
+        megalodonBodyGyro.P = 10000
+        megalodonBodyGyro.Parent = root
+
+        -- Minimal position correction (only when very far)
+        megalodonLockConnection = RunService.Heartbeat:Connect(function()
+            if not root or not root.Parent or not megalodonLockActive then
+                if megalodonLockConnection then
+                    megalodonLockConnection:Disconnect()
+                    megalodonLockConnection = nil
+                end
+                return
+            end
+
+            -- Only correct if drifted extremely far (> 15 studs)
+            -- BodyVelocity handles all normal drifts
+            if (root.Position - megalodonLockedCFrame.Position).Magnitude > 15 then
+                root.CFrame = megalodonLockedCFrame
+                if megalodonBodyVelocity then
+                    megalodonBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+                end
+            end
+        end)
+    else
+        -- Manual teleport without lock
+        root.CFrame = CFrame.new(tPos)
     end
 end
 
-local function disableMegalodonLock()
-    if currentBodyPosition then
-        currentBodyPosition:Destroy()
-        currentBodyPosition = nil
+function disableMegalodonLock()
+    megalodonLockActive = false
+    megalodonLockedCFrame = nil
+    megalodonPositionLocked = false
+    megalodonCurrentEventPos = nil
+
+    if megalodonLockConnection then
+        megalodonLockConnection:Disconnect()
+        megalodonLockConnection = nil
     end
+
+    -- Remove BodyVelocity and BodyGyro
+    if megalodonBodyVelocity then
+        megalodonBodyVelocity:Destroy()
+        megalodonBodyVelocity = nil
+    end
+    if megalodonBodyGyro then
+        megalodonBodyGyro:Destroy()
+        megalodonBodyGyro = nil
+    end
+end
+
+local function formatDuration(seconds)
+    if not seconds or seconds <= 0 then
+        return "Unavailable"
+    end
+
+    seconds = math.floor(seconds)
+    local hours = math.floor(seconds / 3600)
+    local minutes = math.floor((seconds % 3600) / 60)
+    local remainingSeconds = seconds % 60
+
+    if hours > 0 then
+        return string.format("%dh %dm %ds", hours, minutes, remainingSeconds)
+    elseif minutes > 0 then
+        return string.format("%dm %ds", minutes, remainingSeconds)
+    else
+        return string.format("%ds", remainingSeconds)
+    end
+end
+
+local function resumeFarmingAfterMegalodon(previousAutoFarmState)
+    task.spawn(function()
+        task.wait(1) -- Wait a moment before resuming
+
+        -- Check which preset was active
+        local activePreset = config.activePreset
+
+        if activePreset == "auto1" then
+            -- Re-activate Auto 1 (Crater Island)
+            if autoPreset1Toggle then
+                autoPreset1Toggle:UpdateToggle(nil, false)
+                task.wait(0.5)
+                autoPreset1Toggle:UpdateToggle(nil, true)
+            end
+        elseif activePreset == "auto2" then
+            -- Re-activate Auto 2 (Sisyphus)
+            if autoPreset2Toggle then
+                autoPreset2Toggle:UpdateToggle(nil, false)
+                task.wait(0.5)
+                autoPreset2Toggle:UpdateToggle(nil, true)
+            end
+        elseif activePreset == "auto3" then
+            -- Re-activate Auto 3 (Kohana)
+            if autoPreset3Toggle then
+                autoPreset3Toggle:UpdateToggle(nil, false)
+                task.wait(0.5)
+                autoPreset3Toggle:UpdateToggle(nil, true)
+            end
+        else
+            -- No preset active, just resume farming if it was on
+            local shouldResume = previousAutoFarmState
+            if shouldResume == nil then
+                shouldResume = config.autoFarm
+            end
+
+            if shouldResume then
+                if not isAutoFarmOn then
+                    setAutoFarm(true)
+                else
+                    equipRod()
+                end
+            end
+        end
+    end)
 end
 
 -- ====== MEGALODON WEBHOOK ====== 
@@ -1832,9 +1916,9 @@ local maxRetryAttempts = 3
 
 -- ====== UNIFIED WEBHOOK CONFIGURATION ======
 -- Use webhook2 from main.lua if available, otherwise use empty fallback
-local UNIFIED_WEBHOOK_URL = webhook2  -- Uses webhook2 from loadstring
+local UNIFIED_WEBHOOK_URL = type(webhook2) == "string" and webhook2 or ""
 
--- ====== UNIFIED WEBHOOK FUNCTION ====== 
+-- ====== UNIFIED WEBHOOK FUNCTION ======
 local function sendUnifiedWebhook(webhookType, data)
     -- Check if webhook URL is configured
     if not UNIFIED_WEBHOOK_URL or UNIFIED_WEBHOOK_URL == "" then
@@ -1845,7 +1929,6 @@ local function sendUnifiedWebhook(webhookType, data)
     -- Rate limiting check
     local currentTime = tick()
     if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then
-        print('[Webhook] Cooldown active, skipping...')
         return
     end
 
@@ -1863,6 +1946,26 @@ local function sendUnifiedWebhook(webhookType, data)
             },
             footer = { text = 'Megalodon Watch - Auto Fish' }
         }
+    elseif webhookType == "megalodon_ended" then
+        local endedAt = data and data.endedAt or os.time()
+        local startedAt = data and data.startedAt or 0
+        local duration = data and data.duration
+        if (not duration or duration <= 0) and startedAt > 0 then
+            duration = math.max(0, endedAt - startedAt)
+        end
+
+        embed = {
+            title = '[Megalodon] Event Ended',
+            description = 'Megalodon Hunt props removed. Resuming farming routine.',
+            color = 3447003, -- Blue
+            fields = {
+                { name = "Player", value = (player.DisplayName or player.Name or "Unknown"), inline = true },
+                { name = "Ended At", value = os.date("%H:%M:%S", endedAt), inline = true },
+                { name = "Duration", value = formatDuration(duration), inline = true },
+            },
+            footer = { text = 'Megalodon Watch - Auto Fish' }
+        }
+
     elseif webhookType == "fish_found" then
         embed = {
             title = "🎣 SECRET Fish Found",
@@ -1891,7 +1994,6 @@ local function sendUnifiedWebhook(webhookType, data)
             local currentRetryDelay = webhookRetryDelay * (2 ^ (attempt - 1)) -- Exponential backoff
 
             if attempt > 1 then
-                print('[Webhook] Retry attempt ' .. attempt .. ' after ' .. currentRetryDelay .. ' seconds...')
                 task.wait(currentRetryDelay)
             end
 
@@ -1911,14 +2013,12 @@ local function sendUnifiedWebhook(webhookType, data)
 
             if success then
                 lastWebhookTime = tick()
-                print('[Webhook] ' .. webhookType .. ' sent successfully on attempt ' .. attempt)
                 break
             else
                 warn('[Webhook] ' .. webhookType .. ' attempt ' .. attempt .. ' failed: ' .. tostring(err))
 
                 -- Handle specific rate limiting errors
                 if string.find(tostring(err):lower(), "429") or string.find(tostring(err):lower(), "rate") then
-                    print('[Webhook] Rate limited detected, extending cooldown...')
                     lastWebhookTime = tick() + 60 -- Block webhooks for 60 seconds on rate limit
                     task.wait(60) -- Wait longer for rate limit recovery
                     break -- Don't retry immediately on rate limit
@@ -1940,6 +2040,8 @@ end
 local sendMegalodonEventWebhook = function(status, data)
     if status == "missing" then
         sendUnifiedWebhook("megalodon_missing", data)
+    elseif status == "ended" then
+        sendUnifiedWebhook("megalodon_ended", data)
     end
 end
 
@@ -1955,14 +2057,12 @@ local function autoDetectMegalodon()
             -- Iterate through all children of "!!! MENU RINGS" to find the correct "Props" folder
             for _, propsFolder in ipairs(menuRings:GetChildren()) do
                 if propsFolder.Name == "Props" then
-                    if debugMode then print("[Megalodon Debug] Checking Props folder: " .. propsFolder:GetFullName()) end
                     local huntFolder = propsFolder:FindFirstChild("Megalodon Hunt")
                     if huntFolder then
                         local colorPart = huntFolder:FindFirstChild("Color")
                         if colorPart and colorPart.Position then
                             eventPosition = colorPart.Position
                             eventFound = true
-                            print("[Megalodon] Event found at new path: " .. colorPart:GetFullName())
                             break -- Exit the loop once found
                         end
                     end
@@ -1978,7 +2078,6 @@ local function autoDetectMegalodon()
         -- Search for Megalodon event directly in Workspace (handle multiple Props folders)
         for _, child in ipairs(workspace:GetChildren()) do
             if string.lower(child.Name) == "props" then
-                if debugMode then print("[Megalodon Debug] Checking root Props folder: " .. child.Name) end
 
                 local megalodonHunt = child:FindFirstChild("Megalodon Hunt") or
                                     child:FindFirstChild("megalodon hunt") or
@@ -1990,7 +2089,6 @@ local function autoDetectMegalodon()
                 if megalodonHunt and megalodonHunt:FindFirstChild("Color") and megalodonHunt.Color.Position then
                     eventPosition = megalodonHunt.Color.Position
                     eventFound = true
-                    print("[Megalodon] Event found via fallback in: " .. child.Name .. "/" .. megalodonHunt.Name)
                     break
                 end
             end
@@ -2007,7 +2105,6 @@ local function autoDetectMegalodon()
                         if subChild:FindFirstChild("Color") and subChild.Color.Position then
                             eventPosition = subChild.Color.Position
                             eventFound = true
-                            print("[Megalodon] Fallback detection found in: " .. child.Name .. "/" .. subChild.Name)
                             break
                         end
                     end
@@ -2022,31 +2119,41 @@ local function autoDetectMegalodon()
         if not megalodonEventActive then
             megalodonEventActive = true
             megalodonMissingAlertSent = false
+            megalodonEventEndAlertSent = false
+            megalodonPreEventFarmState = isAutoFarmOn
             megalodonEventStartedAt = os.time()
         end
 
-        if not hasTeleportedToMegalodon then
-            teleportToMegalodon(eventPosition, true)
-            task.wait(0.5)
-            disableMegalodonLock()
-        end
+        teleportToMegalodon(eventPosition, true)
     else
-        -- Handle event end
+        -- Handle event end or missing props
         local wasActive = megalodonEventActive
         if wasActive then
             megalodonEventActive = false
+            disableMegalodonLock()
         end
 
-        -- Return to saved position when event ends
-        if hasTeleportedToMegalodon and megalodonSavedPosition then
-            teleportToMegalodon(megalodonSavedPosition, false)
-            megalodonSavedPosition = nil
-            hasTeleportedToMegalodon = false
-
-            if wasActive and not megalodonMissingAlertSent then
+        if wasActive then
+            if not megalodonEventEndAlertSent then
+                megalodonEventEndAlertSent = true
                 megalodonMissingAlertSent = true
-                megalodonEventStartedAt = 0
+
+                local eventEndedAt = os.time()
+                local duration = nil
+                if megalodonEventStartedAt and megalodonEventStartedAt > 0 then
+                    duration = math.max(0, eventEndedAt - megalodonEventStartedAt)
+                end
+
+                sendMegalodonEventWebhook("ended", {
+                    endedAt = eventEndedAt,
+                    startedAt = megalodonEventStartedAt,
+                    duration = duration,
+                })
             end
+
+            megalodonEventStartedAt = 0
+            resumeFarmingAfterMegalodon(megalodonPreEventFarmState)
+            megalodonPreEventFarmState = nil
         elseif not megalodonMissingAlertSent then
             -- Send webhook about missing event only once per session
             megalodonMissingAlertSent = true
@@ -2060,27 +2167,29 @@ local function setAutoMegalodon(state)
     updateConfigField("autoMegalodon", state)
     if not state then
         -- Reset megalodon state
-        megalodonMissingAlertSent = false
         disableMegalodonLock()
-        megalodonSavedPosition = nil
-        hasTeleportedToMegalodon = false
-        megalodonEventActive = false
         megalodonMissingAlertSent = false
+        megalodonEventActive = false
         megalodonEventStartedAt = 0
+        megalodonEventEndAlertSent = false
+        megalodonPreEventFarmState = nil
     end
-    print("🦈 Auto Megalodon Hunt: " .. (state and "ENABLED" or "DISABLED"))
 end
 
 -- ====== CONNECTION STATUS WEBHOOK SYSTEM ======
 -- Webhook khusus untuk status connect/disconnect
-local CONNECTION_WEBHOOK_URL = webhook3 or ""  -- URL webhook khusus untuk status koneksi
+-- PENTING: Pastikan webhook3 dan discordid sudah dikonfigurasi di main.lua sebelum menjalankan script ini!
+-- Contoh konfigurasi di main.lua:
+-- webhook3 = "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+-- discordid = "123456789012345678"  -- Discord User ID (18 digit number)
+local CONNECTION_WEBHOOK_URL = type(webhook3) == "string" and webhook3 or ""  -- URL webhook khusus untuk status koneksi
 
 local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
-local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
+local PING_THRESHOLD = 1000  -- ms, ping monitoring (webhook disabled, console log only)
 local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
-local DISCORD_USER_ID = discordid  -- Ganti dengan User ID Discord yang ingin di-tag
+local DISCORD_USER_ID = type(discordid) == "string" and discordid or "701247227959574567"  -- Fallback jika discordid tidak terdefinisi
 
 -- QUEUE SYSTEM untuk multiple accounts (mencegah rate limiting)
 local webhookQueue = {}
@@ -2088,42 +2197,166 @@ local isProcessingQueue = false
 local WEBHOOK_DELAY = 2  -- seconds between webhook sends
 local lastWebhookSent = 0
 
+-- ====== MESSAGE EDITING SYSTEM ======
+-- Sistem untuk edit message alih-alih kirim pesan baru
+MESSAGE_ID_STORAGE = {}  -- Store message IDs per account (global)
+ONLINE_STATUS_UPDATE_INTERVAL = 8  -- Update setiap 8 detik
+lastOnlineStatusUpdate = 0
+isOnlineStatusActive = false
+onlineStatusMessageId = nil
+
+-- Compact message storage functions
+function saveMessageId(accountId, messageId)
+    MESSAGE_ID_STORAGE[accountId] = MESSAGE_ID_STORAGE[accountId] or {}
+    MESSAGE_ID_STORAGE[accountId].statusMessageId = messageId
+    if writefile and ensureConfigFolder() then
+        pcall(function()
+            writefile(CONFIG_FOLDER .. "/message_ids_" .. accountId .. ".json",
+                HttpService:JSONEncode({statusMessageId = messageId, lastUpdate = os.time(), playerName = LocalPlayer.Name}))
+        end)
+    end
+end
+
+function loadMessageId(accountId)
+    if not readfile or not isfile then return nil end
+    local file = CONFIG_FOLDER .. "/message_ids_" .. accountId .. ".json"
+    if not isfile(file) then return nil end
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(readfile(file)).statusMessageId
+    end)
+    if success and result then
+        MESSAGE_ID_STORAGE[accountId] = MESSAGE_ID_STORAGE[accountId] or {}
+        MESSAGE_ID_STORAGE[accountId].statusMessageId = result
+        return result
+    end
+    return nil
+end
+
+function getStoredMessageId(accountId)
+    return (MESSAGE_ID_STORAGE[accountId] and MESSAGE_ID_STORAGE[accountId].statusMessageId) or loadMessageId(accountId)
+end
+
 -- ====== RECONNECT DETECTION SYSTEM ======
 local lastSessionId = nil
 local lastDisconnectTime = nil
 local RECONNECT_THRESHOLD = 60  -- seconds, if reconnect within this time = quick reconnect
 local NEW_SESSION_THRESHOLD = 60  -- seconds, if offline > 1 minute = treat as new connection
 
--- Fungsi untuk mengirim status koneksi ke webhook khusus
+-- Compact Discord message edit function
+function editDiscordMessage(messageId, embed, content)
+    if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" or not messageId then
+        return false, "Invalid config"
+    end
+
+    local webhookId, webhookToken = CONNECTION_WEBHOOK_URL:match("https://discord%.com/api/webhooks/(%d+)/([%w%-_]+)")
+    if not webhookId or not webhookToken then return false, "Invalid URL" end
+
+    local payload = { embeds = {embed} }
+    if content and content ~= "" then
+        payload.content = content
+        payload.allowed_mentions = {users = {tostring(DISCORD_USER_ID)}}
+    end
+
+    local success, err = pcall(function()
+        local req = syn and syn.request or http_request or (fluxus and fluxus.request) or request
+        if not req then error("No HTTP support") end
+        req({
+            Url = string.format("https://discord.com/api/webhooks/%s/%s/messages/%s", webhookId, webhookToken, messageId),
+            Method = "PATCH",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = HttpService:JSONEncode(payload)
+        })
+    end)
+    return success, err
+end
+
+-- Compact new message sender
+function sendNewStatusMessage(embed, content)
+    if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" then
+        return nil, "No webhook URL"
+    end
+
+    local payload = { embeds = {embed}, wait = true }
+    if content and content ~= "" then
+        payload.content = content
+        payload.allowed_mentions = {users = {tostring(DISCORD_USER_ID)}}
+    end
+
+    local success, response = pcall(function()
+        local req = syn and syn.request or http_request or (fluxus and fluxus.request) or request
+        if not req then error("No HTTP support") end
+        return req({
+            Url = CONNECTION_WEBHOOK_URL,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = HttpService:JSONEncode(payload)
+        })
+    end)
+
+    if success and response and response.Body then
+        local data = HttpService:JSONDecode(response.Body)
+        if data and data.id then return data.id, nil end
+    end
+    return nil, response or "Send failed"
+end
+
+-- Compact online status updater
+function updateOnlineStatus()
+    local accountId = tostring(LocalPlayer.UserId)
+    local uptime = os.time() - startTime
+    local stats = LocalPlayer.leaderstats
+    local fishCount = (stats and stats.Caught and stats.Caught.Value) or 0
+    local bestFish = (stats and stats["Rarest Fish"] and stats["Rarest Fish"].Value) or "None"
+
+    local embed = {
+        title = "🟢 " .. (LocalPlayer.DisplayName or LocalPlayer.Name) .. " - ONLINE",
+        description = "**Status**: Auto Fish Active 🎣",
+        color = 65280,
+        fields = {
+            { name = "⏰ Last Update", value = os.date("%H:%M:%S"), inline = true },
+            { name = "⌛ Uptime", value = FormatTime(uptime), inline = true },
+            { name = "🐠 Total Fish", value = FormatNumber(fishCount), inline = true },
+            { name = "🏆 Best Fish", value = bestFish, inline = true },
+            { name = "💰 Coins", value = FormatNumber(getCurrentCoins()), inline = true },
+            { name = "⭐ Level", value = getCurrentLevel(), inline = true },
+        },
+        footer = { text = "Auto Fish Status • Updates every " .. ONLINE_STATUS_UPDATE_INTERVAL .. "s" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+    }
+
+    local messageId = getStoredMessageId(accountId)
+    if messageId then
+        local success = editDiscordMessage(messageId, embed, "")
+        if success then
+            return true
+        end
+        MESSAGE_ID_STORAGE[accountId] = nil
+    end
+
+    messageId = sendNewStatusMessage(embed, "")
+    if messageId then
+        saveMessageId(accountId, messageId)
+        onlineStatusMessageId = messageId
+        return true
+    end
+    return false
+end
+
+-- Fungsi untuk mengirim status koneksi ke webhook khusus (modified)
 local function sendConnectionStatusWebhook(status, reason)
-    print("[Connection Status] Attempting to send webhook - Status: " .. tostring(status) .. ", Reason: " .. tostring(reason or "none"))
 
     -- Check if webhook URL is configured
     if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" then
         warn('[Connection Status] Webhook URL not configured! Please set CONNECTION_WEBHOOK_URL variable.')
-        print("[Connection Status] Current webhook3 value: " .. tostring(webhook3 or "nil"))
         return
     end
 
-    print("[Connection Status] Webhook URL configured, proceeding to send...")
 
     local embed = {}
 
-    if status == "connected" then
-        embed = {
-            title = "🟢 Player Connected",
-            description = "Auto Fish script has been successfully started",
-            color = 65280, -- Green
-            fields = {
-                { name = "👤 Player", value = LocalPlayer.DisplayName or LocalPlayer.Name or "Unknown", inline = true },
-                { name = "🕒 Time", value = os.date("%H:%M:%S"), inline = true },
-                { name = "🎮 Game", value = "🐠 Fish It", inline = true },
-                { name = "📱 Status", value = "Auto Fish Active", inline = false }
-            },
-            footer = { text = "Connection Monitor • Auto Fish Script" },
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
-        }
-    elseif status == "reconnected" then
+    -- NOTE: "connected" status removed to reduce webhook spam
+    -- Only "reconnected" and "disconnected" will send notifications
+    if status == "reconnected" then
         embed = {
             title = "🔄 Player Reconnected",
             description = reason or "Player has successfully reconnected to the server",
@@ -2161,47 +2394,52 @@ local function sendConnectionStatusWebhook(status, reason)
     -- Prepare payload with mentions for disconnect and reconnect status
     local payload = { embeds = {embed} }
 
+    -- Prepare content with Discord mentions
+    local userIdStr = tostring(DISCORD_USER_ID)
+    local playerName = LocalPlayer.DisplayName or LocalPlayer.Name or "Player"
+
     if status == "disconnected" then
-        -- Add content field with mentions for disconnect notifications
-        payload.content = "<@" .. DISCORD_USER_ID .. "> 🔴 **ALERT: Player telah DISCONNECT!** 🚨"
+        -- Always include mention for disconnect notifications
+        payload.content = "<@" .. userIdStr .. "> 🔴 **ALERT: " .. playerName .. " TELAH DISCONNECT!** 🚨"
 
     elseif status == "reconnected" then
-        -- Add content field with mentions for reconnect notifications
-        payload.content = "<@" .. DISCORD_USER_ID .. "> 🟡 **Player telah RECONNECT!** ✅"
-
-    elseif status == "connected" then
-        -- No tag for normal connection, but add user info in embed
-        payload.content = ""
+        -- Always include mention for reconnect notifications
+        payload.content = "<@" .. userIdStr .. "> 🟡 **" .. playerName .. " TELAH RECONNECT!** ✅"
+    else
+        -- Unknown status or "connected" (which is now disabled)
+        warn('[Connection Status] Unknown or disabled status: ' .. tostring(status))
+        return
     end
 
-    -- Always add allowed_mentions for any status that has content with user mention
+    -- Always add allowed_mentions if content has mentions
     if payload.content and payload.content ~= "" then
-        -- Ensure DISCORD_USER_ID is string and valid
-        local userIdStr = tostring(DISCORD_USER_ID)
-
-        payload.allowed_mentions = {
-            users = {userIdStr}
-        }
-
-        print("[Connection Status] DEBUG - Notification with tag:")
-        print("[Connection Status] - Status: " .. status)
-        print("[Connection Status] - Content: " .. payload.content)
-        print("[Connection Status] - User ID: " .. userIdStr)
-        print("[Connection Status] - Allowed mentions set for user: " .. userIdStr)
-
-        -- Validate the mention format
+        -- Check if content contains user mention
         if string.find(payload.content, "<@" .. userIdStr .. ">") then
-            print("[Connection Status] - ✅ Mention format validated")
+            -- CRITICAL: Make sure allowed_mentions format is correct
+            payload.allowed_mentions = {
+                parse = {},  -- Don't parse @everyone, @here, or @role
+                users = {userIdStr},  -- Allow mention for this specific user ID
+                roles = {}  -- No role mentions
+            }
+
         else
-            print("[Connection Status] - ❌ Mention format validation failed!")
+            -- No allowed_mentions if no user mention in content
+            payload.allowed_mentions = {
+                parse = {},
+                users = {},
+                roles = {}
+            }
         end
+
     end
 
     local body = HttpService:JSONEncode(payload)
 
     -- DEBUG: Print full payload before sending
-    print("[Connection Status] DEBUG - Full payload JSON:")
-    print(body)
+
+    -- Additional validation debug
+    if payload.allowed_mentions then
+    end
 
     -- Send webhook with retry logic
     task.spawn(function()
@@ -2213,26 +2451,57 @@ local function sendConnectionStatusWebhook(status, reason)
             local retryDelay = 2 * attempt -- Progressive delay
 
             if attempt > 1 then
-                print('[Connection Status] Retry attempt ' .. attempt .. ' after ' .. retryDelay .. ' seconds...')
                 task.wait(retryDelay)
             end
 
             success, err = pcall(function()
+                local httpMethod = nil
+                local response = nil
+
                 if syn and syn.request then
-                    syn.request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    httpMethod = "syn.request"
+                    response = syn.request({
+                        Url = CONNECTION_WEBHOOK_URL,
+                        Method = "POST",
+                        Headers = {["Content-Type"] = "application/json"},
+                        Body = body
+                    })
                 elseif http_request then
-                    http_request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    httpMethod = "http_request"
+                    response = http_request({
+                        Url = CONNECTION_WEBHOOK_URL,
+                        Method = "POST",
+                        Headers = {["Content-Type"] = "application/json"},
+                        Body = body
+                    })
                 elseif fluxus and fluxus.request then
-                    fluxus.request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    httpMethod = "fluxus.request"
+                    response = fluxus.request({
+                        Url = CONNECTION_WEBHOOK_URL,
+                        Method = "POST",
+                        Headers = {["Content-Type"] = "application/json"},
+                        Body = body
+                    })
                 elseif request then
-                    request({ Url=CONNECTION_WEBHOOK_URL, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body })
+                    httpMethod = "request"
+                    response = request({
+                        Url = CONNECTION_WEBHOOK_URL,
+                        Method = "POST",
+                        Headers = {["Content-Type"] = "application/json"},
+                        Body = body
+                    })
                 else
                     error("Executor does not support HTTP requests")
                 end
+
+
+                if response then
+                end
+
+                return response
             end)
 
             if success then
-                print('[Connection Status] ' .. status .. ' notification sent successfully on attempt ' .. attempt)
                 break
             else
                 warn('[Connection Status] ' .. status .. ' attempt ' .. attempt .. ' failed: ' .. tostring(err))
@@ -2251,23 +2520,16 @@ local function loadSessionData()
     local success, sessionId, disconnectTime = pcall(function()
         if readfile and isfile then
             local sessionFile = CONFIG_FOLDER .. "/last_session_" .. LocalPlayer.UserId .. ".json"
-            print("[Reconnect] CONFIG_FOLDER: " .. tostring(CONFIG_FOLDER))
-            print("[Reconnect] LocalPlayer.UserId: " .. tostring(LocalPlayer.UserId))
-            print("[Reconnect] Checking session file: " .. sessionFile)
 
             if isfile(sessionFile) then
                 local content = readfile(sessionFile)
-                print("[Reconnect] Session file found, content length: " .. #content)
 
                 local data = HttpService:JSONDecode(content)
-                print("[Reconnect] Loaded session data - SessionID: " .. string.sub(tostring(data.sessionId or "unknown"), 1, 8) .. "..., DisconnectTime: " .. tostring(data.disconnectTime))
 
                 return data.sessionId, data.disconnectTime
             else
-                print("[Reconnect] No session file found")
             end
         else
-            print("[Reconnect] File operations not available")
         end
         return nil, nil
     end)
@@ -2283,7 +2545,6 @@ end
 -- Save session data
 local function saveSessionData(sessionId, disconnectTime)
     if not writefile then
-        print("[Reconnect] writefile not available")
         return
     end
 
@@ -2300,7 +2561,6 @@ local function saveSessionData(sessionId, disconnectTime)
         userId = LocalPlayer.UserId
     }
 
-    print("[Reconnect] Saving session data - SessionID: " .. string.sub(tostring(sessionId or "unknown"), 1, 8) .. "..., DisconnectTime: " .. tostring(disconnectTime))
 
     local success, err = pcall(function()
         local encoded = HttpService:JSONEncode(sessionData)
@@ -2308,7 +2568,6 @@ local function saveSessionData(sessionId, disconnectTime)
     end)
 
     if success then
-        print("[Reconnect] Session data saved to: " .. sessionFile)
     else
         print("[Reconnect] Failed to save session data: " .. tostring(err))
     end
@@ -2326,33 +2585,25 @@ local function initializeReconnectDetection()
     local currentSessionId = game.JobId
     local currentTime = os.time()
 
-    print("[Reconnect] Initializing reconnect detection...")
-    print("[Reconnect] Current SessionID: " .. string.sub(tostring(currentSessionId or "unknown"), 1, 8) .. "...")
-    print("[Reconnect] Current Time: " .. tostring(currentTime))
 
     -- Load previous session data
     lastSessionId, lastDisconnectTime = loadSessionData()
-    print("[Reconnect] Loaded - lastSessionId: " .. tostring(lastSessionId and string.sub(tostring(lastSessionId or "unknown"), 1, 8) .. "..." or "nil") .. ", lastDisconnectTime: " .. tostring(lastDisconnectTime or "nil"))
 
     if lastSessionId and lastDisconnectTime then
         local timeDiff = currentTime - lastDisconnectTime
-        print("[Reconnect] Time difference: " .. timeDiff .. " seconds")
 
-        -- NEW LOGIC: If offline > 1 minute, treat as new session
+        -- NEW LOGIC: If offline > 1 minute, treat as reconnect (not new connection)
         if timeDiff > NEW_SESSION_THRESHOLD then
-            print("[Reconnect] Offline > 1 minute (" .. timeDiff .. "s) - treating as new connection")
             local success, err = pcall(function()
-                sendConnectionStatusWebhook("connected", "New connection after " .. math.floor(timeDiff/60) .. " minute(s) offline")
+                sendConnectionStatusWebhook("reconnected", "Reconnected after " .. math.floor(timeDiff/60) .. " minute(s) offline")
             end)
             if not success then
-                print("[Reconnect] Error sending new connection webhook: " .. tostring(err))
+                print("[Reconnect] Error sending reconnect webhook: " .. tostring(err))
             end
         else
             -- Within 1 minute threshold - check reconnect type
             if currentSessionId == lastSessionId then
                 -- Same server session
-                print("[Reconnect] Same server detected!")
-                print("[Reconnect] Quick reconnect detected - sending webhook")
                 local sessionPreview = string.sub(tostring(currentSessionId or "unknown"), 1, 8)
                 local success, err = pcall(function()
                     sendConnectionStatusWebhook("reconnected", "Quick reconnect detected (Session: " .. sessionPreview .. "..., Time: " .. tostring(timeDiff) .. "s)")
@@ -2362,8 +2613,6 @@ local function initializeReconnectDetection()
                 end
             else
                 -- Different server session within threshold
-                print("[Reconnect] Different server detected!")
-                print("[Reconnect] Server change reconnect detected - sending webhook")
                 local sessionPreview = string.sub(tostring(currentSessionId or "unknown"), 1, 8)
                 local success, err = pcall(function()
                     sendConnectionStatusWebhook("reconnected", "Reconnected to different server (New Session: " .. sessionPreview .. "..., Time: " .. tostring(timeDiff) .. "s)")
@@ -2374,66 +2623,80 @@ local function initializeReconnectDetection()
             end
         end
     else
-        -- No previous session data = fresh start
-        print("[Reconnect] No previous session data found - fresh start")
-        local success, err = pcall(function()
-            sendConnectionStatusWebhook("connected")
-        end)
-        if not success then
-            print("[Reconnect] Error sending fresh start webhook: " .. tostring(err))
-        end
+        -- No previous session data = fresh start (no webhook sent to avoid spam)
+        -- Webhook "connected" disabled to reduce spam
+        -- Only reconnect and disconnect will send notifications
     end
 
     -- Save current session as the new baseline
     lastSessionId = currentSessionId
     lastDisconnectTime = nil  -- Reset disconnect time since we're connected
-    print("[Reconnect] Initialization complete!")
 end
 
 -- Send connection status notification when script starts
 task.spawn(function()
     -- Wait a bit to ensure all services are loaded
-    print("[Reconnect] Starting initialization after 2 second delay...")
     task.wait(2)
 
     -- Debug: Check if function exists
-    print("[Reconnect] Function check - sendConnectionStatusWebhook exists: " .. tostring(sendConnectionStatusWebhook ~= nil))
-    print("[Reconnect] Function check - sendConnectionStatusWebhook type: " .. tostring(type(sendConnectionStatusWebhook)))
 
     initializeReconnectDetection()
-    print("✅ Auto Fish script fully initialized and connected!")
+
+    -- NOTE: Online status updates are disabled to reduce webhook spam
+    -- Only connect/disconnect/reconnect notifications will be sent
 end)
 
 local function sendDisconnectWebhook(username, reason)
-    if hasSentDisconnectWebhook then return end
+    if hasSentDisconnectWebhook then
+        return
+    end
+
     hasSentDisconnectWebhook = true
 
-    -- Save session data before disconnect for reconnect detection
-    saveSessionData(game.JobId, os.time())
+    -- Stop online status timer and update to offline
+    pcall(stopOnlineStatusTimer)
 
-    -- Send only to dedicated connection status webhook (webhook3)
-    sendConnectionStatusWebhook("disconnected", reason)
+    -- Save session data before disconnect for reconnect detection
+    pcall(function()
+        saveSessionData(game.JobId, os.time())
+    end)
+
+    -- Send disconnect notification with user tag
+    pcall(function()
+        sendConnectionStatusWebhook("disconnected", reason or "Unknown disconnect reason")
+    end)
+
 end
 
 local function setupDisconnectNotifier()
-    local username = LocalPlayer.Name
+    local username = LocalPlayer.Name or "Unknown"
     local GuiService = game:GetService("GuiService")
+
 
     -- Monitor error messages for disconnect reasons
     GuiService.ErrorMessageChanged:Connect(function(message)
-        local lowerMessage = string.lower(message)
+        if hasSentDisconnectWebhook then return end -- Prevent multiple sends
+
+        print("[Disconnect Monitor] Error message detected: " .. tostring(message))
+        local lowerMessage = string.lower(tostring(message))
         local reason = "Unknown"
 
-        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") then
+        if lowerMessage:find("disconnect") or lowerMessage:find("connection lost") or lowerMessage:find("lost connection") then
             reason = "Connection Lost: " .. message
-        elseif lowerMessage:find("kick") or lowerMessage:find("banned") then
-            reason = "Kicked: " .. message
-        elseif lowerMessage:find("timeout") then
-            reason = "Timeout: " .. message
-        elseif lowerMessage:find("error") then
-            reason = "General Error: " .. message
+        elseif lowerMessage:find("kick") or lowerMessage:find("banned") or lowerMessage:find("removed") then
+            reason = "Kicked/Banned: " .. message
+        elseif lowerMessage:find("timeout") or lowerMessage:find("timed out") then
+            reason = "Connection Timeout: " .. message
+        elseif lowerMessage:find("server") and lowerMessage:find("full") then
+            reason = "Server Full: " .. message
+        elseif lowerMessage:find("shut") or lowerMessage:find("restart") then
+            reason = "Server Shutdown/Restart: " .. message
+        elseif lowerMessage:find("network") then
+            reason = "Network Error: " .. message
         else
-            return -- Don't send webhook for unrelated errors
+            -- For debugging, log all errors but don't send webhook
+            print("[Disconnect Monitor] Non-disconnect error ignored: " .. message)
+            return
         end
 
         task.spawn(function()
@@ -2441,16 +2704,29 @@ local function setupDisconnectNotifier()
         end)
     end)
 
-    -- Monitor for player removal
+    -- Monitor for player removal (enhanced)
     Players.PlayerRemoving:Connect(function(removedPlayer)
-        if removedPlayer == LocalPlayer and not hasSentDisconnectWebhook then
-            task.spawn(function()
-                sendDisconnectWebhook(username, "Disconnected (Player Removed)")
-            end)
+        if removedPlayer == LocalPlayer then
+            if not hasSentDisconnectWebhook then
+                task.spawn(function()
+                    sendDisconnectWebhook(username, "Player Removed from Game (Clean Disconnect)")
+                end)
+            end
         end
     end)
 
-    -- Monitor network ping for connection issues
+    -- Monitor for game leaving
+    game:GetService("GuiService").ErrorMessageChanged:Connect(function(message)
+        if message and (message:find("Leaving") or message:find("Disconnecting")) then
+            if not hasSentDisconnectWebhook then
+                task.spawn(function()
+                    sendDisconnectWebhook(username, "Game Leaving: " .. message)
+                end)
+            end
+        end
+    end)
+
+    -- Monitor network ping for connection issues (HIGH PING WEBHOOK DISABLED)
     task.spawn(function()
         local consecutiveFailures = 0
         local maxConsecutiveFailures = 3  -- Fail 3 times before disconnect
@@ -2474,15 +2750,11 @@ local function setupDisconnectNotifier()
                 -- Reset failure counter on successful ping
                 if consecutiveFailures > 0 then
                     consecutiveFailures = 0
-                    print("[Disconnect Monitor] Connection recovered")
                 end
 
+                -- HIGH PING DETECTION DISABLED - No webhook sent for high ping
+                -- Just log it to console
                 if ping > PING_THRESHOLD then
-                    print("[Disconnect Monitor] High ping detected: " .. math.floor(ping) .. "ms")
-                    task.spawn(function()
-                        sendDisconnectWebhook(username, "High Ping Detected (" .. math.floor(ping) .. "ms) - Possible connection issue")
-                    end)
-                    break -- Stop monitoring after sending notification
                 end
             end
 
@@ -2499,33 +2771,217 @@ local function setupDisconnectNotifier()
         end
     end)
 
-    print("🚨 Advanced disconnect notifier setup complete")
+    -- Monitor for Roblox core errors
+    local ScriptContext = game:GetService("ScriptContext")
+    ScriptContext.Error:Connect(function(message, stack, script)
+        if hasSentDisconnectWebhook then return end
+
+        local lowerMessage = string.lower(tostring(message))
+        if lowerMessage:find("disconnect") or lowerMessage:find("network") or
+           lowerMessage:find("timeout") or lowerMessage:find("connection") then
+            print("[Disconnect Monitor] Script error suggests disconnect: " .. tostring(message))
+            task.spawn(function()
+                sendDisconnectWebhook(username, "Script Error (Network/Connection): " .. tostring(message))
+            end)
+        end
+    end)
+
+    -- Heartbeat monitoring for complete game freeze
+    local lastHeartbeat = tick()
+    local heartbeatFailureCount = 0
+
+    RunService.Heartbeat:Connect(function()
+        lastHeartbeat = tick()
+        heartbeatFailureCount = 0 -- Reset on successful heartbeat
+    end)
+
+    -- Check for heartbeat failures
+    task.spawn(function()
+        while true do
+            task.wait(5) -- Check every 5 seconds
+            local currentTime = tick()
+            local timeSinceLastHeartbeat = currentTime - lastHeartbeat
+
+            if timeSinceLastHeartbeat > 10 then -- If no heartbeat for 10 seconds
+                heartbeatFailureCount = heartbeatFailureCount + 1
+                print("[Disconnect Monitor] Heartbeat failure detected! Count: " .. heartbeatFailureCount .. ", Time since last: " .. string.format("%.2f", timeSinceLastHeartbeat) .. "s")
+
+                if heartbeatFailureCount >= 2 and not hasSentDisconnectWebhook then
+                    task.spawn(function()
+                        sendDisconnectWebhook(username, "Heartbeat Failure - Game Unresponsive (" .. string.format("%.2f", timeSinceLastHeartbeat) .. "s)")
+                    end)
+                    break
+                end
+            end
+        end
+    end)
+
+    -- Emergency disconnect detection via workspace monitoring
+    local workspaceConnection
+    workspaceConnection = workspace.ChildAdded:Connect(function()
+        -- This connection will be severed on disconnect
+        -- If we lose connection, this won't fire
+    end)
+
+    -- Monitor workspace connection loss
+    task.spawn(function()
+        task.wait(10) -- Wait for initialization
+        local lastWorkspaceCheck = tick()
+
+        while true do
+            task.wait(15) -- Check every 15 seconds
+
+            pcall(function()
+                -- Try to access workspace - this will fail on disconnect
+                local _ = workspace.Name
+                lastWorkspaceCheck = tick()
+            end)
+
+            local currentTime = tick()
+            if currentTime - lastWorkspaceCheck > 30 and not hasSentDisconnectWebhook then
+                print("[Disconnect Monitor] Workspace access failure detected!")
+                task.spawn(function()
+                    sendDisconnectWebhook(username, "Workspace Access Failure - Likely Disconnected")
+                end)
+                break
+            end
+        end
+    end)
+
+end
+
+-- Initialize Discord mention validation
+local discordValid = pcall(validateDiscordMention)
+if discordValid then
+else
+    warn("⚠️ [Auto Fish] Discord configuration validation failed")
 end
 
 -- Initialize disconnect notifier
-setupDisconnectNotifier()
+local monitorSuccess = pcall(setupDisconnectNotifier)
+if monitorSuccess then
+else
+    warn("⚠️ [Auto Fish] Disconnect monitor setup failed")
+end
 
--- TEST FUNCTIONS untuk testing notification dengan tags (hapus setelah testing)
+-- Auto-run test untuk memastikan sistem berfungsi (uncomment untuk testing)
+-- task.spawn(function()
+--     task.wait(5) -- Wait 5 seconds after startup
+--     testDisconnectNotification()
+-- end)
+
+-- ====== ONLINE STATUS TIMER SYSTEM ======
+-- Timer untuk update status online setiap 8 detik
+local function startOnlineStatusTimer()
+    isOnlineStatusActive = true
+
+    -- Initial status message
+    task.spawn(function()
+        task.wait(3) -- Wait for everything to load
+        updateOnlineStatus()
+    end)
+
+    -- Regular updates every 8 seconds
+    task.spawn(function()
+        while isOnlineStatusActive do
+            task.wait(ONLINE_STATUS_UPDATE_INTERVAL)
+
+            if isOnlineStatusActive then
+                local currentTime = tick()
+                if currentTime - lastOnlineStatusUpdate >= ONLINE_STATUS_UPDATE_INTERVAL then
+                    local success = updateOnlineStatus()
+                    if success then
+                        lastOnlineStatusUpdate = currentTime
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Function untuk stop online status updates (saat disconnect)
+-- DISABLED: Online status system is turned off to reduce webhook spam
+local function stopOnlineStatusTimer()
+    isOnlineStatusActive = false
+    -- No message editing needed since online status is disabled
+end
+
+-- DISABLED: Online status timer to reduce webhook spam
+-- Only connect/disconnect/reconnect notifications will be sent
+-- startOnlineStatusTimer()
+
+-- ====== TEST FUNCTIONS & ERROR HANDLING ======
+-- TEST FUNCTIONS untuk testing sistem online status baru
+local function testOnlineStatusUpdate()
+    local success = updateOnlineStatus()
+    if success then
+    else
+        print("[TEST] ❌ Online status update test FAILED")
+    end
+end
+
+local function testOfflineStatusUpdate()
+    stopOnlineStatusTimer()
+end
+
+-- TEST FUNCTIONS untuk testing notification dengan tags
 local function testDisconnectNotification()
-    print("[TEST] Testing disconnect notification with tags...")
-    sendConnectionStatusWebhook("disconnected", "TEST: Manual disconnect test - Tag system check")
+    sendConnectionStatusWebhook("disconnected", "TEST: Manual disconnect test - Tag system check for User ID " .. tostring(DISCORD_USER_ID))
 end
 
 local function testReconnectNotification()
-    print("[TEST] Testing reconnect notification with tags...")
-    sendConnectionStatusWebhook("reconnected", "TEST: Manual reconnect test - Tag system check")
+    sendConnectionStatusWebhook("reconnected", "TEST: Manual reconnect test - Tag system check for User ID " .. tostring(DISCORD_USER_ID))
 end
 
--- ENABLE untuk test notifications (comment kembali setelah testing):
---[[ DISABLED - Remove test notifications
+-- Test function untuk validasi Discord mention format
+local function validateDiscordMention()
+    local userIdStr = tostring(DISCORD_USER_ID)
+    local mentionFormat = "<@" .. userIdStr .. ">"
+
+
+    -- Test allowed_mentions structure
+    local testAllowedMentions = {
+        parse = {},
+        users = {userIdStr},
+        roles = {}
+    }
+
+    return userIdStr
+end
+
+-- ERROR HANDLING untuk webhook failures
+local function handleWebhookError(errorType, error)
+    print("[Error Handler] " .. errorType .. " failed: " .. tostring(error))
+
+    -- Online status updates are disabled, no retry needed
+    -- Only reconnect/disconnect webhooks are active
+end
+
+-- Debug function untuk check message IDs
+local function debugMessageStorage()
+    for accountId, data in pairs(MESSAGE_ID_STORAGE) do
+    end
+end
+
+-- ====== OPTIMIZATIONS SUMMARY ======
+-- Optimizations made to fix "Out of local registers" error:
+-- 1. Converted local variables to global: MESSAGE_ID_STORAGE, upgradeState, etc.
+-- 2. Compacted functions: editDiscordMessage, sendNewStatusMessage, updateOnlineStatus
+-- 3. Added createInstance helper to reduce Instance.new() local variables
+-- 4. Simplified conditionals and reduced temporary variables
+-- 5. Converted function declarations from local to global where possible
+
+-- ENABLE untuk test functions (uncomment untuk testing):
+--[[ DISABLED - Remove test functions untuk production
 task.spawn(function()
+    task.wait(10)
+    testOnlineStatusUpdate()
     task.wait(5)
-    print("[TEST] Starting tag tests in 5 seconds...")
-    testDisconnectNotification()
-    task.wait(3)
-    testReconnectNotification()
+    debugMessageStorage()
 end)
 --]]
+
+-- Quick test untuk verify optimizations worked
 
 
 -- ====== ENHANCED TOGGLE FUNCTIONS ====== 
@@ -2535,18 +2991,15 @@ local function setAutoFarm(state)
     
     if state then
         equipRod() -- Auto equip rod when starting
-        print("🚜 Auto Farm: ENABLED")
     else
         cancelFishing()
         unequipRod() -- Auto unequip when stopping
-        print("🚜 Auto Farm: DISABLED")
     end
 end
 
 local function setSell(state)
     isAutoSellOn = state
     updateConfigField("autoSell", state)
-    print("💰 Auto Sell: " .. (state and "ENABLED" or "DISABLED"))
 end
 
 
@@ -2554,13 +3007,11 @@ end
 local function setAutoCatch(state)
     isAutoCatchOn = state
     updateConfigField("autoCatch", state)
-    print("🎯 Auto Catch: " .. (state and "ENABLED" or "DISABLED"))
 end
 
 local function setAutoWeather(state)
     isAutoWeatherOn = state
     updateConfigField("autoWeather", state)
-    print("🌤️ Auto Weather: " .. (state and "ENABLED" or "DISABLED"))
 end
 
 local function setAutoFishDelayForKohana()
@@ -2569,1535 +3020,196 @@ local function setAutoFishDelayForKohana()
     else
         setAutoFishMainDelay(5)
     end
-    print("[Preset] Auto Fish Delay set to 5 seconds for Kohana")
 end
 
-
--- ====== ENHANCED MOBILE UI LIBRARY ====== 
-local Library = {}
-do
-    -- Get screen size for responsive design
-    local function getScreenSize()
-        local viewport = workspace.CurrentCamera.ViewportSize
-        return viewport.X, viewport.Y
-    end
-
-    -- Responsive sizing based on screen
-    local function getResponsiveSize()
-        local screenX, screenY = getScreenSize()
-        local isMobile = screenX < 800 or screenY < 600
-
-        if isMobile then
-            return {
-                windowWidth = math.min(screenX * 0.95, 400),
-                windowHeight = math.min(screenY * 0.85, 500),
-                titleSize = 16,
-                textSize = 13,
-                buttonHeight = 35,
-                padding = 8
-            }
+local function setDelaysForPreset(presetKey)
+    if presetKey == "auto1" or presetKey == "auto2" then
+        -- Auto 1 dan Auto 2: Auto Fish Delay 0.1s, Auto Catch Delay 0.1s
+        if autoFishMainSlider then
+            autoFishMainSlider:Set(0.1)
         else
-            return {
-                windowWidth = 480,
-                windowHeight = 580,
-                titleSize = 18,
-                textSize = 14,
-                buttonHeight = 38,
-                padding = 12
-            }
+            setAutoFishMainDelay(0.1)
         end
-    end
-
-    local function createRow(sectionFrame, titleText, descriptionText)
-        local responsive = getResponsiveSize()
-
-        local row = Instance.new("Frame")
-        row.Name = ("Row_%s"):format(titleText:gsub("%s", ""))
-        row.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
-        row.BackgroundTransparency = 0
-        row.AutomaticSize = Enum.AutomaticSize.Y
-        row.Size = UDim2.new(1, 0, 0, math.max(50, responsive.buttonHeight + 20))
-        row.Parent = sectionFrame
-        row.ClipsDescendants = false
-
-        local rowCorner = Instance.new("UICorner")
-        rowCorner.CornerRadius = UDim.new(0, 8)
-        rowCorner.Parent = row
-
-        local rowStroke = Instance.new("UIStroke")
-        rowStroke.Color = Color3.fromRGB(45, 45, 45)
-        rowStroke.Thickness = 1
-        rowStroke.Parent = row
-
-        local padding = Instance.new("UIPadding")
-        padding.PaddingLeft = UDim.new(0, responsive.padding)
-        padding.PaddingRight = UDim.new(0, responsive.padding)
-        padding.PaddingTop = UDim.new(0, responsive.padding)
-        padding.PaddingBottom = UDim.new(0, responsive.padding)
-        padding.Parent = row
-
-        local infoFrame = Instance.new("Frame")
-        infoFrame.Name = "Info"
-        infoFrame.BackgroundTransparency = 1
-        infoFrame.Size = UDim2.new(1, -120, 1, 0)
-        infoFrame.Position = UDim2.new(0, 0, 0, 0)
-        infoFrame.Parent = row
-
-        local infoLayout = Instance.new("UIListLayout")
-        infoLayout.FillDirection = Enum.FillDirection.Vertical
-        infoLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        infoLayout.Padding = UDim.new(0, 2)
-        infoLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        infoLayout.Parent = infoFrame
-
-        local title = Instance.new("TextLabel")
-        title.Name = "Title"
-        title.BackgroundTransparency = 1
-        title.AutomaticSize = Enum.AutomaticSize.Y
-        title.Size = UDim2.new(1, 0, 0, 0)
-        title.Font = Enum.Font.GothamSemibold
-        title.Text = titleText
-        title.TextColor3 = Color3.fromRGB(255, 255, 255)
-        title.TextSize = responsive.textSize + 1
-        title.TextWrapped = true
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.TextYAlignment = Enum.TextYAlignment.Top
-        title.Parent = infoFrame
-
-        if descriptionText and descriptionText ~= "" then
-            local description = Instance.new("TextLabel")
-            description.Name = "Description"
-            description.BackgroundTransparency = 1
-            description.AutomaticSize = Enum.AutomaticSize.Y
-            description.Size = UDim2.new(1, 0, 0, 0)
-            description.Font = Enum.Font.Gotham
-            description.Text = descriptionText
-            description.TextColor3 = Color3.fromRGB(180, 180, 180)
-            description.TextSize = responsive.textSize - 1
-            description.TextWrapped = true
-            description.TextXAlignment = Enum.TextXAlignment.Left
-            description.TextYAlignment = Enum.TextYAlignment.Top
-            description.Parent = infoFrame
-        end
-
-        local actionContainer = Instance.new("Frame")
-        actionContainer.Name = "Action"
-        actionContainer.BackgroundTransparency = 1
-        actionContainer.Size = UDim2.new(0, 110, 0, responsive.buttonHeight)
-        actionContainer.AnchorPoint = Vector2.new(1, 0.5)
-        actionContainer.Position = UDim2.new(1, 0, 0.5, 0)
-        actionContainer.Parent = row
-
-        return row, actionContainer
-    end
-
-    local function createWindow(titleText)
-        local coreGui = game:GetService("CoreGui")
-        local userInputService = game:GetService("UserInputService")
-        local responsive = getResponsiveSize()
-
-        -- Clean up any existing UI
-        local existingGui = coreGui:FindFirstChild("AF_MobileUI")
-        if existingGui then
-            existingGui:Destroy()
-        end
-
-        local screenGui = Instance.new("ScreenGui")
-        screenGui.Name = "AF_MobileUI"
-        screenGui.ResetOnSpawn = false
-        screenGui.IgnoreGuiInset = true
-        screenGui.DisplayOrder = 1000
-        screenGui.Parent = coreGui
-
-        local mainFrame = Instance.new("Frame")
-        mainFrame.Name = "MainFrame"
-        mainFrame.Size = UDim2.new(0, responsive.windowWidth, 0, responsive.windowHeight)
-        mainFrame.Position = UDim2.new(0.5, -responsive.windowWidth/2, 0.5, -responsive.windowHeight/2)
-        mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-        mainFrame.Parent = screenGui
-        mainFrame.Active = true
-        mainFrame.ClipsDescendants = true
-
-        local mainCorner = Instance.new("UICorner")
-        mainCorner.CornerRadius = UDim.new(0, 12)
-        mainCorner.Parent = mainFrame
-
-        local mainStroke = Instance.new("UIStroke")
-        mainStroke.Color = Color3.fromRGB(50, 50, 50)
-        mainStroke.Thickness = 2
-        mainStroke.Parent = mainFrame
-
-        local topBar = Instance.new("Frame")
-        topBar.Name = "TopBar"
-        topBar.Size = UDim2.new(1, 0, 0, 45)
-        topBar.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
-        topBar.Parent = mainFrame
-        topBar.Active = true
-
-        local topCorner = Instance.new("UICorner")
-        topCorner.CornerRadius = UDim.new(0, 12)
-        topCorner.Parent = topBar
-
-        local topStroke = Instance.new("UIStroke")
-        topStroke.Color = Color3.fromRGB(60, 60, 60)
-        topStroke.Thickness = 1
-        topStroke.Parent = topBar
-
-        local topPadding = Instance.new("UIPadding")
-        topPadding.PaddingLeft = UDim.new(0, 15)
-        topPadding.PaddingRight = UDim.new(0, 15)
-        topPadding.PaddingTop = UDim.new(0, 8)
-        topPadding.PaddingBottom = UDim.new(0, 8)
-        topPadding.Parent = topBar
-
-        local titleLabel = Instance.new("TextLabel")
-        titleLabel.Name = "Title"
-        titleLabel.BackgroundTransparency = 1
-        titleLabel.Size = UDim2.new(1, -60, 1, 0)
-        titleLabel.Position = UDim2.new(0, 0, 0, 0)
-        titleLabel.Font = Enum.Font.GothamBold
-        titleLabel.Text = titleText or "Auto Fish v6.2"
-        titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        titleLabel.TextSize = responsive.titleSize
-        titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-        titleLabel.TextYAlignment = Enum.TextYAlignment.Center
-        titleLabel.Parent = topBar
-
-        -- Minimize button
-        local minimizeButton = Instance.new("TextButton")
-        minimizeButton.Name = "MinimizeButton"
-        minimizeButton.Size = UDim2.new(0, 30, 0, 30)
-        minimizeButton.Position = UDim2.new(1, -70, 0.5, -15)
-        minimizeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        minimizeButton.Text = "−"
-        minimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        minimizeButton.TextSize = 18
-        minimizeButton.Font = Enum.Font.GothamBold
-        minimizeButton.Parent = topBar
-
-        local minimizeCorner = Instance.new("UICorner")
-        minimizeCorner.CornerRadius = UDim.new(0, 6)
-        minimizeCorner.Parent = minimizeButton
-
-        -- Close button
-        local closeButton = Instance.new("TextButton")
-        closeButton.Name = "CloseButton"
-        closeButton.Size = UDim2.new(0, 30, 0, 30)
-        closeButton.Position = UDim2.new(1, -35, 0.5, -15)
-        closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        closeButton.Text = "×"
-        closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        closeButton.TextSize = 18
-        closeButton.Font = Enum.Font.GothamBold
-        closeButton.Parent = topBar
-
-        local closeCorner = Instance.new("UICorner")
-        closeCorner.CornerRadius = UDim.new(0, 6)
-        closeCorner.Parent = closeButton
-
-        local tabContainer = Instance.new("Frame")
-        tabContainer.Name = "TabContainer"
-        tabContainer.BackgroundTransparency = 1
-        tabContainer.Size = UDim2.new(1, 0, 0, 40)
-        tabContainer.Position = UDim2.new(0, 0, 0, 45)
-        tabContainer.Parent = mainFrame
-
-        local tabBar = Instance.new("Frame")
-        tabBar.Name = "TabBar"
-        tabBar.BackgroundTransparency = 1
-        tabBar.Size = UDim2.new(1, -20, 1, 0)
-        tabBar.Position = UDim2.new(0, 10, 0, 0)
-        tabBar.Parent = tabContainer
-
-        local tabScrollFrame = Instance.new("ScrollingFrame")
-        tabScrollFrame.Name = "TabScroll"
-        tabScrollFrame.BackgroundTransparency = 1
-        tabScrollFrame.Size = UDim2.new(1, 0, 1, 0)
-        tabScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-        tabScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.X
-        tabScrollFrame.ScrollingDirection = Enum.ScrollingDirection.X
-        tabScrollFrame.ScrollBarThickness = 0
-        tabScrollFrame.Parent = tabBar
-
-        local tabLayout = Instance.new("UIListLayout")
-        tabLayout.FillDirection = Enum.FillDirection.Horizontal
-        tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        tabLayout.Padding = UDim.new(0, 5)
-        tabLayout.Parent = tabScrollFrame
-
-        local contentFrame = Instance.new("Frame")
-        contentFrame.Name = "Content"
-        contentFrame.BackgroundTransparency = 1
-        contentFrame.Size = UDim2.new(1, -20, 1, -95)
-        contentFrame.Position = UDim2.new(0, 10, 0, 85)
-        contentFrame.Parent = mainFrame
-
-        local pageLayout = Instance.new("UIPageLayout")
-        pageLayout.FillDirection = Enum.FillDirection.Horizontal
-        pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        pageLayout.TweenTime = 0.15
-        pageLayout.EasingStyle = Enum.EasingStyle.Quad
-        pageLayout.EasingDirection = Enum.EasingDirection.Out
-        pageLayout.Parent = contentFrame
-
-        local window = {
-            _screenGui = screenGui,
-            _mainFrame = mainFrame,
-            _pageLayout = pageLayout,
-            _tabButtons = {},
-            _tabPages = {},
-            _currentTab = nil,
-            _tabScrollFrame = tabScrollFrame,
-            _closeButton = closeButton,
-            _minimizeButton = minimizeButton,
-            _contentFrame = contentFrame,
-            _tabContainer = tabContainer,
-            _isMinimized = false,
-            _originalHeight = responsive.windowHeight,
-        }
-
-        -- Enhanced drag system
-        local dragging = false
-        local dragStart, startPos
-
-        local function beginDrag(input)
-            if input.Position.X > minimizeButton.AbsolutePosition.X then
-                return -- Don't drag if clicking minimize or close button
-            end
-
-            dragging = true
-            dragStart = input.Position
-            startPos = mainFrame.Position
-
-            local changeConn
-            changeConn = input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                    if changeConn then
-                        changeConn:Disconnect()
-                    end
-                end
-            end)
-        end
-
-        topBar.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                beginDrag(input)
-            end
-        end)
-
-        userInputService.InputChanged:Connect(function(input)
-            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                local delta = input.Position - dragStart
-                local newPosX = math.clamp(startPos.X.Offset + delta.X, 0, getScreenSize() - responsive.windowWidth)
-                local newPosY = math.clamp(startPos.Y.Offset + delta.Y, 0, getScreenSize() - responsive.windowHeight)
-
-                mainFrame.Position = UDim2.new(0, newPosX, 0, newPosY)
-            end
-        end)
-
-        -- Close button functionality
-        closeButton.MouseButton1Click:Connect(function()
-            window:ToggleUI(false)
-        end)
-
-        closeButton.MouseEnter:Connect(function()
-            closeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-        end)
-
-        closeButton.MouseLeave:Connect(function()
-            closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        end)
-
-        -- Minimize button functionality
-        minimizeButton.MouseButton1Click:Connect(function()
-            window:MinimizeUI()
-        end)
-
-        minimizeButton.MouseEnter:Connect(function()
-            minimizeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-        end)
-
-        minimizeButton.MouseLeave:Connect(function()
-            minimizeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        end)
-
-        local function highlightTab(tabName)
-            for name, button in pairs(window._tabButtons) do
-                if name == tabName then
-                    button.BackgroundColor3 = Color3.fromRGB(50, 130, 245)
-                    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    -- Add selection indicator
-                    if not button:FindFirstChild("SelectionIndicator") then
-                        local indicator = Instance.new("Frame")
-                        indicator.Name = "SelectionIndicator"
-                        indicator.Size = UDim2.new(1, 0, 0, 2)
-                        indicator.Position = UDim2.new(0, 0, 1, -2)
-                        indicator.BackgroundColor3 = Color3.fromRGB(70, 150, 255)
-                        indicator.BorderSizePixel = 0
-                        indicator.Parent = button
-                    end
-                else
-                    button.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-                    button.TextColor3 = Color3.fromRGB(180, 180, 180)
-                    -- Remove selection indicator
-                    local indicator = button:FindFirstChild("SelectionIndicator")
-                    if indicator then
-                        indicator:Destroy()
-                    end
-                end
-            end
-        end
-
-        function window:ShowTab(tabName)
-            local targetPage = self._tabPages[tabName]
-            if not targetPage then return end
-            self._pageLayout:JumpTo(targetPage)
-            highlightTab(tabName)
-            self._currentTab = tabName
-        end
-
-        function window:ToggleUI(force)
-            if typeof(force) == "boolean" then
-                self._screenGui.Enabled = force
-            else
-                self._screenGui.Enabled = not self._screenGui.Enabled
-            end
-            return self._screenGui.Enabled
-        end
-
-        function window:MinimizeUI(force)
-            if typeof(force) == "boolean" then
-                self._isMinimized = force
-            else
-                self._isMinimized = not self._isMinimized
-            end
-
-            if self._isMinimized then
-                -- Minimize: hide content and resize to just title bar
-                self._contentFrame.Visible = false
-                self._tabContainer.Visible = false
-                self._mainFrame.Size = UDim2.new(0, self._mainFrame.Size.X.Offset, 0, 45)
-                self._minimizeButton.Text = "+"
-            else
-                -- Restore: show content and restore original size
-                self._contentFrame.Visible = true
-                self._tabContainer.Visible = true
-                self._mainFrame.Size = UDim2.new(0, self._mainFrame.Size.X.Offset, 0, self._originalHeight)
-                self._minimizeButton.Text = "−"
-            end
-
-            return self._isMinimized
-        end
-
-        function window:NewTab(tabName)
-            local responsive = getResponsiveSize()
-
-            local tabButton = Instance.new("TextButton")
-            tabButton.Name = ("Tab_%s"):format(tabName:gsub("%s", ""))
-            tabButton.Size = UDim2.new(0, math.max(100, #tabName * 8 + 20), 0, 32)
-            tabButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-            tabButton.TextColor3 = Color3.fromRGB(180, 180, 180)
-            tabButton.Font = Enum.Font.GothamSemibold
-            tabButton.TextSize = responsive.textSize
-            tabButton.AutoButtonColor = false
-            tabButton.Text = tabName
-            tabButton.Parent = tabScrollFrame
-
-            local tabCorner = Instance.new("UICorner")
-            tabCorner.CornerRadius = UDim.new(0, 6)
-            tabCorner.Parent = tabButton
-
-            local tabStroke = Instance.new("UIStroke")
-            tabStroke.Color = Color3.fromRGB(55, 55, 55)
-            tabStroke.Thickness = 1
-            tabStroke.Parent = tabButton
-
-            -- Tab hover effects
-            tabButton.MouseEnter:Connect(function()
-                if window._currentTab ~= tabName then
-                    tabButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                end
-            end)
-
-            tabButton.MouseLeave:Connect(function()
-                if window._currentTab ~= tabName then
-                    tabButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-                end
-            end)
-
-            local page = Instance.new("ScrollingFrame")
-            page.Name = ("Page_%s"):format(tabName)
-            page.Active = true
-            page.AutomaticCanvasSize = Enum.AutomaticSize.Y
-            page.CanvasSize = UDim2.new(0, 0, 0, 0)
-            page.ScrollBarThickness = responsive.padding / 2
-            page.ScrollingDirection = Enum.ScrollingDirection.Y
-            page.BackgroundTransparency = 1
-            page.BorderSizePixel = 0
-            page.TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
-            page.BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
-            page.MidImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
-            page.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
-            page.Size = UDim2.new(1, 0, 1, 0)
-            page.Parent = contentFrame
-
-            local pagePadding = Instance.new("UIPadding")
-            pagePadding.PaddingLeft = UDim.new(0, responsive.padding)
-            pagePadding.PaddingRight = UDim.new(0, responsive.padding)
-            pagePadding.PaddingTop = UDim.new(0, responsive.padding)
-            pagePadding.PaddingBottom = UDim.new(0, responsive.padding * 2)
-            pagePadding.Parent = page
-
-            local pageLayoutList = Instance.new("UIListLayout")
-            pageLayoutList.FillDirection = Enum.FillDirection.Vertical
-            pageLayoutList.SortOrder = Enum.SortOrder.LayoutOrder
-            pageLayoutList.Padding = UDim.new(0, responsive.padding)
-            pageLayoutList.Parent = page
-
-            self._tabButtons[tabName] = tabButton
-            self._tabPages[tabName] = page
-
-            tabButton.MouseButton1Click:Connect(function()
-                self:ShowTab(tabName)
-            end)
-
-            local tab = {}
-
-            function tab:NewSection(sectionName)
-                local responsive = getResponsiveSize()
-
-                local sectionFrame = Instance.new("Frame")
-                sectionFrame.Name = ("Section_%s"):format(sectionName:gsub("%s", ""))
-                sectionFrame.AutomaticSize = Enum.AutomaticSize.Y
-                sectionFrame.Size = UDim2.new(1, 0, 0, 0)
-                sectionFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-                sectionFrame.Parent = page
-
-                local sectionCorner = Instance.new("UICorner")
-                sectionCorner.CornerRadius = UDim.new(0, 8)
-                sectionCorner.Parent = sectionFrame
-
-                local sectionStroke = Instance.new("UIStroke")
-                sectionStroke.Color = Color3.fromRGB(40, 40, 40)
-                sectionStroke.Thickness = 1
-                sectionStroke.Parent = sectionFrame
-
-                local sectionPadding = Instance.new("UIPadding")
-                sectionPadding.PaddingLeft = UDim.new(0, responsive.padding)
-                sectionPadding.PaddingRight = UDim.new(0, responsive.padding)
-                sectionPadding.PaddingTop = UDim.new(0, responsive.padding)
-                sectionPadding.PaddingBottom = UDim.new(0, responsive.padding)
-                sectionPadding.Parent = sectionFrame
-
-                local sectionLayout = Instance.new("UIListLayout")
-                sectionLayout.FillDirection = Enum.FillDirection.Vertical
-                sectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
-                sectionLayout.Padding = UDim.new(0, responsive.padding / 2)
-                sectionLayout.Parent = sectionFrame
-
-                local header = Instance.new("TextLabel")
-                header.Name = "Header"
-                header.BackgroundTransparency = 1
-                header.AutomaticSize = Enum.AutomaticSize.Y
-                header.Size = UDim2.new(1, 0, 0, 0)
-                header.Font = Enum.Font.GothamBold
-                header.Text = sectionName
-                header.TextColor3 = Color3.fromRGB(255, 255, 255)
-                header.TextSize = responsive.titleSize - 1
-                header.TextXAlignment = Enum.TextXAlignment.Left
-                header.TextYAlignment = Enum.TextYAlignment.Top
-                header.TextWrapped = true
-                header.Parent = sectionFrame
-
-                local section = {}
-                function section:NewToggle(title, description, callback)
-                    local responsive = getResponsiveSize()
-                    local _, actionContainer = createRow(sectionFrame, title, description)
-
-                    local toggleButton = Instance.new("TextButton")
-                    toggleButton.Name = "ToggleButton"
-                    toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    toggleButton.TextColor3 = Color3.fromRGB(220, 220, 220)
-                    toggleButton.Font = Enum.Font.GothamSemibold
-                    toggleButton.TextSize = responsive.textSize
-                    toggleButton.Text = "OFF"
-                    toggleButton.Size = UDim2.new(1, 0, 1, 0)
-                    toggleButton.AutoButtonColor = false
-                    toggleButton.Parent = actionContainer
-
-                    local corner = Instance.new("UICorner")
-                    corner.CornerRadius = UDim.new(0, 6)
-                    corner.Parent = toggleButton
-
-                    local stroke = Instance.new("UIStroke")
-                    stroke.Color = Color3.fromRGB(65, 65, 65)
-                    stroke.Thickness = 1
-                    stroke.Parent = toggleButton
-
-                    local toggler = { state = false }
-
-                    local function updateVisual(state)
-                        toggleButton.Text = state and "ON" or "OFF"
-                        if state then
-                            toggleButton.BackgroundColor3 = Color3.fromRGB(50, 130, 245)
-                            stroke.Color = Color3.fromRGB(70, 150, 255)
-                        else
-                            toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                            stroke.Color = Color3.fromRGB(65, 65, 65)
-                        end
-                    end
-
-                    -- Add hover effects
-                    toggleButton.MouseEnter:Connect(function()
-                        if toggler.state then
-                            toggleButton.BackgroundColor3 = Color3.fromRGB(60, 140, 255)
-                        else
-                            toggleButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
-                        end
-                    end)
-
-                    toggleButton.MouseLeave:Connect(function()
-                        updateVisual(toggler.state)
-                    end)
-
-                    function toggler:SetState(state, skipCallback)
-                        state = not not state
-                        if self.state == state then return end
-                        self.state = state
-                        updateVisual(state)
-                        if not skipCallback and callback then
-                            local ok, err = pcall(callback, state)
-                            if not ok then
-                                warn("[Auto Fish UI] Toggle callback error: " .. tostring(err))
-                            end
-                        end
-                    end
-
-                    toggleButton.MouseButton1Click:Connect(function()
-                        toggler:SetState(not toggler.state)
-                    end)
-
-                    function toggler:UpdateToggle(_, state)
-                        self:SetState(state)
-                    end
-
-                    updateVisual(false)
-                    return toggler
-                end
-
-                function section:NewButton(title, description, callback)
-                    local responsive = getResponsiveSize()
-                    local _, actionContainer = createRow(sectionFrame, title, description)
-
-                    local button = Instance.new("TextButton")
-                    button.Name = "ActionButton"
-                    button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-                    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    button.Font = Enum.Font.GothamSemibold
-                    button.Text = "RUN"
-                    button.TextSize = responsive.textSize
-                    button.AutoButtonColor = false
-                    button.Size = UDim2.new(1, 0, 1, 0)
-                    button.Parent = actionContainer
-
-                    local corner = Instance.new("UICorner")
-                    corner.CornerRadius = UDim.new(0, 6)
-                    corner.Parent = button
-
-                    local stroke = Instance.new("UIStroke")
-                    stroke.Color = Color3.fromRGB(80, 80, 80)
-                    stroke.Thickness = 1
-                    stroke.Parent = button
-
-                    -- Button hover effects
-                    button.MouseEnter:Connect(function()
-                        button.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-                    end)
-
-                    button.MouseLeave:Connect(function()
-                        button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-                    end)
-
-                    button.MouseButton1Click:Connect(function()
-                        if not callback then return end
-                        local ok, err = pcall(callback)
-                        if not ok then
-                            warn("[Auto Fish UI] Button callback error: " .. tostring(err))
-                        end
-                    end)
-
-                    return button
-                end
-
-                function section:NewDropdown(title, description, options, callback)
-                    local responsive = getResponsiveSize()
-                    local row, actionContainer = createRow(sectionFrame, title, description)
-
-                    local dropdownButton = Instance.new("TextButton")
-                    dropdownButton.Name = "DropdownButton"
-                    dropdownButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-                    dropdownButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    dropdownButton.Font = Enum.Font.GothamSemibold
-                    dropdownButton.TextSize = responsive.textSize
-                    dropdownButton.Text = (options and options[1]) or "Select"
-                    dropdownButton.AutoButtonColor = false
-                    dropdownButton.Size = UDim2.new(1, 0, 1, 0)
-                    dropdownButton.Parent = actionContainer
-
-                    local corner = Instance.new("UICorner")
-                    corner.CornerRadius = UDim.new(0, 6)
-                    corner.Parent = dropdownButton
-
-                    local stroke = Instance.new("UIStroke")
-                    stroke.Color = Color3.fromRGB(70, 70, 70)
-                    stroke.Thickness = 1
-                    stroke.Parent = dropdownButton
-
-                    -- Dropdown arrow indicator
-                    local arrow = Instance.new("TextLabel")
-                    arrow.Name = "Arrow"
-                    arrow.BackgroundTransparency = 1
-                    arrow.Size = UDim2.new(0, 20, 1, 0)
-                    arrow.Position = UDim2.new(1, -20, 0, 0)
-                    arrow.Text = "▼"
-                    arrow.TextColor3 = Color3.fromRGB(180, 180, 180)
-                    arrow.TextSize = responsive.textSize - 2
-                    arrow.Font = Enum.Font.Gotham
-                    arrow.TextXAlignment = Enum.TextXAlignment.Center
-                    arrow.Parent = dropdownButton
-
-                    local optionsFrame = Instance.new("Frame")
-                    optionsFrame.Name = "Options"
-                    optionsFrame.Visible = false
-                    optionsFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-                    optionsFrame.Position = UDim2.new(1, -5, 1, 5)
-                    optionsFrame.AnchorPoint = Vector2.new(1, 0)
-                    optionsFrame.AutomaticSize = Enum.AutomaticSize.Y
-                    optionsFrame.Size = UDim2.new(0, 150, 0, 0)
-                    optionsFrame.Parent = row
-                    optionsFrame.ZIndex = 10
-
-                    local optionsCorner = Instance.new("UICorner")
-                    optionsCorner.CornerRadius = UDim.new(0, 6)
-                    optionsCorner.Parent = optionsFrame
-
-                    local optionsStroke = Instance.new("UIStroke")
-                    optionsStroke.Color = Color3.fromRGB(60, 60, 60)
-                    optionsStroke.Thickness = 1
-                    optionsStroke.Parent = optionsFrame
-
-                    local optionsLayout = Instance.new("UIListLayout")
-                    optionsLayout.FillDirection = Enum.FillDirection.Vertical
-                    optionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-                    optionsLayout.Padding = UDim.new(0, 2)
-                    optionsLayout.Parent = optionsFrame
-
-                    local optionsPadding = Instance.new("UIPadding")
-                    optionsPadding.PaddingLeft = UDim.new(0, 6)
-                    optionsPadding.PaddingRight = UDim.new(0, 6)
-                    optionsPadding.PaddingTop = UDim.new(0, 6)
-                    optionsPadding.PaddingBottom = UDim.new(0, 6)
-                    optionsPadding.Parent = optionsFrame
-
-                    -- Hover effects for dropdown button
-                    dropdownButton.MouseEnter:Connect(function()
-                        dropdownButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-                    end)
-
-                    dropdownButton.MouseLeave:Connect(function()
-                        dropdownButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-                    end)
-
-                    local function setSelection(value, skipCallback)
-                        dropdownButton.Text = value
-                        optionsFrame.Visible = false
-                        arrow.Text = "▼"
-                        if not skipCallback and callback then
-                            local ok, err = pcall(callback, value)
-                            if not ok then
-                                warn("[Auto Fish UI] Dropdown callback error: " .. tostring(err))
-                            end
-                        end
-                    end
-
-                    dropdownButton.MouseButton1Click:Connect(function()
-                        optionsFrame.Visible = not optionsFrame.Visible
-                        arrow.Text = optionsFrame.Visible and "▲" or "▼"
-                    end)
-
-                    if options then
-                        for _, option in ipairs(options) do
-                            local optionButton = Instance.new("TextButton")
-                            optionButton.Name = "Option"
-                            optionButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-                            optionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-                            optionButton.TextSize = responsive.textSize
-                            optionButton.AutoButtonColor = false
-                            optionButton.Font = Enum.Font.Gotham
-                            optionButton.Text = option
-                            optionButton.Size = UDim2.new(1, 0, 0, 28)
-                            optionButton.Parent = optionsFrame
-
-                            local optionCorner = Instance.new("UICorner")
-                            optionCorner.CornerRadius = UDim.new(0, 4)
-                            optionCorner.Parent = optionButton
-
-                            optionButton.MouseEnter:Connect(function()
-                                optionButton.BackgroundColor3 = Color3.fromRGB(50, 130, 245)
-                            end)
-
-                            optionButton.MouseLeave:Connect(function()
-                                optionButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-                            end)
-
-                            optionButton.MouseButton1Click:Connect(function()
-                                setSelection(option)
-                            end)
-                        end
-                    end
-
-                    if options and options[1] and callback then
-                        local ok, err = pcall(callback, options[1])
-                        if not ok then
-                            warn("[Auto Fish UI] Dropdown callback error: " .. tostring(err))
-                        end
-                    end
-
-                    return {
-                        Set = function(_, value) 
-                            setSelection(value, true)
-                        end
-                    }
-                end
-
-                function section:NewSlider(title, description, maxValue, minValue, callback)
-                    local responsive = getResponsiveSize()
-                    local _, actionContainer = createRow(sectionFrame, title, description)
-
-                    local textBox = Instance.new("TextBox")
-                    textBox.Name = "SliderBox"
-                    textBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    textBox.Font = Enum.Font.GothamSemibold
-                    textBox.TextSize = responsive.textSize
-                    textBox.ClearTextOnFocus = false
-                    textBox.Size = UDim2.new(1, 0, 1, 0)
-                    textBox.Text = tostring(minValue)
-                    textBox.PlaceholderText = string.format("%s - %s", tostring(minValue), tostring(maxValue))
-                    textBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
-                    textBox.TextXAlignment = Enum.TextXAlignment.Center
-                    textBox.Parent = actionContainer
-
-                    local corner = Instance.new("UICorner")
-                    corner.CornerRadius = UDim.new(0, 6)
-                    corner.Parent = textBox
-
-                    local stroke = Instance.new("UIStroke")
-                    stroke.Color = Color3.fromRGB(65, 65, 65)
-                    stroke.Thickness = 1
-                    stroke.Parent = textBox
-
-                    -- Focus effects
-                    textBox.Focused:Connect(function()
-                        stroke.Color = Color3.fromRGB(50, 130, 245)
-                    end)
-
-                    textBox.FocusLost:Connect(function()
-                        stroke.Color = Color3.fromRGB(65, 65, 65)
-                    end)
-
-                    local currentValue = tonumber(minValue) or 0
-                    if callback then
-                        local ok, err = pcall(callback, currentValue)
-                        if not ok then
-                            warn("[Auto Fish UI] Slider callback error: " .. tostring(err))
-                        end
-                    end
-
-                    local function commitValue(raw)
-                        local value = tonumber(raw)
-                        if not value then
-                            textBox.Text = tostring(currentValue)
-                            return
-                        end
-                        local minClamp = tonumber(minValue)
-                        local maxClamp = tonumber(maxValue)
-                        if minClamp and maxClamp then
-                            value = math.clamp(value, minClamp, maxClamp)
-                        end
-                        if value ~= currentValue then
-                            currentValue = value
-                            if callback then
-                                local ok, err = pcall(callback, value)
-                                if not ok then
-                                    warn("[Auto Fish UI] Slider callback error: " .. tostring(err))
-                                end
-                            end
-                        end
-                        textBox.Text = tostring(value)
-                    end
-
-                    -- Auto-save on text change with debounce
-                    local lastChanged = 0
-                    local debounceTime = 0.5 -- seconds
-                    textBox.Changed:Connect(function(property)
-                        if property == "Text" then
-                            lastChanged = tick()
-                            task.delay(debounceTime, function()
-                                if tick() - lastChanged >= debounceTime then
-                                    commitValue(textBox.Text)
-                                end
-                            end)
-                        end
-                    end)
-
-                    textBox.FocusLost:Connect(function()
-                        commitValue(textBox.Text)
-                    end)
-
-                    textBox.InputEnded:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.Touch then
-                            commitValue(textBox.Text)
-                        end
-                    end)
-
-                    return {
-                        Set = function(_, value) 
-                            commitValue(value)
-                        end
-                    }
-                end
-
-                function section:NewKeybind(title, description, defaultKey, callback)
-                    local responsive = getResponsiveSize()
-                    local _, actionContainer = createRow(sectionFrame, title, description)
-
-                    local keyButton = Instance.new("TextButton")
-                    keyButton.Name = "KeybindButton"
-                    keyButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    keyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    keyButton.Font = Enum.Font.GothamSemibold
-                    keyButton.TextSize = responsive.textSize
-                    keyButton.AutoButtonColor = false
-                    keyButton.Size = UDim2.new(1, 0, 1, 0)
-                    keyButton.Parent = actionContainer
-
-                    local corner = Instance.new("UICorner")
-                    corner.CornerRadius = UDim.new(0, 6)
-                    corner.Parent = keyButton
-
-                    local stroke = Instance.new("UIStroke")
-                    stroke.Color = Color3.fromRGB(65, 65, 65)
-                    stroke.Thickness = 1
-                    stroke.Parent = keyButton
-
-                    -- Hover effects
-                    keyButton.MouseEnter:Connect(function()
-                        keyButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
-                    end)
-
-                    keyButton.MouseLeave:Connect(function()
-                        keyButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    end)
-
-                    local userInput = game:GetService("UserInputService")
-                    local listening = false
-                    local currentKey = defaultKey or Enum.KeyCode.RightShift
-                    keyButton.Text = currentKey.Name
-
-                    local activationConn
-                    local function bindKeybind(keyCode)
-                        currentKey = keyCode
-                        keyButton.Text = currentKey.Name
-                        if activationConn then
-                            activationConn:Disconnect()
-                        end
-                        activationConn = userInput.InputBegan:Connect(function(input, gpe)
-                            if gpe then return end
-                            if input.KeyCode == currentKey then
-                                if callback then
-                                    local ok, err = pcall(callback)
-                                    if not ok then
-                                        warn("[Auto Fish UI] Keybind callback error: " .. tostring(err))
-                                    end
-                                end
-                            end
-                        end)
-                    end
-
-                    bindKeybind(currentKey)
-
-                    keyButton.MouseButton1Click:Connect(function()
-                        if listening then return end
-                        listening = true
-                        keyButton.Text = "Press key"
-
-                        local connection
-                        connection = userInput.InputBegan:Connect(function(input, gpe)
-                            if gpe then return end
-                            if input.UserInputType == Enum.UserInputType.Keyboard then
-                                listening = false
-                                if connection then
-                                    connection:Disconnect()
-                                end
-                                bindKeybind(input.KeyCode)
-                            end
-                        end)
-                    end)
-
-                    return {
-                        Set = function(_, keyCode) 
-                            bindKeybind(keyCode)
-                        end
-                    }
-                end
-
-                return section
-            end
-
-            if not window._currentTab then
-                window:ShowTab(tabName)
-            end
-
-            return tab
-        end
-
-        return window
-    end
-
-    function Library.CreateLib(titleText)
-        local window = createWindow(titleText)
-        Library._lastWindow = window
-        return window
-    end
-
-    function Library:ToggleUI(force)
-        if self._lastWindow then
-            return self._lastWindow:ToggleUI(force)
-        end
-    end
-
-    function Library:MinimizeUI(force)
-        if self._lastWindow then
-            return self._lastWindow:MinimizeUI(force)
-        end
-    end
-
-end
-
-local Window  = Library.CreateLib("🎣 Auto Fish v6.2 Enhanced")
-
---TAB: Auto
-local TabAuto      = Window:NewTab("Auto Features")
-local SecMain      = TabAuto:NewSection("Main Features")
-local SecOther     = TabAuto:NewSection("Other Features")
-local SecDelays    = TabAuto:NewSection("Delay Settings")
-
-autoFarmToggle = SecMain:NewToggle("Auto Farm", "Auto equip rod + fishing (kombinasi)", function(state)
-    setAutoFarm(state)
-end)
-
-autoSellToggle = SecMain:NewToggle("Auto Sell", "Auto jual hasil", function(state)
-    setSell(state)
-end)
-
-autoCatchToggle = SecMain:NewToggle("Auto Catch", "Auto catch fish", function(state)
-    setAutoCatch(state)
-end)
-
-autoPreset1Toggle = SecMain:NewToggle("Auto 1 (Auto Crater)", "Enable core auto features with 0.5s stagger then teleport to Crater Island", function(state)
-    if state then
-        enablePreset("auto1", "Crater Island")
-    else
-        disablePreset("auto1")
-    end
-end)
-
-autoPreset2Toggle = SecMain:NewToggle("Auto 2 (Auto Sisyphus)", "Enable core auto features with 0.5s stagger then teleport to Sisyphus State", function(state)
-    if state then
-        enablePreset("auto2", "Sisyphus State")
-    else
-        disablePreset("auto2")
-    end
-end)
-
-autoPreset3Toggle = SecMain:NewToggle("Auto 3 (Auto Kohana)", "Enable core auto features with 5s delay then teleport to Kohana Volcano", function(state)
-    if state then
-        enablePreset("auto3", "Kohana Volcano")
-    else
-        disablePreset("auto3")
-    end
-end)
-
-
-
-autoWeatherToggle = SecOther:NewToggle("Auto Weather", "Auto weather events", function(state)
-    setAutoWeather(state)
-end)
-
-chargeFishingSlider = SecDelays:NewSlider("Charge Rod Delay", "Delay setelah charge fishing rod (detik, min: 0.01)", 10, 0.1, function(value)
-    setChargeFishingDelay(value)
-end)
-
-autoFishMainSlider = SecDelays:NewSlider("Auto Fish Delay", "Delay loop utama auto fish (detik, min: 0.1)", 20, 0.1, function(value)
-    setAutoFishMainDelay(value)
-end)
-
-autoSellSlider = SecDelays:NewSlider("Auto Sell Delay", "Delay auto sell (detik, min: 1)", 180, 1, function(value)
-    setAutoSellDelay(value)
-end)
-
-autoCatchSlider = SecDelays:NewSlider("Auto Catch Delay", "Delay auto catch (detik, min: 0.1)", 10, 0.1, function(value)
-    setAutoCatchDelay(value)
-end)
-
-weatherIdSlider = SecDelays:NewSlider("Weather ID Delay", "Delay antar weather ID (detik, min: 1)", 60, 1, function(value)
-    setWeatherIdDelay(value)
-end)
-
-weatherCycleSlider = SecDelays:NewSlider("Weather Cycle Delay", "Delay siklus weather (detik, min: 10)", 600, 30, function(value)
-    setWeatherCycleDelay(value)
-end)
-
-task.defer(function()
-    task.wait(1)
-    if chargeFishingSlider then
-        chargeFishingSlider:Set(config.chargeFishingDelay or chargeFishingDelay)
-    end
-    if autoFishMainSlider then
-        autoFishMainSlider:Set(config.autoFishMainDelay or autoFishMainDelay)
-    end
-    if autoSellSlider then
-        autoSellSlider:Set(config.autoSellDelay or autoSellDelay)
-    end
-    if autoCatchSlider then
-        autoCatchSlider:Set(config.autoCatchDelay or autoCatchDelay)
-    end
-    if weatherIdSlider then
-        weatherIdSlider:Set(config.weatherIdDelay or weatherIdDelay)
-    end
-    if weatherCycleSlider then
-        weatherCycleSlider:Set(config.weatherCycleDelay or weatherCycleDelay)
-    end
-    print("[UI] Delay sliders initialized from config")
-end)
-
-local TabTeleport = Window:NewTab("Teleport")
-local SecTP = TabTeleport:NewSection("All Locations")
-
--- Function to safely teleport
-local function teleportTo(locationName, cframe)
-    pcall(function()
-        local character = game.Players.LocalPlayer.Character
-        if character and character:FindFirstChild("HumanoidRootPart") then
-            character.HumanoidRootPart.CFrame = cframe
-            print("[Teleport] ✅ Successfully teleported to: " .. locationName)
+        if autoCatchSlider then
+            autoCatchSlider:Set(0.1)
         else
-            warn("[Teleport] ❌ Character or HumanoidRootPart not found!")
+            setAutoCatchDelay(0.1)
         end
-    end)
-end
-
--- Create individual teleport buttons for better UX
-SecTP:NewButton("🏠 Spawn", "Return to spawn area", function()
-    teleportTo("Spawn", CFrame.new(45.2788086, 252.562927, 2987.10913, 1, 0, 0, 0, 1, 0, 0, 0, 1))
-end)
-
--- Popular fishing locations section
-local SecPopular = TabTeleport:NewSection("Popular Fishing Spots")
-
-SecPopular:NewButton("🌋 Kohana Volcano", "Active volcano area with rare fish", function()
-    teleportTo("Kohana Volcano", CFrame.new(-572.879456, 22.4521465, 148.355331, -0.995764792, -6.67705606e-08, 0.0919371247, -5.74611505e-08, 1, 1.03905414e-07, -0.0919371247, 9.81825394e-08, -0.995764792))
-end)
-
-SecPopular:NewButton("🗿 Sisyphus Statue", "Deep sea location near the ancient statue", function()
-    teleportTo("Sisyphus Statue", CFrame.new(-3728.21606, -135.074417, -1012.12744, -0.977224171, 7.74980258e-09, -0.212209702, 1.566994e-08, 1, -3.5640408e-08, 0.212209702, -3.81539813e-08, -0.977224171))
-end)
-
-SecPopular:NewButton("🏝️ Crater Island", "Isolated crater island with unique catches", function()
-    teleportTo("Crater Island", CFrame.new(1016.49072, 20.0919304, 5069.27295, 0.838976264, 3.30379857e-09, -0.544168055, 2.63538391e-09, 1, 1.01344115e-08, 0.544168055, -9.93662219e-09, 0.838976264))
-end)
-
--- Deep sea locations section
-local SecDeep = TabTeleport:NewSection("Deep Sea Areas")
-
-SecDeep:NewButton("🌊 Esoteric Depths", "Deepest area with mysterious fish", function()
-    teleportTo("Esoteric Depths", CFrame.new(3248.37109, -1301.53027, 1403.82727, -0.920208454, 7.76270355e-08, 0.391428679, 4.56261056e-08, 1, -9.10549289e-08, -0.391428679, -6.5930152e-08, -0.920208454))
-end)
-
-SecDeep:NewButton("🪸 Coral Reefs", "Colorful reef system", function()
-    teleportTo("Coral Reefs", CFrame.new(-3114.78198, 1.32066584, 2237.52295, -0.304758579, 1.6556676e-08, -0.952429652, -8.50574935e-08, 1, 4.46003305e-08, 0.952429652, 9.46036067e-08, -0.304758579))
-end)
-
--- Special locations section
-local SecSpecial = TabTeleport:NewSection("Special Areas")
-
-SecSpecial:NewButton("🏝️ Lost Isle", "Mysterious lost island", function()
-    teleportTo("Lost Isle", CFrame.new(-3618.15698, 240.836655, -1317.45801, 1, 0, 0, 0, 1, 0, 0, 0, 1))
-end)
-
-SecSpecial:NewButton("🌴 Tropical Grove", "Lush tropical area", function()
-    teleportTo("Tropical Grove", CFrame.new(-2095.34106, 197.199997, 3718.08008))
-end)
-
-SecSpecial:NewButton("💎 Treasure Room", "Hidden treasure chamber", function()
-    teleportTo("Treasure Room", CFrame.new(-3606.34985, -266.57373, -1580.97339, 0.998743415, 1.12141152e-13, -0.0501160324, -1.56847693e-13, 1, -8.88127842e-13, 0.0501160324, 8.94872392e-13, 0.998743415))
-end)
-
--- Utility locations section
-local SecUtility = TabTeleport:NewSection("Utility Locations")
-
-SecUtility:NewButton("🌤️ Weather Machine", "Control weather patterns", function()
-    teleportTo("Weather Machine", CFrame.new(-1488.51196, 83.1732635, 1876.30298, 1, 0, 0, 0, 1, 0, 0, 0, 1))
-end)
-
-SecUtility:NewButton("🏘️ Kohana Village", "Main village area", function()
-    teleportTo("Kohana", CFrame.new(-663.904236, 3.04580712, 718.796875, -0.100799225, -2.14183729e-08, -0.994906783, -1.12300391e-08, 1, -2.03902459e-08, 0.994906783, 9.11752096e-09, -0.100799225))
-end)
-
--- Quick dropdown for legacy support
-local SecQuick = TabTeleport:NewSection("Quick Select (Legacy)")
-local tpNames = {}
-for _, loc in ipairs(teleportLocations) do
-    table.insert(tpNames, loc.Name)
-end
-
-SecQuick:NewDropdown("Location Selector", "Choose location from dropdown", tpNames, function(chosen)
-    for _, location in ipairs(teleportLocations) do
-        if location.Name == chosen then
-            teleportTo(chosen, location.CFrame)
-            break
+    elseif presetKey == "auto3" then
+        -- Auto 3: Auto Fish Delay 5s, Auto Catch Delay 0.6s
+        if autoFishMainSlider then
+            autoFishMainSlider:Set(5)
+        else
+            setAutoFishMainDelay(5)
         end
-    end
-end)
-
-
-autoMegalodonToggle = SecOther:NewToggle("Auto Megalodon Hunt", "Auto teleport to Megalodon events", function(state)
-    setAutoMegalodon(state)
-end)
-
-upgradeRodToggle = SecOther:NewToggle("Auto Upgrade Rod", "Otomatis beli rod pancing selanjutnya", function(state)
-    setUpgradeRod(state)
-end)
-
-upgradeBaitToggle = SecOther:NewToggle("Auto Upgrade Bait", "Otomatis beli umpan selanjutnya", function(state)
-    setUpgradeBait(state)
-end)
-
-
-local function applyLoadedConfig()
-    if config.activePreset == "none" then
-        isApplyingConfig = true
-
-        if config.autoFarm and autoFarmToggle then
-            autoFarmToggle:UpdateToggle(nil, true)
+        if autoCatchSlider then
+            autoCatchSlider:Set(0.6)
+        else
+            setAutoCatchDelay(0.6)
         end
-        if config.autoSell and autoSellToggle then
-            autoSellToggle:UpdateToggle(nil, true)
-        end
-        if config.autoCatch and autoCatchToggle then
-            autoCatchToggle:UpdateToggle(nil, true)
-        end
-        if config.autoWeather and autoWeatherToggle then
-            autoWeatherToggle:UpdateToggle(nil, true)
-        end
-        if config.autoMegalodon and autoMegalodonToggle then
-            autoMegalodonToggle:UpdateToggle(nil, true)
-        end
-        if config.gpuSaver then
-            enableGPUSaver()
-        end
-        if config.gpuSaver and gpuSaverToggle then
-            gpuSaverToggle:UpdateToggle(nil, true)
-        end
-
-        isApplyingConfig = false
-        syncConfigFromStates()
-        saveConfig()
-    end
-
-    if config.activePreset == "auto1" and autoPreset1Toggle then
-        autoPreset1Toggle:UpdateToggle(nil, true)
-    elseif config.activePreset == "auto2" and autoPreset2Toggle then
-        autoPreset2Toggle:UpdateToggle(nil, true)
-    elseif config.activePreset == "auto3" and autoPreset3Toggle then
-        autoPreset3Toggle:UpdateToggle(nil, true)
     end
 end
 
-task.defer(applyLoadedConfig)
 
+-- ====================================================================
+--                    AUTO-START (NO UI MODE - MANUAL CONFIG)
+-- ====================================================================
+-- Configuration from main_noui.lua loader OR saved config.json
 
--- ====== PERFORMANCE TAB ====== 
-local TabPerformance = Window:NewTab("Performance")
-local SecGPU = TabPerformance:NewSection("GPU Saver Mode")
+print("🎣 [Auto Fish] Starting NO-UI mode (Manual Config)...")
 
-gpuSaverToggle = SecGPU:NewToggle("GPU Saver Mode", "Enable white screen to save GPU/battery", function(state)
-    if state then
+-- First, load config (will load from JSON if exists, otherwise use defaults)
+loadConfig()
+
+-- Check if config file exists
+local configExists = false
+if isfile then
+    local configFile = getConfigFileName()
+    configExists = isfile(configFile)
+end
+
+-- Variables to use
+local useAutoFarm, useAutoSell, useAutoCatch, useAutoWeather, useAutoMegalodon, useGPUSaver, useTeleportLoc
+
+if configExists then
+    -- Config exists, use saved settings from JSON
+    print("📂 [Config] Loading from saved file...")
+    useAutoFarm = config.autoFarm
+    useAutoSell = config.autoSell
+    useAutoCatch = config.autoCatch
+    useAutoWeather = config.autoWeather
+    useAutoMegalodon = config.autoMegalodon
+    useGPUSaver = config.gpuSaver
+    useTeleportLoc = config.teleportLocation or "Sisyphus Statue"
+
+    -- Apply delays from config (using applyDelayConfig)
+    applyDelayConfig()
+
+    print("✅ [Config] Loaded from JSON (ignoring main_noui.lua)")
+else
+    -- No config file, use settings from main_noui.lua and save them
+    print("📝 [Config] No saved file found, using main_noui.lua settings...")
+    useAutoFarm = AUTO_FARM or false
+    useAutoSell = AUTO_SELL or false
+    useAutoCatch = AUTO_CATCH or false
+    useAutoWeather = AUTO_WEATHER or false
+    useAutoMegalodon = AUTO_MEGALODON or false
+    useGPUSaver = GPU_SAVER or false
+    useTeleportLoc = TELEPORT_LOCATION or "Sisyphus Statue"
+
+    -- Apply delays from main_noui.lua
+    chargeFishingDelay = CHARGE_ROD_DELAY or 0.1
+    autoFishMainDelay = AUTO_FISH_DELAY or 0.1
+    autoSellDelay = AUTO_SELL_DELAY or 34
+    autoCatchDelay = AUTO_CATCH_DELAY or 0.1
+    weatherIdDelay = WEATHER_ID_DELAY or 10
+    weatherCycleDelay = WEATHER_CYCLE_DELAY or 30
+
+    -- Save to config for next time
+    config.autoFarm = useAutoFarm
+    config.autoSell = useAutoSell
+    config.autoCatch = useAutoCatch
+    config.autoWeather = useAutoWeather
+    config.autoMegalodon = useAutoMegalodon
+    config.gpuSaver = useGPUSaver
+    config.teleportLocation = useTeleportLoc
+    config.chargeFishingDelay = chargeFishingDelay
+    config.autoFishDelay = autoFishMainDelay
+    config.autoSellDelay = autoSellDelay
+    config.autoCatchDelay = autoCatchDelay
+    config.weatherIdDelay = weatherIdDelay
+    config.weatherCycleDelay = weatherCycleDelay
+
+    saveConfig()
+    print("💾 [Config] Saved to JSON for future sessions")
+end
+
+local GPU_FPS_CAP = GPU_FPS_LIMIT or 8
+
+print("⏱️  [Delays] Fish:", autoFishMainDelay, "| Sell:", autoSellDelay, "| Catch:", autoCatchDelay)
+
+-- Manual configuration function
+local function startManualConfig()
+    task.wait(3)  -- Wait for everything to load
+
+    print("⚙️  [Manual Config] Starting features...")
+    print("📍 [Teleport] Target:", useTeleportLoc)
+
+    -- Teleport first
+    teleportToNamedLocation(useTeleportLoc)
+    task.wait(2)
+
+    -- Enable GPU Saver if configured
+    if useGPUSaver then
         enableGPUSaver()
-    else
-        disableGPUSaver()
+        print("🎨 [GPU Saver] ✅ Enabled")
+        task.wait(0.5)
     end
-    updateConfigField("gpuSaver", state)
-end)
 
-SecGPU:NewKeybind("GPU Saver Hotkey", "Quick toggle GPU saver", Enum.KeyCode.RightControl, function()
-    if gpuSaverEnabled then
-        disableGPUSaver()
-    else
-        enableGPUSaver()
+    -- Enable Auto Farm if configured
+    if useAutoFarm then
+        setAutoFarm(true)
+        print("🎣 [Auto Farm] ✅ Enabled")
+        task.wait(0.5)
     end
-end)
 
-SecGPU:NewButton("Force Remove White Screen", "Emergency remove if stuck", function()
-    removeWhiteScreen()
-    gpuSaverEnabled = false
-end)
-
-
-
--- The "Advanced Modules" tab and its contents have been removed as per instructions.
-
--- ====== UI CONTROLS ====== 
-local TabUI = Window:NewTab("UI Controls")
-local SecUI = TabUI:NewSection("Interface Controls")
-
--- ====== MINIMIZE SYSTEM ====== 
-local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
-
-local MiniGui = Instance.new("ScreenGui")
-MiniGui.Name = "AF_Minibar"
-MiniGui.ResetOnSpawn = false
-MiniGui.IgnoreGuiInset = true
-MiniGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-MiniGui.Parent = CoreGui
-
-local MiniBtn = Instance.new("TextButton")
-MiniBtn.Name = "RestoreButton"
-MiniBtn.Size = UDim2.new(0, 200, 0, 40)
-MiniBtn.Position = UDim2.new(0, 20, 0, 80)
-MiniBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-MiniBtn.BorderSizePixel = 0
-MiniBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-MiniBtn.TextSize = 14
-MiniBtn.Font = Enum.Font.GothamSemibold
-MiniBtn.Text = "🚜 Auto Fish v4.5 (Show)"
-MiniBtn.AutoButtonColor = true
-MiniBtn.Visible = false
-MiniBtn.Parent = MiniGui
-
--- Add status indicator
-local statusFrame = Instance.new("Frame")
-statusFrame.Size = UDim2.new(1, 0, 0, 3)
-statusFrame.Position = UDim2.new(0, 0, 1, -3)
-statusFrame.BorderSizePixel = 0
-statusFrame.Parent = MiniBtn
-
-local statusGradient = Instance.new("UIGradient")
-statusGradient.Color = ColorSequence.new{ 
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 0)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
-}
-statusGradient.Parent = statusFrame
-
--- Update status bar color based on active features
-task.spawn(function()
-    while true do
-        if MiniBtn.Visible then
-            local activeCount = 0
-            if isAutoFarmOn then activeCount = activeCount + 1 end
-            if isAutoSellOn then activeCount = activeCount + 1 end
-            if isAutoCatchOn then activeCount = activeCount + 1 end
-            
-            local intensity = math.min(activeCount / 3, 1)
-            statusGradient.Offset = Vector2.new(-intensity, 0)
-            
-            -- Update button text with status
-            local statusText = ""
-            if isAutoFarmOn then statusText = statusText .. "🚜" end
-            if isAutoSellOn then statusText = statusText .. "💰" end
-            if isAutoCatchOn then statusText = statusText .. "🎯" end
-            
-            MiniBtn.Text = "Auto Fish v4.5 " .. statusText .. " (Show)"
-        end
-        task.wait(1)
+    -- Enable Auto Sell if configured
+    if useAutoSell then
+        setSell(true)
+        print("💰 [Auto Sell] ✅ Enabled")
+        task.wait(0.5)
     end
-end)
 
--- Drag functionality
-do
-    local dragging = false
-    local dragStart, startPos
-    MiniBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = MiniBtn.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
-            end)
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            MiniBtn.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
+    -- Enable Auto Catch if configured
+    if useAutoCatch then
+        setAutoCatch(true)
+        print("🐟 [Auto Catch] ✅ Enabled")
+        task.wait(0.5)
+    end
+
+    -- Enable Auto Weather if configured
+    if useAutoWeather then
+        setAutoWeather(true)
+        print("🌤️  [Auto Weather] ✅ Enabled")
+        task.wait(0.5)
+    end
+
+    -- Enable Auto Megalodon if configured
+    if useAutoMegalodon then
+        setAutoMegalodon(true)
+        print("🦈 [Auto Megalodon] ✅ Enabled")
+        task.wait(0.5)
+    end
+
+    print("✅ [Auto Fish] All configured features active!")
+    print("📊 [Monitor] Check console for status updates every 60s")
+    print("")
+    print("Current Config:")
+    print("  - Auto Farm:", useAutoFarm and "ON" or "OFF")
+    print("  - Auto Sell:", useAutoSell and "ON" or "OFF")
+    print("  - Auto Catch:", useAutoCatch and "ON" or "OFF")
+    print("  - Auto Weather:", useAutoWeather and "ON" or "OFF")
+    print("  - Auto Megalodon:", useAutoMegalodon and "ON" or "OFF")
+    print("  - GPU Saver:", useGPUSaver and "ON" or "OFF")
+    print("  - Location:", useTeleportLoc)
 end
 
-local isMinimized = false
-local function minimizeUI()
-    if not isMinimized then
-        isMinimized = true
-        if MiniBtn then MiniBtn.Visible = true end
-        Library:ToggleUI()
-    end
-end
+-- ====================================================================
+--                    AUTO LOOPS (CORE FISHING LOGIC)
+-- ====================================================================
 
-local function restoreUI()
-    if isMinimized then
-        isMinimized = false
-        if MiniBtn then MiniBtn.Visible = false end
-        Library:ToggleUI()
-    end
-end
-
-MiniBtn.MouseButton1Click:Connect(restoreUI)
-
-SecUI:NewKeybind("Minimize/Restore (RightShift)", "Toggle UI cepat", Enum.KeyCode.RightShift, function()
-    if isMinimized then restoreUI() else minimizeUI() end
-end)
-
-SecUI:NewButton("Minimize UI", "Hide the interface", function()
-    minimizeUI()
-end)
-
--- Custom minimize button
-task.spawn(function()
-    task.wait(2) -- Wait longer for UI to fully load
-    
-    local possibleNames = {"Kavo UI", "KavoLibrary", "UI", "MainUI"}
-    local kavoGui = nil
-    
-    for _, name in pairs(possibleNames) do
-        kavoGui = CoreGui:FindFirstChild(name)
-        if kavoGui then break end
-    end
-    
-    if not kavoGui then
-        for _, gui in pairs(CoreGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name ~= "AF_Minibar" and gui.Name ~= "GPUSaverScreen" then
-                local frame = gui:FindFirstChildOfClass("Frame")
-                if frame and frame:FindFirstChild("Main") then
-                    kavoGui = gui
-                    break
-                end
-            end
-        end
-    end
-    
-    if not kavoGui then
-        warn("❌ Kavo GUI tidak ditemukan untuk minimize button")
-        return
-    end
-    
-    local mainFrame = kavoGui:FindFirstChild("Main") or kavoGui:FindFirstChildOfClass("Frame")
-    if not mainFrame then return end
-    
-    local titleBar = nil
-    for _, child in pairs(mainFrame:GetChildren()) do
-        if child:IsA("Frame") and (child.Name:lower():find("top") or child.Name:lower():find("title") or child.Size.Y.Offset < 40) then
-            titleBar = child
-            break
-        end
-    end
-    
-    if not titleBar then
-        local topMost = nil
-        local smallestY = math.huge
-        
-        for _, child in pairs(mainFrame:GetChildren()) do
-            if child:IsA("Frame") and child.Position.Y.Offset < smallestY then
-                smallestY = child.Position.Y.Offset
-                topMost = child
-            end
-        end
-        titleBar = topMost
-    end
-    
-    if not titleBar then
-        warn("❌ Title bar tidak ditemukan")
-        return
-    end
-    
-    local closeBtn = nil
-    for _, child in pairs(titleBar:GetDescendants()) do
-        if child:IsA("TextButton") and (child.Text == "X" or child.Text == "✕" or child.Text:find("close")) then
-            closeBtn = child
-            break
-        end
-    end
-    
-    local minimizeBtn = Instance.new("TextButton")
-    minimizeBtn.Name = "CustomMinimizeButton"
-    minimizeBtn.Size = UDim2.new(0, 20, 0, 20)
-    
-    if closeBtn then
-        minimizeBtn.Position = UDim2.new(0, closeBtn.Position.X.Offset - 25, 0, closeBtn.Position.Y.Offset)
-    else
-        minimizeBtn.Position = UDim2.new(1, -45, 0, 5)
-    end
-    
-    minimizeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    minimizeBtn.BorderSizePixel = 0
-    minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    minimizeBtn.TextSize = 12
-    minimizeBtn.Font = Enum.Font.GothamBold
-    minimizeBtn.Text = "−"
-    minimizeBtn.TextYAlignment = Enum.TextYAlignment.Center
-    minimizeBtn.ZIndex = 10
-    minimizeBtn.Parent = titleBar
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 2)
-    corner.Parent = minimizeBtn
-    
-    minimizeBtn.MouseEnter:Connect(function()
-        minimizeBtn.BackgroundColor3 = Color3.fromRGB(65, 65, 65)
-    end)
-    
-    minimizeBtn.MouseLeave:Connect(function()
-        minimizeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    end)
-    
-    minimizeBtn.MouseButton1Click:Connect(function()
-        minimizeUI()
-    end)
-    
-    print("✅ Custom minimize button added successfully!")
-end)
-
-
--- ====== AUTO LOOPS WITH ENHANCED LOGIC ====== 
-
--- Enhanced Auto Farm Loop (combines equip + fishing) with asset error protection
+-- Enhanced Auto Farm Loop (combines equip + fishing)
 task.spawn(function()
     while true do
         if isAutoFarmOn then
             local success, err = pcall(function()
-                -- Check if rod is equipped by looking for tool in character
+                -- Check if rod is equipped
                 local character = player.Character
                 if character then
                     local tool = character:FindFirstChildOfClass("Tool")
                     if not tool then
                         equipRod()
-                        task.wait(1) -- Wait for rod to equip
+                        task.wait(1)
                     end
                 end
 
@@ -4111,12 +3223,8 @@ task.spawn(function()
             end)
 
             if not success then
-                -- Check if it's an asset loading error
-                if string.find(tostring(err):lower(), "asset is not approved") or
-                   string.find(tostring(err):lower(), "failed to load sound") or
-                   string.find(tostring(err):lower(), "rbxassetid") then
-                    -- Silently continue, don't spam console
-                else
+                if not (string.find(tostring(err):lower(), "asset is not approved") or
+                       string.find(tostring(err):lower(), "failed to load sound")) then
                     warn("[Auto Farm] Loop error: " .. tostring(err))
                 end
             end
@@ -4130,48 +3238,13 @@ task.spawn(function()
     while true do
         if isAutoSellOn then
             pcall(function()
-                if sellEvent then 
-                    sellEvent:InvokeServer() 
+                if sellEvent then
+                    sellEvent:InvokeServer()
+                    print("💰 [Auto Sell] Sold fish")
                 end
             end)
         end
         task.wait(autoSellDelay)
-    end
-end)
-
-
-task.spawn(function()
-    while true do
-        task.wait(1) -- biar nggak error
-    end
-end)
-
-
--- Auto Weather Loop
-task.spawn(function()
-    while true do
-        if isAutoWeatherOn then
-            for _, id in ipairs(WeatherIDs) do
-                if not isAutoWeatherOn then break end
-                pcall(function()
-                    if WeatherEvent then
-                        WeatherEvent:InvokeServer(id)
-                    end
-                end)
-                local waited = 0
-                while isAutoWeatherOn and waited < weatherIdDelay do
-                    task.wait(0.1)
-                    waited = waited + 0.1
-                end
-            end
-            
-            local waitedCycle = 0
-            while isAutoWeatherOn and waitedCycle < weatherCycleDelay do
-                task.wait(0.1)
-                waitedCycle = waitedCycle + 0.1
-            end
-        end
-        task.wait(0.1)
     end
 end)
 
@@ -4185,7 +3258,36 @@ task.spawn(function()
     end
 end)
 
--- Auto Megalodon Hunt Loop with enhanced error protection
+-- Auto Weather Loop
+task.spawn(function()
+    while true do
+        if isAutoWeatherOn then
+            for _, id in ipairs(WeatherIDs) do
+                if not isAutoWeatherOn then break end
+                pcall(function()
+                    if WeatherEvent then
+                        WeatherEvent:InvokeServer(id)
+                        print("🌤️  [Auto Weather] Bought:", id)
+                    end
+                end)
+                local waited = 0
+                while isAutoWeatherOn and waited < weatherIdDelay do
+                    task.wait(0.1)
+                    waited = waited + 0.1
+                end
+            end
+
+            local waitedCycle = 0
+            while isAutoWeatherOn and waitedCycle < weatherCycleDelay do
+                task.wait(0.1)
+                waitedCycle = waitedCycle + 0.1
+            end
+        end
+        task.wait(0.1)
+    end
+end)
+
+-- Auto Megalodon Hunt Loop
 task.spawn(function()
     while true do
         if isAutoMegalodonOn then
@@ -4194,96 +3296,157 @@ task.spawn(function()
             end)
 
             if not success then
-                -- Check if it's an asset loading error
-                if string.find(tostring(err):lower(), "asset is not approved") or
-                   string.find(tostring(err):lower(), "failed to load sound") then
-                    -- Silently continue, don't spam console
-                else
+                if not (string.find(tostring(err):lower(), "asset is not approved") or
+                       string.find(tostring(err):lower(), "failed to load sound")) then
                     warn("[Megalodon] Loop error: " .. tostring(err))
                 end
             end
         end
-        task.wait(12) -- Check every 12 seconds
+        task.wait(12)
     end
 end)
 
+print("✅ [Auto Loops] All loops started!")
 
--- The "Disconnect Notifier" section has been removed due to compatibility issues.
+-- Run manual config auto-start
+task.spawn(startManualConfig)
 
--- ============ SCRIPT INITIALIZATION ============ 
-print("🚀 Auto Fish v5.7 - Enhanced Edition Starting...")
-
--- ====== AUTO UPGRADE LOOPS (From Fish v3) ======
+-- Status reporter every 60 seconds
 task.spawn(function()
     while true do
-        if upgradeState.rod then
-            pcall(function()
-                local currentCurrency = getCurrentCoins()
-                local affordableRodId, rodPrice = getAffordableRod(currentCurrency)
-                if not affordableRodId then return end
-                
-                print("[AutoUpgrade] Attempting to purchase rod " .. affordableRodId)
-                local wasAutoFarm = isAutoFarmOn
-                if wasAutoFarm then setAutoFarm(false) task.wait(1) end
-                
-                local success, guid = pcall(networkEvents.purchaseRodEvent.InvokeServer, networkEvents.purchaseRodEvent, affordableRodId)
-                
-                if success and guid and type(guid) == 'string' and #guid > 0 then
-                    print("[AutoUpgrade] Rod " .. affordableRodId .. " purchased. Equipping...")
-                    pcall(networkEvents.equipItemEvent.FireServer, networkEvents.equipItemEvent, guid, "Fishing Rods")
-                    task.wait(1)
-                    failedRodAttempts[affordableRodId] = nil
-                    rodFailedCounts[affordableRodId] = 0
-                    currentRodTarget = findNextRodTarget()
-                else
-                    print("[AutoUpgrade] Rod " .. affordableRodId .. " purchase failed, marking as owned/failed.")
-                    rodFailedCounts[affordableRodId] = (rodFailedCounts[affordableRodId] or 0) + 1
-                    failedRodAttempts[affordableRodId] = tick()
-                    if (rodFailedCounts[affordableRodId] or 0) >= 3 then
-                        currentRodTarget = findNextRodTarget()
-                    end
-                end
-                
-                if wasAutoFarm then setAutoFarm(true) end
-            end)
+        task.wait(60)
+        if startTime then
+            local uptime = os.time() - startTime
+            local hours = math.floor(uptime / 3600)
+            local minutes = math.floor((uptime % 3600) / 60)
+            local seconds = uptime % 60
+            local fish = (sessionStats and sessionStats.totalFish) or 0
+            print(string.format("📊 [Status] Uptime: %02d:%02d:%02d | Fish: %d | Farm: %s | Sell: %s | Catch: %s",
+                hours, minutes, seconds,
+                fish,
+                isAutoFarmOn and "ON" or "OFF",
+                isAutoSellOn and "ON" or "OFF",
+                isAutoCatchOn and "ON" or "OFF"
+            ))
         end
-        task.wait(15) -- Check every 15 seconds
     end
 end)
 
+print("🚀 [Auto Fish] Initialization complete!")
+
+-- ====================================================================
+--                    SIMPLE GPU SAVER UI
+-- ====================================================================
+
+-- Create simple UI for GPU Saver toggle only
 task.spawn(function()
-    while true do
-        if upgradeState.bait then
-            pcall(function()
-                local currentCurrency = getCurrentCoins()
-                local affordableBaitId, baitPrice = getAffordableBait(currentCurrency)
-                if not affordableBaitId then return end
+    task.wait(5) -- Wait for everything to load
 
-                print("[AutoUpgrade] Attempting to purchase bait " .. affordableBaitId)
-                local wasAutoFarm = isAutoFarmOn
-                if wasAutoFarm then setAutoFarm(false) task.wait(1) end
+    local success = pcall(function()
+        local CoreGui = game:GetService("CoreGui")
+        local Players = game:GetService("Players")
+        local player = Players.LocalPlayer
 
-                local success, result = pcall(networkEvents.purchaseBaitEvent.InvokeServer, networkEvents.purchaseBaitEvent, affordableBaitId)
+        -- Create ScreenGui
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "GPUSaverUI"
+        screenGui.ResetOnSpawn = false
+        screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-                if success and result then
-                    print("[AutoUpgrade] Bait " .. affordableBaitId .. " purchased. Equipping...")
-                    pcall(networkEvents.equipBaitEvent.FireServer, networkEvents.equipBaitEvent, affordableBaitId)
-                    task.wait(1)
-                    failedBaitAttempts[affordableBaitId] = nil
-                    baitFailedCounts[affordableBaitId] = 0
-                    currentBaitTarget = findNextBaitTarget()
-                else
-                    print("[AutoUpgrade] Bait " .. affordableBaitId .. " purchase failed, marking as owned/failed.")
-                    baitFailedCounts[affordableBaitId] = (baitFailedCounts[affordableBaitId] or 0) + 1
-                    failedBaitAttempts[affordableBaitId] = tick()
-                    if (baitFailedCounts[affordableBaitId] or 0) >= 3 then
-                        currentBaitTarget = findNextBaitTarget()
+        -- Main Frame (compact)
+        local mainFrame = Instance.new("Frame")
+        mainFrame.Name = "MainFrame"
+        mainFrame.Size = UDim2.new(0, 180, 0, 50)
+        mainFrame.Position = UDim2.new(0, 10, 0.5, -25)
+        mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        mainFrame.BorderSizePixel = 0
+        mainFrame.Parent = screenGui
+
+        -- Corner rounding
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = mainFrame
+
+        -- GPU Saver Toggle Button
+        local toggleButton = Instance.new("TextButton")
+        toggleButton.Name = "GPUToggle"
+        toggleButton.Size = UDim2.new(0, 160, 0, 35)
+        toggleButton.Position = UDim2.new(0, 10, 0, 7.5)
+        toggleButton.BackgroundColor3 = isGPUSaverOn and Color3.fromRGB(46, 125, 50) or Color3.fromRGB(183, 28, 28)
+        toggleButton.Text = isGPUSaverOn and "🎨 GPU Saver: ON" or "🎨 GPU Saver: OFF"
+        toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        toggleButton.TextSize = 14
+        toggleButton.Font = Enum.Font.GothamBold
+        toggleButton.Parent = mainFrame
+
+        local buttonCorner = Instance.new("UICorner")
+        buttonCorner.CornerRadius = UDim.new(0, 6)
+        buttonCorner.Parent = toggleButton
+
+        -- Toggle functionality
+        toggleButton.MouseButton1Click:Connect(function()
+            -- Toggle GPU Saver
+            if isGPUSaverOn then
+                disableGPUSaver()
+                toggleButton.BackgroundColor3 = Color3.fromRGB(183, 28, 28)
+                toggleButton.Text = "🎨 GPU Saver: OFF"
+                config.gpuSaver = false
+                print("🎨 [GPU Saver] ❌ Disabled via UI")
+            else
+                enableGPUSaver()
+                toggleButton.BackgroundColor3 = Color3.fromRGB(46, 125, 50)
+                toggleButton.Text = "🎨 GPU Saver: ON"
+                config.gpuSaver = true
+                print("🎨 [GPU Saver] ✅ Enabled via UI")
+            end
+
+            -- Save config
+            pcall(saveConfig)
+        end)
+
+        -- Make draggable
+        local dragging = false
+        local dragInput, mousePos, framePos
+
+        mainFrame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                mousePos = input.Position
+                framePos = mainFrame.Position
+
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        dragging = false
                     end
-                end
+                end)
+            end
+        end)
 
-                if wasAutoFarm then setAutoFarm(true) end
-            end)
-        end
-        task.wait(15) -- Check every 15 seconds
+        mainFrame.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement then
+                dragInput = input
+            end
+        end)
+
+        game:GetService("UserInputService").InputChanged:Connect(function(input)
+            if input == dragInput and dragging then
+                local delta = input.Position - mousePos
+                mainFrame.Position = UDim2.new(
+                    framePos.X.Scale,
+                    framePos.X.Offset + delta.X,
+                    framePos.Y.Scale,
+                    framePos.Y.Offset + delta.Y
+                )
+            end
+        end)
+
+        -- Parent to CoreGui
+        screenGui.Parent = CoreGui
+
+        print("🎨 [GPU Saver UI] Loaded! Toggle button visible on screen")
+    end)
+
+    if not success then
+        warn("[GPU Saver UI] Failed to create UI")
     end
 end)
