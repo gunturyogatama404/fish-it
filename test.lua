@@ -172,7 +172,8 @@ Webhook Usage:
 Traditional Connection Features (still active):
 ✅ Sends "Player Connected" when script starts successfully
 ❌ Sends "Player Disconnected" with detailed reason when issues occur
-📊 Includes session duration, ping monitoring, and freeze detection
+📊 Includes session duration and freeze detection
+⚠️ Ping monitoring enabled (high ping webhook DISABLED - console log only)
 
 Note: All status notifications are sent to webhook3 only
 --]]
@@ -538,6 +539,8 @@ local isAutoMegalodonOn = false
 local megalodonSavedPosition = nil -- Will store full CFrame (position + orientation)
 local hasTeleportedToMegalodon = false
 local currentBodyPosition = nil
+local currentBodyGyro = nil
+local currentBodyVelocity = nil
 
 local isAutoPreset1On = false
 local isAutoPreset2On = false
@@ -1404,7 +1407,7 @@ function enableGPUSaver()
             end
         end
         
-        pcall(function() setfpscap(40) end) -- Limit FPS to 5
+        pcall(function() setfpscap(10) end) -- Limit FPS to 5
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
@@ -1494,17 +1497,60 @@ local function sendStuckNotification()
 end
 
 local function restartAutoFarm()
-    print("[StuckDetection] Attempting to restart Auto Farm...")
+    print("[StuckDetection] Attempting to restart based on active preset...")
 
-    -- Turn off auto farm first
-    if isAutoFarmOn then
-        setAutoFarm(false)
+    -- Check which preset is active
+    local activePreset = config.activePreset or "none"
+
+    if activePreset == "auto1" then
+        print("[StuckDetection] Restarting Auto Preset 1...")
+        -- Turn off preset first
+        if autoPreset1Toggle then
+            autoPreset1Toggle:UpdateToggle(nil, false)
+        end
         task.wait(2)
-    end
+        -- Turn it back on
+        if autoPreset1Toggle then
+            autoPreset1Toggle:UpdateToggle(nil, true)
+        end
+        print("[StuckDetection] Auto Preset 1 restarted")
 
-    -- Turn it back on
-    setAutoFarm(true)
-    print("[StuckDetection] Auto Farm restarted")
+    elseif activePreset == "auto2" then
+        print("[StuckDetection] Restarting Auto Preset 2...")
+        -- Turn off preset first
+        if autoPreset2Toggle then
+            autoPreset2Toggle:UpdateToggle(nil, false)
+        end
+        task.wait(2)
+        -- Turn it back on
+        if autoPreset2Toggle then
+            autoPreset2Toggle:UpdateToggle(nil, true)
+        end
+        print("[StuckDetection] Auto Preset 2 restarted")
+
+    elseif activePreset == "auto3" then
+        print("[StuckDetection] Restarting Auto Preset 3...")
+        -- Turn off preset first
+        if autoPreset3Toggle then
+            autoPreset3Toggle:UpdateToggle(nil, false)
+        end
+        task.wait(2)
+        -- Turn it back on
+        if autoPreset3Toggle then
+            autoPreset3Toggle:UpdateToggle(nil, true)
+        end
+        print("[StuckDetection] Auto Preset 3 restarted")
+
+    else
+        -- Fallback: restart auto farm only if no preset is active
+        print("[StuckDetection] No preset active, restarting Auto Farm only...")
+        if isAutoFarmOn then
+            setAutoFarm(false)
+            task.wait(2)
+        end
+        setAutoFarm(true)
+        print("[StuckDetection] Auto Farm restarted")
+    end
 end
 
 local function checkForStuckState()
@@ -1840,7 +1886,9 @@ local function unequipRod()
 end
 
 
--- ====== MEGALODON HUNT FUNCTIONS ====== 
+-- ====== MEGALODON HUNT FUNCTIONS ======
+local megalodonLockLoop = nil -- Store the lock loop connection
+
 local function teleportToMegalodon(position, isEventTeleport)
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") then
         local humanoid = player.Character.Humanoid
@@ -1853,46 +1901,186 @@ local function teleportToMegalodon(position, isEventTeleport)
             print("[Megalodon] Saved player CFrame before event teleport")
         end
 
-        -- Remove lock before teleport if exists
+        -- Remove old lock before teleport if exists
         if currentBodyPosition then
             currentBodyPosition:Destroy()
             currentBodyPosition = nil
         end
 
-        -- Teleport to position with proper orientation
+        -- Remove old BodyVelocity if exists
+        if currentBodyVelocity then
+            currentBodyVelocity:Destroy()
+            currentBodyVelocity = nil
+        end
+
+        -- Remove old BodyGyro if exists
+        if currentBodyGyro then
+            currentBodyGyro:Destroy()
+            currentBodyGyro = nil
+        end
+
+        -- Disconnect old lock loop if exists
+        if megalodonLockLoop then
+            megalodonLockLoop:Disconnect()
+            megalodonLockLoop = nil
+        end
+
+        -- Calculate initial teleport position (closer to water for better fishing)
+        local teleportPos
         if type(position) == "userdata" and position.X then
-            -- If position is a Vector3, create new CFrame with default orientation
-            rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+            -- If position is a Vector3 - use lower height for better fishing
+            teleportPos = position + Vector3.new(0, 8, 0) -- Reduced from 20 to 8 studs
         elseif type(position) == "userdata" and position.Position then
-            -- If position is already a CFrame, use it directly
-            rootPart.CFrame = position + Vector3.new(0, 5, 0)
+            -- If position is already a CFrame
+            teleportPos = position.Position + Vector3.new(0, 8, 0)
         else
             -- Fallback
-            rootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+            teleportPos = position + Vector3.new(0, 8, 0)
         end
-        task.wait(0.1)
 
-        -- Jump once
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        task.wait(0.5)
-
-        -- Enable floating/lock position only for event teleports
+        -- Enable floating/lock position for event teleports
         if isEventTeleport then
-            currentBodyPosition = Instance.new("BodyPosition")
-            currentBodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            currentBodyPosition.Position = (type(position) == "userdata" and position.Position and position.Position or position) + Vector3.new(0, 5, 0)
-            currentBodyPosition.P = 10000
-            currentBodyPosition.D = 1000
-            currentBodyPosition.Parent = rootPart
+            -- Store the locked CFrame with proper rotation (facing down slightly for fishing)
+            local lockedCFrame = CFrame.new(teleportPos) * CFrame.Angles(math.rad(0), 0, 0)
+
+            -- Set initial position
+            rootPart.CFrame = lockedCFrame
+            print("[Megalodon] Teleported to position (Y: " .. math.floor(teleportPos.Y) .. ")")
+
+            -- Wait for physics to settle
+            task.wait(0.1)
+
+            -- Disable character physics to prevent any movement
+            humanoid.PlatformStand = true
+
+            -- Create BodyVelocity to cancel all velocity (STORE IN VARIABLE)
+            currentBodyVelocity = Instance.new("BodyVelocity")
+            currentBodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            currentBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            currentBodyVelocity.Parent = rootPart
+            currentBodyVelocity.Name = "MegalodonVelocity"
+
+            -- Create BodyGyro to lock rotation
+            currentBodyGyro = Instance.new("BodyGyro")
+            currentBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            currentBodyGyro.CFrame = lockedCFrame
+            currentBodyGyro.P = 20000 -- Increased from 10000 for stronger lock
+            currentBodyGyro.D = 500 -- Reduced damping for faster correction
+            currentBodyGyro.Parent = rootPart
+            currentBodyGyro.Name = "MegalodonGyro"
+
+            print("[Megalodon] Lock mode enabled - Using PlatformStand + BodyVelocity + BodyGyro + RenderStepped")
+
+            -- ULTIMATE LOCK: Continuously reset position every frame using RenderStepped
+            megalodonLockLoop = RunService.RenderStepped:Connect(function()
+                if rootPart and rootPart.Parent and humanoid and humanoid.Parent then
+                    -- Force position back to locked CFrame every single frame
+                    rootPart.CFrame = lockedCFrame
+                    rootPart.Velocity = Vector3.new(0, 0, 0)
+                    rootPart.RotVelocity = Vector3.new(0, 0, 0)
+
+                    -- Ensure PlatformStand stays enabled
+                    if not humanoid.PlatformStand then
+                        humanoid.PlatformStand = true
+                    end
+                else
+                    -- Character destroyed, stop loop
+                    if megalodonLockLoop then
+                        megalodonLockLoop:Disconnect()
+                        megalodonLockLoop = nil
+                    end
+                end
+            end)
+
+            task.wait(0.2)
+
+            print("[Megalodon] ✅ Position LOCKED at height: " .. math.floor(teleportPos.Y))
+            print("[Megalodon] ✅ Player is now locked in place and can fish safely")
+            print("[Megalodon] ✅ Anti-displacement protection active")
         end
     end
 end
 
 local function disableMegalodonLock()
-    if currentBodyPosition then
-        currentBodyPosition:Destroy()
-        currentBodyPosition = nil
-    end
+    pcall(function()
+        print("[Megalodon] 🔓 Disabling all locks...")
+
+        -- Disconnect RenderStepped lock loop (MOST IMPORTANT - DO THIS FIRST)
+        if megalodonLockLoop then
+            megalodonLockLoop:Disconnect()
+            megalodonLockLoop = nil
+            print("[Megalodon] ✅ RenderStepped lock loop disconnected")
+        end
+
+        -- Remove BodyPosition (fly lock)
+        if currentBodyPosition then
+            currentBodyPosition:Destroy()
+            currentBodyPosition = nil
+            print("[Megalodon] ✅ BodyPosition removed")
+        end
+
+        -- Remove BodyVelocity using global variable
+        if currentBodyVelocity then
+            currentBodyVelocity:Destroy()
+            currentBodyVelocity = nil
+            print("[Megalodon] ✅ BodyVelocity removed")
+        end
+
+        -- Remove BodyGyro (rotation lock) using global variable
+        if currentBodyGyro then
+            currentBodyGyro:Destroy()
+            currentBodyGyro = nil
+            print("[Megalodon] ✅ BodyGyro removed")
+        end
+
+        -- Remove BodyVelocity and other physics objects from character (FALLBACK CLEANUP)
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local rootPart = player.Character.HumanoidRootPart
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+
+            -- Remove any Megalodon-related physics objects (fallback)
+            local gyro = rootPart:FindFirstChild("MegalodonGyro")
+            if gyro then
+                gyro:Destroy()
+                print("[Megalodon] ✅ BodyGyro removed (fallback)")
+            end
+
+            local velocity = rootPart:FindFirstChild("MegalodonVelocity")
+            if velocity then
+                velocity:Destroy()
+                print("[Megalodon] ✅ BodyVelocity removed (fallback)")
+            end
+
+            local bodyPos = rootPart:FindFirstChild("MegalodonPosition")
+            if bodyPos then
+                bodyPos:Destroy()
+                print("[Megalodon] ✅ BodyPosition removed (fallback)")
+            end
+
+            -- Re-enable character physics AFTER removing all physics objects
+            if humanoid then
+                humanoid.PlatformStand = false
+                print("[Megalodon] ✅ PlatformStand disabled - Character physics restored")
+            end
+
+            -- Reset velocities
+            rootPart.Velocity = Vector3.new(0, 0, 0)
+            rootPart.RotVelocity = Vector3.new(0, 0, 0)
+        end
+
+        -- Return to saved position if available
+        if megalodonSavedPosition and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            task.wait(0.3) -- Small delay to ensure physics objects are removed
+            player.Character.HumanoidRootPart.CFrame = megalodonSavedPosition
+            print("[Megalodon] ✅ Player returned to saved position")
+
+            -- Reset flags
+            hasTeleportedToMegalodon = false
+            megalodonSavedPosition = nil
+        end
+
+        print("[Megalodon] ✅ All locks removed - Player returned to normal state")
+    end)
 end
 
 local function formatDuration(seconds)
@@ -2172,8 +2360,8 @@ local function autoDetectMegalodon()
 
         if not hasTeleportedToMegalodon then
             teleportToMegalodon(eventPosition, true)
-            task.wait(0.5)
-            disableMegalodonLock()
+            -- REMOVED: disableMegalodonLock() - Lock stays active during entire event!
+            print("[Megalodon] ✅ Lock will remain active until event ends")
         end
     else
         -- Handle event end or missing props
@@ -2249,7 +2437,7 @@ end
 local CONNECTION_WEBHOOK_URL = webhook3 or ""  -- URL webhook khusus untuk status koneksi
 
 local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
-local PING_THRESHOLD = 1000  -- ms, if ping > this = poor connection
+local PING_THRESHOLD = 1000  -- ms, ping monitoring (webhook disabled, console log only)
 local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
 
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
@@ -2854,7 +3042,7 @@ local function setupDisconnectNotifier()
         end
     end)
 
-    -- Monitor network ping for connection issues
+    -- Monitor network ping for connection issues (HIGH PING WEBHOOK DISABLED)
     task.spawn(function()
         local consecutiveFailures = 0
         local maxConsecutiveFailures = 3  -- Fail 3 times before disconnect
@@ -2881,12 +3069,10 @@ local function setupDisconnectNotifier()
                     print("[Disconnect Monitor] Connection recovered")
                 end
 
+                -- HIGH PING DETECTION DISABLED - No webhook sent for high ping
+                -- Just log it to console
                 if ping > PING_THRESHOLD then
-                    print("[Disconnect Monitor] High ping detected: " .. math.floor(ping) .. "ms")
-                    task.spawn(function()
-                        sendDisconnectWebhook(username, "High Ping Detected (" .. math.floor(ping) .. "ms) - Possible connection issue")
-                    end)
-                    break -- Stop monitoring after sending notification
+                    print("[Disconnect Monitor] High ping detected: " .. math.floor(ping) .. "ms (webhook disabled)")
                 end
             end
 
@@ -2985,7 +3171,7 @@ local function setupDisconnectNotifier()
     print("[Disconnect Monitor] All monitoring systems active:")
     print("  - Error message monitoring: ✅")
     print("  - Player removal monitoring: ✅")
-    print("  - Network ping monitoring: ✅")
+    print("  - Network ping monitoring: ✅ (webhook disabled for high ping)")
     print("  - Game freeze detection: ✅")
     print("  - Script error monitoring: ✅")
     print("  - Heartbeat monitoring: ✅")
