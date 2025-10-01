@@ -3127,6 +3127,120 @@ local function autoStartPreset()
     print("📊 [Monitor] Check console for status updates every 60s")
 end
 
+-- ====================================================================
+--                    AUTO LOOPS (CORE FISHING LOGIC)
+-- ====================================================================
+
+-- Enhanced Auto Farm Loop (combines equip + fishing)
+task.spawn(function()
+    while true do
+        if isAutoFarmOn then
+            local success, err = pcall(function()
+                -- Check if rod is equipped
+                local character = player.Character
+                if character then
+                    local tool = character:FindFirstChildOfClass("Tool")
+                    if not tool then
+                        equipRod()
+                        task.wait(1)
+                    end
+                end
+
+                -- Perform fishing sequence
+                chargeFishingRod()
+                task.wait(autoFishMainDelay)
+
+                if fishingEvent then
+                    fishingEvent:FireServer()
+                end
+            end)
+
+            if not success then
+                if not (string.find(tostring(err):lower(), "asset is not approved") or
+                       string.find(tostring(err):lower(), "failed to load sound")) then
+                    warn("[Auto Farm] Loop error: " .. tostring(err))
+                end
+            end
+        end
+        task.wait(0.1)
+    end
+end)
+
+-- Auto Sell Loop
+task.spawn(function()
+    while true do
+        if isAutoSellOn then
+            pcall(function()
+                if sellEvent then
+                    sellEvent:InvokeServer()
+                    print("💰 [Auto Sell] Sold fish")
+                end
+            end)
+        end
+        task.wait(autoSellDelay)
+    end
+end)
+
+-- Auto Catch Loop
+task.spawn(function()
+    while true do
+        if isAutoCatchOn then
+            performAutoCatch()
+        end
+        task.wait(autoCatchDelay)
+    end
+end)
+
+-- Auto Weather Loop
+task.spawn(function()
+    while true do
+        if isAutoWeatherOn then
+            for _, id in ipairs(WeatherIDs) do
+                if not isAutoWeatherOn then break end
+                pcall(function()
+                    if WeatherEvent then
+                        WeatherEvent:InvokeServer(id)
+                        print("🌤️  [Auto Weather] Bought:", id)
+                    end
+                end)
+                local waited = 0
+                while isAutoWeatherOn and waited < weatherIdDelay do
+                    task.wait(0.1)
+                    waited = waited + 0.1
+                end
+            end
+
+            local waitedCycle = 0
+            while isAutoWeatherOn and waitedCycle < weatherCycleDelay do
+                task.wait(0.1)
+                waitedCycle = waitedCycle + 0.1
+            end
+        end
+        task.wait(0.1)
+    end
+end)
+
+-- Auto Megalodon Hunt Loop
+task.spawn(function()
+    while true do
+        if isAutoMegalodonOn then
+            local success, err = pcall(function()
+                autoDetectMegalodon()
+            end)
+
+            if not success then
+                if not (string.find(tostring(err):lower(), "asset is not approved") or
+                       string.find(tostring(err):lower(), "failed to load sound")) then
+                    warn("[Megalodon] Loop error: " .. tostring(err))
+                end
+            end
+        end
+        task.wait(12)
+    end
+end)
+
+print("✅ [Auto Loops] All loops started!")
+
 -- Run auto-start
 task.spawn(autoStartPreset)
 
