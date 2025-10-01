@@ -3052,18 +3052,75 @@ weatherCycleDelay = WEATHER_CYCLE_DELAY or 30
 
 print("⏱️  [Delays] Fish:", autoFishMainDelay, "| Sell:", autoSellDelay, "| Catch:", autoCatchDelay)
 
+-- NO-UI VERSION: Direct preset activation without toggles
+local function enablePresetNoUI(presetKey, locationName)
+    print("⚙️  [Preset] Activating:", presetKey)
+
+    -- Disable all first
+    setAutoFarm(false)
+    task.wait(0.5)
+    setSell(false)
+    task.wait(0.5)
+    setAutoCatch(false)
+    task.wait(0.5)
+    setAutoWeather(false)
+    task.wait(0.5)
+    setAutoMegalodon(false)
+    task.wait(0.5)
+
+    -- Set delays based on preset
+    if presetKey == "auto1" or presetKey == "auto2" then
+        autoFishMainDelay = 0.1
+        autoCatchDelay = 0.1
+        print("⏱️  [Preset Delays] Fast mode: Fish 0.1s, Catch 0.1s")
+    elseif presetKey == "auto3" then
+        autoFishMainDelay = 5
+        autoCatchDelay = 0.6
+        print("⏱️  [Preset Delays] Stable mode: Fish 5s, Catch 0.6s")
+    end
+
+    -- Enable features
+    setAutoFarm(true)
+    task.wait(0.5)
+    setSell(true)
+    task.wait(0.5)
+    setAutoCatch(true)
+    task.wait(0.5)
+
+    -- Weather and Megalodon only for auto1 and auto2
+    if presetKey ~= "auto3" then
+        setAutoWeather(true)
+        task.wait(0.5)
+        setAutoMegalodon(true)
+        task.wait(0.5)
+    end
+
+    -- Enable GPU Saver
+    enableGPUSaver()
+    task.wait(0.5)
+
+    -- Update config
+    config.activePreset = presetKey
+    saveConfig()
+
+    -- Teleport to location
+    teleportToNamedLocation(locationName)
+
+    print("✅ [Preset] Activated:", presetKey, "at", locationName)
+end
+
 -- Auto-start function
 local function autoStartPreset()
     task.wait(3)  -- Wait for everything to load
 
-    print("⚙️  [Auto Start] Activating preset:", SELECTED_PRESET)
+    print("⚙️  [Auto Start] Starting preset:", SELECTED_PRESET)
 
     if SELECTED_PRESET == "auto1" then
-        enablePreset("auto1", "Crater Island")
+        enablePresetNoUI("auto1", "Crater Island")
     elseif SELECTED_PRESET == "auto2" then
-        enablePreset("auto2", "Sisyphus Statue") 
+        enablePresetNoUI("auto2", "Sisyphus Statue")
     elseif SELECTED_PRESET == "auto3" then
-        enablePreset("auto3", "Kohana")
+        enablePresetNoUI("auto3", "Kohana")
     end
 
     print("✅ [Auto Fish] Fully active! Script running without UI.")
