@@ -459,6 +459,11 @@ local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
+-- Modules for totem functionality
+local ItemUtility = require(replicatedStorage.Shared.ItemUtility)
+local Replion = require(replicatedStorage.Packages.Replion)
+local PlayerData = Replion.Client:WaitReplion("Data")
+
 local leaderstats = player:WaitForChild("leaderstats")
 local BestCaught = leaderstats:WaitForChild("Rarest Fish")
 local AllTimeCaught = leaderstats:WaitForChild("Caught")
@@ -944,6 +949,63 @@ function FormatCoins(coins)
     end
 end
 
+-- ====== TOTEM PURCHASE FUNCTIONS ======
+
+local function buyTotem()
+    task.spawn(function()
+        print("[Buy Totem] Purchasing Luck Totem from market...")
+
+        -- Debug: Check current coins
+        local currentCoins = getCurrentCoins()
+        print("[Buy Totem] Current coins: " .. FormatCoins(currentCoins))
+        if currentCoins < 2000000 then
+            warn("[Buy Totem] ❌ Not enough coins! Need 2M, you have: " .. FormatCoins(currentCoins))
+            return
+        end
+
+        -- Debug: Check if event exists
+        if not networkEvents or not networkEvents.purchaseMarketItemEvent then
+            warn("[Buy Totem] ❌ Purchase event not found! Trying alternative method...")
+
+            -- Alternative method: Direct access
+            local success, result = pcall(function()
+                local net = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
+                local purchaseEvent = net:FindFirstChild("RF/PurchaseMarketItem")
+
+                if not purchaseEvent then
+                    warn("[Buy Totem] ❌ PurchaseMarketItem event not found in ReplicatedStorage!")
+                    return false
+                end
+
+                print("[Buy Totem] Found event, invoking with ID 5...")
+                local result = purchaseEvent:InvokeServer(5)
+                print("[Buy Totem] Server response: " .. tostring(result))
+                return true
+            end)
+
+            if not success then
+                warn("[Buy Totem] ❌ Alternative method failed: " .. tostring(result))
+                return
+            end
+        else
+            -- Original method
+            local purchaseSuccess, purchaseError = pcall(function()
+                print("[Buy Totem] Calling InvokeServer(5)...")
+                local result = networkEvents.purchaseMarketItemEvent:InvokeServer(5)
+                print("[Buy Totem] Server returned: " .. tostring(result))
+            end)
+
+            if not purchaseSuccess then
+                warn("[Buy Totem] ❌ Failed to purchase totem: " .. tostring(purchaseError))
+                return
+            end
+        end
+
+        print("[Buy Totem] ✅ Purchase request sent!")
+        print("[Buy Totem] 💡 Totem purchased! Place it manually from your inventory.")
+    end)
+end
+
 -- ====== GPU SAVER VARIABLES ======
 -- Read GPU_FPS_LIMIT from main_noui.lua if available, otherwise default to 8
 if not GPU_FPS_LIMIT then
@@ -986,7 +1048,9 @@ local function getNetworkEvents()
             purchaseRodEvent = net:WaitForChild("RF/PurchaseFishingRod", 10),
             purchaseBaitEvent = net:WaitForChild("RF/PurchaseBait", 10),
             equipItemEvent = net:WaitForChild("RE/EquipItem", 10),
-            equipBaitEvent = net:WaitForChild("RE/EquipBait", 10)
+            equipBaitEvent = net:WaitForChild("RE/EquipBait", 10),
+            -- For Totem Purchase Only (placement is manual)
+            purchaseMarketItemEvent = net:WaitForChild("RF/PurchaseMarketItem", 10)
         }
     end)
     
@@ -1198,15 +1262,38 @@ local function createWhiteScreen()
     extraStatusLabel.TextYAlignment = Enum.TextYAlignment.Center
     extraStatusLabel.Parent = frame
 
-    -- Close button for Android/mobile users
+    -- Nearby Players Display (pojok kanan atas) - simple text labels
+    local nearbyPlayersContainer = Instance.new("Frame")
+    nearbyPlayersContainer.Name = "NearbyPlayersContainer"
+    nearbyPlayersContainer.Size = UDim2.new(0, 250, 0, 500)
+    nearbyPlayersContainer.Position = UDim2.new(1, -270, 0, 20)
+    nearbyPlayersContainer.BackgroundTransparency = 1
+    nearbyPlayersContainer.Parent = frame
+
+    -- Title untuk nearby players
+    local nearbyTitle = Instance.new("TextLabel")
+    nearbyTitle.Name = "NearbyTitle"
+    nearbyTitle.Size = UDim2.new(1, 0, 0, 25)
+    nearbyTitle.Position = UDim2.new(0, 0, 0, 0)
+    nearbyTitle.BackgroundTransparency = 1
+    nearbyTitle.Text = "👥 Nearby Players"
+    nearbyTitle.TextColor3 = Color3.new(1, 1, 0)
+    nearbyTitle.TextSize = 16
+    nearbyTitle.Font = Enum.Font.SourceSansBold
+    nearbyTitle.TextXAlignment = Enum.TextXAlignment.Left
+    nearbyTitle.Parent = nearbyPlayersContainer
+
+    -- Buttons container di bawah (2 buttons horizontal)
+    -- Close button (kiri)
     local closeButton = Instance.new("TextButton")
-    closeButton.Size = UDim2.new(0, 200, 0, 40)
-    closeButton.Position = UDim2.new(0.5, -100, 0, 520)
+    closeButton.Size = UDim2.new(0, 150, 0, 40)
+    closeButton.Position = UDim2.new(0.5, -160, 1, -60)
+    closeButton.AnchorPoint = Vector2.new(0, 1)
     closeButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
     closeButton.BorderSizePixel = 0
-    closeButton.Text = "❌ Disable GPU Saver"
+    closeButton.Text = "❌ Disable GPU"
     closeButton.TextColor3 = Color3.new(1, 0, 0)
-    closeButton.TextSize = 16
+    closeButton.TextSize = 14
     closeButton.Font = Enum.Font.SourceSansBold
     closeButton.Parent = frame
 
@@ -1214,32 +1301,33 @@ local function createWhiteScreen()
         disableGPUSaver()
     end)
 
-    -- Buy Totem button
+    -- Buy Totem button (kanan)
     local buyTotemButton = Instance.new("TextButton")
-    buyTotemButton.Size = UDim2.new(0, 200, 0, 40)
-    buyTotemButton.Position = UDim2.new(0.5, -100, 0, 570)
+    buyTotemButton.Size = UDim2.new(0, 150, 0, 40)
+    buyTotemButton.Position = UDim2.new(0.5, 10, 1, -60)
+    buyTotemButton.AnchorPoint = Vector2.new(0, 1)
     buyTotemButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
     buyTotemButton.BorderSizePixel = 0
-    buyTotemButton.Text = "🗿 Buy Totem 2M"
+    buyTotemButton.Text = "💰 Buy Totem"
     buyTotemButton.TextColor3 = Color3.new(1, 1, 1)
-    buyTotemButton.TextSize = 16
+    buyTotemButton.TextSize = 14
     buyTotemButton.Font = Enum.Font.SourceSansBold
     buyTotemButton.Parent = frame
 
     buyTotemButton.MouseButton1Click:Connect(function()
-        -- Function will be added later
-        print("Buy Totem button clicked")
+        buyTotem()
     end)
 
-    -- ====== IMPROVED UPDATE SYSTEM (from reference) ====== 
+    -- ====== IMPROVED UPDATE SYSTEM (from reference) ======
     task.spawn(function()
         local lastUpdate = tick()
+        local lastPlayerUpdate = tick()
         local frameCount = 0
-        
+
         connections.renderConnection = RunService.RenderStepped:Connect(function()
             frameCount = frameCount + 1
             local currentTime = tick()
-            
+
             if currentTime - lastUpdate >= 1 then
                 local fps = frameCount / (currentTime - lastUpdate)
                 
@@ -1285,6 +1373,65 @@ local function createWhiteScreen()
                 pcall(function() if quest2Label and quest2Label.Parent then quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2") end end)
                 pcall(function() if quest3Label and quest3Label.Parent then quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3") end end)
                 pcall(function() if quest4Label and quest4Label.Parent then quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4") end end)
+
+                -- Update nearby players list (every 30 seconds only)
+                if currentTime - lastPlayerUpdate >= 30 then
+                    lastPlayerUpdate = currentTime
+                    pcall(function()
+                        if nearbyPlayersContainer and nearbyPlayersContainer.Parent then
+                            local myChar = LocalPlayer.Character
+                            if not myChar then return end
+                            local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+                            if not myRoot then return end
+
+                            -- Clear existing player labels (except title)
+                            for _, child in ipairs(nearbyPlayersContainer:GetChildren()) do
+                                if child:IsA("TextLabel") and child.Name ~= "NearbyTitle" then
+                                    child:Destroy()
+                                end
+                            end
+
+                            local nearbyPlayers = {}
+                            local charactersFolder = workspace:FindFirstChild("Characters")
+                            if charactersFolder then
+                                for _, charModel in ipairs(charactersFolder:GetChildren()) do
+                                    if charModel:IsA("Model") then
+                                        local otherRoot = charModel:FindFirstChild("HumanoidRootPart")
+                                        if otherRoot and charModel.Name ~= LocalPlayer.Name then
+                                            local distance = (myRoot.Position - otherRoot.Position).Magnitude
+                                            if distance <= 100 then -- Within 100 studs
+                                                table.insert(nearbyPlayers, {
+                                                    name = charModel.Name,
+                                                    distance = distance
+                                                })
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+
+                            -- Sort by distance
+                            table.sort(nearbyPlayers, function(a, b) return a.distance < b.distance end)
+
+                            -- Display players (simple text labels)
+                            local yOffset = 30
+                            for i, playerData in ipairs(nearbyPlayers) do
+                                if i > 15 then break end -- Limit to 15 players max for performance
+                                local playerLabel = Instance.new("TextLabel")
+                                playerLabel.Size = UDim2.new(1, 0, 0, 20)
+                                playerLabel.Position = UDim2.new(0, 0, 0, yOffset)
+                                playerLabel.BackgroundTransparency = 1
+                                playerLabel.Text = string.format("%s (%.0fm)", playerData.name, playerData.distance)
+                                playerLabel.TextColor3 = Color3.new(1, 1, 1)
+                                playerLabel.TextSize = 14
+                                playerLabel.Font = Enum.Font.SourceSans
+                                playerLabel.TextXAlignment = Enum.TextXAlignment.Left
+                                playerLabel.Parent = nearbyPlayersContainer
+                                yOffset = yOffset + 20
+                            end
+                        end
+                    end)
+                end
                 
                 -- Safe status update
                 pcall(function()
@@ -3156,6 +3303,9 @@ else
 
     saveConfig()
 end
+
+-- Set global variable for totem functions
+_G.useAutoFarm = useAutoFarm
 
 local GPU_FPS_CAP = GPU_FPS_LIMIT or 8
 
