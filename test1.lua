@@ -1198,10 +1198,34 @@ local function createWhiteScreen()
     extraStatusLabel.TextYAlignment = Enum.TextYAlignment.Center
     extraStatusLabel.Parent = frame
 
-    -- Close button for Android/mobile users
+    -- Nearby Players Display (pojok kanan atas)
+    local nearbyPlayersFrame = Instance.new("ScrollingFrame")
+    nearbyPlayersFrame.Name = "NearbyPlayersFrame"
+    nearbyPlayersFrame.Size = UDim2.new(0, 220, 0, 400)
+    nearbyPlayersFrame.Position = UDim2.new(1, -240, 0, 20)
+    nearbyPlayersFrame.BackgroundColor3 = Color3.new(0.15, 0.15, 0.15)
+    nearbyPlayersFrame.BorderSizePixel = 0
+    nearbyPlayersFrame.ScrollBarThickness = 6
+    nearbyPlayersFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    nearbyPlayersFrame.Parent = frame
+
+    -- Title untuk nearby players
+    local nearbyTitle = Instance.new("TextLabel")
+    nearbyTitle.Name = "NearbyTitle"
+    nearbyTitle.Size = UDim2.new(1, 0, 0, 30)
+    nearbyTitle.Position = UDim2.new(0, 0, 0, 0)
+    nearbyTitle.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+    nearbyTitle.BorderSizePixel = 0
+    nearbyTitle.Text = "👥 Nearby Players"
+    nearbyTitle.TextColor3 = Color3.new(1, 1, 1)
+    nearbyTitle.TextSize = 14
+    nearbyTitle.Font = Enum.Font.SourceSansBold
+    nearbyTitle.Parent = nearbyPlayersFrame
+
+    -- Close button for Android/mobile users (pindah ke bawah tengah)
     local closeButton = Instance.new("TextButton")
     closeButton.Size = UDim2.new(0, 200, 0, 40)
-    closeButton.Position = UDim2.new(1, -220, 0, 100)
+    closeButton.Position = UDim2.new(0.5, -100, 0, 520)
     closeButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
     closeButton.BorderSizePixel = 0
     closeButton.Text = "❌ Disable GPU Saver"
@@ -1214,10 +1238,10 @@ local function createWhiteScreen()
         disableGPUSaver()
     end)
 
-    -- Buy Totem button
+    -- Buy Totem button (pindah ke bawah tengah)
     local buyTotemButton = Instance.new("TextButton")
     buyTotemButton.Size = UDim2.new(0, 200, 0, 40)
-    buyTotemButton.Position = UDim2.new(1, -220, 0, 150)
+    buyTotemButton.Position = UDim2.new(0.5, -100, 0, 570)
     buyTotemButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
     buyTotemButton.BorderSizePixel = 0
     buyTotemButton.Text = "🗿 Buy Totem 2M"
@@ -1285,6 +1309,64 @@ local function createWhiteScreen()
                 pcall(function() if quest2Label and quest2Label.Parent then quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2") end end)
                 pcall(function() if quest3Label and quest3Label.Parent then quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3") end end)
                 pcall(function() if quest4Label and quest4Label.Parent then quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4") end end)
+
+                -- Update nearby players list
+                pcall(function()
+                    if nearbyPlayersFrame and nearbyPlayersFrame.Parent then
+                        local myChar = LocalPlayer.Character
+                        if not myChar then return end
+                        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+                        if not myRoot then return end
+
+                        -- Clear existing player labels (except title)
+                        for _, child in ipairs(nearbyPlayersFrame:GetChildren()) do
+                            if child:IsA("TextLabel") and child.Name ~= "NearbyTitle" then
+                                child:Destroy()
+                            end
+                        end
+
+                        local nearbyPlayers = {}
+                        local charactersFolder = workspace:FindFirstChild("Characters")
+                        if charactersFolder then
+                            for _, charModel in ipairs(charactersFolder:GetChildren()) do
+                                if charModel:IsA("Model") then
+                                    local otherRoot = charModel:FindFirstChild("HumanoidRootPart")
+                                    if otherRoot and charModel.Name ~= LocalPlayer.Name then
+                                        local distance = (myRoot.Position - otherRoot.Position).Magnitude
+                                        if distance <= 100 then -- Within 100 studs
+                                            table.insert(nearbyPlayers, {
+                                                name = charModel.Name,
+                                                distance = distance
+                                            })
+                                        end
+                                    end
+                                end
+                            end
+                        end
+
+                        -- Sort by distance
+                        table.sort(nearbyPlayers, function(a, b) return a.distance < b.distance end)
+
+                        -- Display players
+                        local yOffset = 35
+                        for i, playerData in ipairs(nearbyPlayers) do
+                            local playerLabel = Instance.new("TextLabel")
+                            playerLabel.Size = UDim2.new(1, -10, 0, 25)
+                            playerLabel.Position = UDim2.new(0, 5, 0, yOffset)
+                            playerLabel.BackgroundTransparency = 1
+                            playerLabel.Text = string.format("%s (%.0fm)", playerData.name, playerData.distance)
+                            playerLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+                            playerLabel.TextSize = 12
+                            playerLabel.Font = Enum.Font.SourceSans
+                            playerLabel.TextXAlignment = Enum.TextXAlignment.Left
+                            playerLabel.Parent = nearbyPlayersFrame
+                            yOffset = yOffset + 25
+                        end
+
+                        -- Update canvas size
+                        nearbyPlayersFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 10)
+                    end
+                end)
                 
                 -- Safe status update
                 pcall(function()
