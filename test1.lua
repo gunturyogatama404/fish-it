@@ -958,170 +958,30 @@ local function findTotemUUID()
 
     local success, result = pcall(function()
         local inventoryItems = PlayerData:GetExpect("Inventory").Items
-        local equippedItems = PlayerData:GetExpect("EquippedItems")
 
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print("[Find Totem] Scanning inventory...")
+        print("[Find Totem] Scanning inventory for 'Luck Totem'...")
         print("[Find Totem] Total items in Inventory.Items: " .. #inventoryItems)
-        print("[Find Totem] Total equipped items: " .. #equippedItems)
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-        -- Print first 5 equipped items to see UUID format
-        print("[Find Totem] [DEBUG] First 5 equipped UUIDs:")
-        for i = 1, math.min(5, #equippedItems) do
-            print(string.format("[Find Totem] [DEBUG]   Slot %d: %s", i, equippedItems[i]))
-        end
-        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-        -- Count unique items by Type
-        local typeCount = {}
+        -- Search ONLY by name "Luck Totem" (exact match or contains)
         for _, item in ipairs(inventoryItems) do
             local itemData = ItemUtility:GetItemData(item.Id)
-            if itemData and itemData.Data then
-                local itemType = itemData.Data.Type or "Unknown"
-                typeCount[itemType] = (typeCount[itemType] or 0) + 1
-            end
-        end
+            if itemData and itemData.Data and itemData.Data.Name then
+                local itemName = itemData.Data.Name
 
-        print("[Find Totem] [DEBUG] Items by Type:")
-        for itemType, count in pairs(typeCount) do
-            print(string.format("[Find Totem] [DEBUG]   - %s: %d items", itemType, count))
-        end
-        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-        -- Print RAW items with ID 1, 5, or 11 (Luck Totem possible IDs)
-        print("[Find Totem] [DEBUG] Searching for items with ID 1, 5, or 11 (Luck Totem):")
-        local foundLuckTotem = false
-        for i, item in ipairs(inventoryItems) do
-            if item.Id == 1 or item.Id == 5 or item.Id == 11 then
-                print(string.format("[Find Totem] [DEBUG] ✅ FOUND ID %d! UUID: %s",
-                    item.Id, item.UUID))
-                foundLuckTotem = true
-
-                -- Try to get ItemData
-                local itemData = ItemUtility:GetItemData(item.Id)
-                if itemData and itemData.Data then
-                    print(string.format("[Find Totem] [DEBUG]   ItemData.Name: %s, Type: %s",
-                        itemData.Data.Name or "nil", itemData.Data.Type or "nil"))
-                else
-                    print("[Find Totem] [DEBUG]   ItemUtility returned nil or invalid data")
+                -- Exact match for "Luck Totem"
+                if itemName == "Luck Totem" then
+                    local itemType = itemData.Data.Type or "Unknown"
+                    print(string.format("[Find Totem] ✅ FOUND: %s (Type: %s, ID: %d, UUID: %s)",
+                        itemName, itemType, item.Id, item.UUID))
+                    return item.UUID
                 end
             end
         end
 
-        if not foundLuckTotem then
-            print("[Find Totem] [DEBUG] ❌ No items with ID 1, 5, or 11 found in Inventory.Items")
-        end
-        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-        -- Also check EquippedItems (if totem already equipped manually)
-        print("[Find Totem] [DEBUG] Checking equipped items for Luck Totem UUID...")
-        for slot, uuid in ipairs(equippedItems) do
-            -- Try to match this UUID with inventory items
-            for _, item in ipairs(inventoryItems) do
-                if item.UUID == uuid and (item.Id == 1 or item.Id == 5 or item.Id == 11) then
-                    print(string.format("[Find Totem] [DEBUG] ✅ Totem found in hotbar slot %d! UUID: %s, ID: %d",
-                        slot, uuid, item.Id))
-                    foundLuckTotem = true
-                end
-            end
-        end
-        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-        -- Search all items for anything related to totem (including by ID)
-        local foundItems = {}
-        for i, item in ipairs(inventoryItems) do
-            -- First check: Direct ID match (ID 1, 5, or 11 are possible Luck Totem IDs)
-            if item.Id == 1 or item.Id == 5 or item.Id == 11 then
-                table.insert(foundItems, {
-                    name = "Luck Totem (ID " .. item.Id .. ")",
-                    type = "Totems/Potions",
-                    id = item.Id,
-                    uuid = item.UUID
-                })
-                print(string.format("[Find Totem] ✅ FOUND BY ID: Luck Totem (ID: %d, UUID: %s)", item.Id, item.UUID))
-                -- Continue to check via ItemUtility as well
-            end
-
-            -- Second check: Via ItemUtility (as before)
-            local itemData = ItemUtility:GetItemData(item.Id)
-            if itemData and itemData.Data then
-                local itemName = itemData.Data.Name or ""
-                local itemType = itemData.Data.Type or ""
-                local itemNameLower = string.lower(itemName)
-                local itemTypeLower = string.lower(itemType)
-
-                -- Check if it's totem-related by name or type
-                if string.find(itemNameLower, "totem") or string.find(itemTypeLower, "totem") or
-                   string.find(itemNameLower, "luck") or itemType == "Totems" or
-                   (itemType == "Potions" and string.find(itemNameLower, "totem")) then
-
-                    -- Only add if not already added by ID check
-                    local alreadyAdded = false
-                    for _, existing in ipairs(foundItems) do
-                        if existing.uuid == item.UUID then
-                            alreadyAdded = true
-                            break
-                        end
-                    end
-
-                    if not alreadyAdded then
-                        table.insert(foundItems, {
-                            name = itemName,
-                            type = itemType,
-                            id = item.Id,
-                            uuid = item.UUID
-                        })
-                        print(string.format("[Find Totem] ✅ FOUND BY NAME: %s (Type: %s, ID: %d, UUID: %s)",
-                            itemName, itemType, item.Id, item.UUID))
-                    end
-                end
-            end
-        end
-
-        -- If we found any totem-related items, return the first one
-        if #foundItems > 0 then
-            print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            print(string.format("[Find Totem] ✅ Returning UUID: %s", foundItems[1].uuid))
-            return foundItems[1].uuid
-        end
-
-        -- Fallback 1: Check if any equipped item is a Luck Totem (by matching with inventory)
-        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print("[Find Totem] ❌ No totem found via search")
-        print("[Find Totem] 🔄 Fallback: Checking equipped items...")
-
-        for slot, uuid in ipairs(equippedItems) do
-            -- Find this UUID in inventory and check if it's ID 1, 5, or 11
-            for _, item in ipairs(inventoryItems) do
-                if item.UUID == uuid and (item.Id == 1 or item.Id == 5 or item.Id == 11) then
-                    print(string.format("[Find Totem] ✅ Found equipped totem in slot %d! UUID: %s, ID: %d",
-                        slot, uuid, item.Id))
-                    return uuid
-                end
-            end
-        end
-
-        -- Fallback 2: Try hardcoded UUID
-        print("[Find Totem] 🔄 Fallback 2: Trying hardcoded UUID: bf27e53b-284c-400b-9a89-737f54a4cc4a")
-
-        -- Check if this UUID exists in equipped items
-        for _, uuid in ipairs(equippedItems) do
-            if uuid == "bf27e53b-284c-400b-9a89-737f54a4cc4a" then
-                print("[Find Totem] ✅ Hardcoded UUID found in equipped items!")
-                return uuid
-            end
-        end
-
-        -- Check if exists in raw inventory
-        for _, item in ipairs(inventoryItems) do
-            if item.UUID == "bf27e53b-284c-400b-9a89-737f54a4cc4a" then
-                print("[Find Totem] ✅ Hardcoded UUID found in inventory!")
-                return item.UUID
-            end
-        end
-
-        print("[Find Totem] ⚠️ All methods failed. Totem might not be purchased yet.")
+        print("[Find Totem] ❌ 'Luck Totem' not found in inventory")
+        print("[Find Totem] ⚠️ Make sure you purchased it first with 'Buy Totem' button")
         return nil
     end)
 
@@ -1223,10 +1083,24 @@ local function equipAndPlaceTotem()
             task.wait(3) -- Wait longer for auto farm to fully stop
         end
 
-        -- Step 1: Use hardcoded Luck Totem UUID (universal UUID from reference file)
-        local totemUUID = "bf27e53b-284c-400b-9a89-737f54a4cc4a"
-        print("[Place Totem] Using universal Luck Totem UUID: " .. totemUUID)
-        print("[Place Totem] (Based on reference file - this should work for all Luck Totems)")
+        -- Step 1: Find Luck Totem UUID from inventory
+        print("[Place Totem] Searching for 'Luck Totem' in inventory...")
+        local totemUUID = findTotemUUID()
+
+        if not totemUUID then
+            warn("[Place Totem] ❌ Luck Totem not found in inventory!")
+            warn("[Place Totem] ❌ Please purchase it first using 'Buy Totem' button")
+
+            -- Re-enable auto farm
+            if wasAutoFarmActive then
+                print("[Place Totem] 🔄 Re-enabling auto farm...")
+                isAutoFarmOn = true
+                equipRod() -- Re-equip rod
+            end
+            return
+        end
+
+        print("[Place Totem] ✅ Found Luck Totem UUID: " .. totemUUID)
 
         -- Step 2: Equip totem to hotbar (try both "Totems" and "Potions" category)
         print("[Place Totem] Step 1: Equipping totem to hotbar...")
