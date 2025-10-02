@@ -933,6 +933,7 @@ function getQuestText(a)local b,c=pcall(function()local d=workspace:FindFirstChi
 -- ====== STATS/FORMAT FUNCTIONS (GLOBAL TO SAVE REGISTERS) ======
 function FormatTime(a)a=tonumber(a)or 0;a=math.max(0,math.floor(a))local b=math.floor(a/3600)local c=math.floor((a%3600)/60)local d=a%60;return string.format("%02d:%02d:%02d",b,c,d)end
 function FormatNumber(a)local b=tonumber(a)or 0;local c=tostring(math.floor(b))local d;while true do c,d=string.gsub(c,"^(-?%d+)(%d%d%d)",'%1,%2')if d==0 then break end end;return c end
+function FormatCoins(a)local b=tonumber(a)or 0;if b>=1000000 then return string.format("%.1fM",b/1000000)elseif b>=1000 then return string.format("%.1fK",b/1000)else return tostring(math.floor(b))end end
 
 -- ====== GPU SAVER VARIABLES ======
 -- Read GPU_FPS_LIMIT from main_noui.lua if available, otherwise default to 8
@@ -1086,7 +1087,7 @@ local function createWhiteScreen()
     coinLabel.Size = UDim2.new(0, 400, 0, 40)
     coinLabel.Position = UDim2.new(0.5, -200, 0, 240)
     coinLabel.BackgroundTransparency = 1
-    coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
+    coinLabel.Text = "💰 Coins: " .. FormatCoins(getCurrentCoins())
     coinLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
     coinLabel.TextSize = 22
     coinLabel.Font = Enum.Font.SourceSans
@@ -1242,7 +1243,7 @@ local function createWhiteScreen()
                 -- Safe coins update
                 pcall(function()
                     if coinLabel and coinLabel.Parent then
-                        coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
+                        coinLabel.Text = "💰 Coins: " .. FormatCoins(getCurrentCoins())
                     end
                 end)
 
