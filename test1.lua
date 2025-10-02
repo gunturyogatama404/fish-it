@@ -991,23 +991,61 @@ local function buyTotem()
     task.spawn(function()
         print("[Buy Totem] Purchasing Luck Totem from market...")
 
-        local purchaseSuccess, purchaseError = pcall(function()
-            networkEvents.purchaseMarketItemEvent:InvokeServer(5)
-        end)
-
-        if not purchaseSuccess then
-            warn("[Buy Totem] Failed to purchase totem: " .. tostring(purchaseError))
+        -- Debug: Check current coins
+        local currentCoins = getCurrentCoins()
+        print("[Buy Totem] Current coins: " .. FormatCoins(currentCoins))
+        if currentCoins < 2000000 then
+            warn("[Buy Totem] ❌ Not enough coins! Need 2M, you have: " .. FormatCoins(currentCoins))
             return
         end
 
+        -- Debug: Check if event exists
+        if not networkEvents or not networkEvents.purchaseMarketItemEvent then
+            warn("[Buy Totem] ❌ Purchase event not found! Trying alternative method...")
+
+            -- Alternative method: Direct access
+            local success, result = pcall(function()
+                local net = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
+                local purchaseEvent = net:FindFirstChild("RF/PurchaseMarketItem")
+
+                if not purchaseEvent then
+                    warn("[Buy Totem] ❌ PurchaseMarketItem event not found in ReplicatedStorage!")
+                    return false
+                end
+
+                print("[Buy Totem] Found event, invoking with ID 5...")
+                local result = purchaseEvent:InvokeServer(5)
+                print("[Buy Totem] Server response: " .. tostring(result))
+                return true
+            end)
+
+            if not success then
+                warn("[Buy Totem] ❌ Alternative method failed: " .. tostring(result))
+                return
+            end
+        else
+            -- Original method
+            local purchaseSuccess, purchaseError = pcall(function()
+                print("[Buy Totem] Calling InvokeServer(5)...")
+                local result = networkEvents.purchaseMarketItemEvent:InvokeServer(5)
+                print("[Buy Totem] Server returned: " .. tostring(result))
+            end)
+
+            if not purchaseSuccess then
+                warn("[Buy Totem] ❌ Failed to purchase totem: " .. tostring(purchaseError))
+                return
+            end
+        end
+
         print("[Buy Totem] ✅ Purchase request sent! Waiting for confirmation...")
-        task.wait(2)
+        task.wait(3)
 
         local totemUUID = findTotemUUID()
         if totemUUID then
             print("[Buy Totem] ✅ Totem successfully purchased and found in inventory!")
         else
-            warn("[Buy Totem] ⚠️ Purchase sent, but totem not found in inventory yet. Try again or wait.")
+            warn("[Buy Totem] ⚠️ Purchase sent, but totem not found in inventory yet.")
+            warn("[Buy Totem] ⚠️ Check if you have enough coins (2M required) or if totem already exists.")
         end
     end)
 end
