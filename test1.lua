@@ -960,59 +960,58 @@ local function findTotemUUID()
         local inventory = PlayerData:GetExpect("Inventory")
         local inventoryItems = inventory.Items
 
+        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         print("[Find Totem] Scanning " .. #inventoryItems .. " items in inventory...")
+        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-        -- First pass: Look for items with "Totem" in Type
+        -- Debug: Print first 10 items to see structure
+        print("[Find Totem] [DEBUG] First 10 items in inventory:")
+        for i = 1, math.min(10, #inventoryItems) do
+            local item = inventoryItems[i]
+            local itemData = ItemUtility:GetItemData(item.Id)
+            if itemData and itemData.Data then
+                local itemName = itemData.Data.Name or "Unknown"
+                local itemType = itemData.Data.Type or "Unknown"
+                print(string.format("[Find Totem] [DEBUG] #%d: %s (Type: %s, ID: %d)", i, itemName, itemType, item.Id))
+            end
+        end
+        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+        -- Search all items for anything related to totem
+        local foundItems = {}
         for i, item in ipairs(inventoryItems) do
             local itemData = ItemUtility:GetItemData(item.Id)
             if itemData and itemData.Data then
+                local itemName = itemData.Data.Name or ""
                 local itemType = itemData.Data.Type or ""
-
-                -- Check if Type is "Totems"
-                if itemType == "Totems" then
-                    local itemName = itemData.Data.Name or "Unknown"
-                    print("[Find Totem] ✅ FOUND TOTEM TYPE! Name: " .. itemName .. " (Type: " .. itemType .. ", ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
-                    return item.UUID
-                end
-            end
-        end
-
-        -- Second pass: Search by name containing "totem"
-        print("[Find Totem] First pass failed, trying name search...")
-        for i, item in ipairs(inventoryItems) do
-            local itemData = ItemUtility:GetItemData(item.Id)
-            if itemData and itemData.Data and itemData.Data.Name then
-                local itemName = itemData.Data.Name
                 local itemNameLower = string.lower(itemName)
+                local itemTypeLower = string.lower(itemType)
 
-                if string.find(itemNameLower, "totem") or string.find(itemNameLower, "luck") then
-                    local itemType = itemData.Data.Type or "Unknown"
-                    print("[Find Totem] ✅ Found item with 'totem/luck': " .. itemName .. " (Type: " .. itemType .. ", ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
-                    return item.UUID
+                -- Check if it's totem-related by name or type
+                if string.find(itemNameLower, "totem") or string.find(itemTypeLower, "totem") or
+                   string.find(itemNameLower, "luck") or itemType == "Totems" then
+                    table.insert(foundItems, {
+                        name = itemName,
+                        type = itemType,
+                        id = item.Id,
+                        uuid = item.UUID
+                    })
+                    print(string.format("[Find Totem] ✅ FOUND POTENTIAL TOTEM: %s (Type: %s, ID: %d, UUID: %s)",
+                        itemName, itemType, item.Id, item.UUID))
                 end
             end
         end
 
-        -- Third pass: Print items with Type "Items" (in case it's categorized there)
-        print("[Find Totem] Still not found, checking Items type...")
-        for i, item in ipairs(inventoryItems) do
-            local itemData = ItemUtility:GetItemData(item.Id)
-            if itemData and itemData.Data then
-                local itemType = itemData.Data.Type or ""
-
-                if itemType == "Items" then
-                    local itemName = itemData.Data.Name or "Unknown"
-                    print("[Find Totem] Item: " .. itemName .. " (ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
-
-                    if string.find(string.lower(itemName), "totem") then
-                        print("[Find Totem] ✅ Found totem in Items!")
-                        return item.UUID
-                    end
-                end
-            end
+        -- If we found any totem-related items, return the first one
+        if #foundItems > 0 then
+            print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print(string.format("[Find Totem] ✅ Returning UUID: %s", foundItems[1].uuid))
+            return foundItems[1].uuid
         end
 
-        print("[Find Totem] ❌ No totem found after 3 passes")
+        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("[Find Totem] ❌ No totem found in inventory")
+        print("[Find Totem] ⚠️ Totem might not be purchased yet, or inventory needs time to refresh")
         return nil
     end)
 
