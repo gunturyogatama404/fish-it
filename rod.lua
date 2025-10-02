@@ -1,10 +1,11 @@
 --[[
-    Fish Detection and Selection System v1.4
-    Tujuan: Mendeteksi daftar ikan, rods, dan baits di inventory
+    Fish Detection and Selection System v1.5
+    Tujuan: Mendeteksi daftar ikan, rods, baits, dan totems di inventory
     Fitur:
     - GUI untuk melihat nama ikan + mutasi, dengan navigasi berurutan
     - Tab Rods: Deteksi dan equip fishing rods menggunakan UUID
     - Tab Baits: Deteksi dan equip baits menggunakan ID
+    - Tab Totems: Deteksi dan equip totems menggunakan UUID (dengan info tier)
     - Auto Trade & Auto Enchant
 --]]
 
@@ -43,6 +44,11 @@ local currentCategory = "Fishes" -- "Fishes" or "Items"
 local detectedBaits = {}
 local currentBaitIndex = 1
 local selectedBaitIndex = nil
+
+-- Variables for totem detection
+local detectedTotems = {}
+local currentTotemIndex = 1
+local selectedTotemIndex = nil
 
 -- Auto Enchant Variables
 local isAutoEnchantOn = false
@@ -511,6 +517,24 @@ local function equipBaitByID(baitID)
     -- Use the EquipBait remote event
     local EquipBaitEvent = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/EquipBait")
     EquipBaitEvent:FireServer(baitID)
+    return true
+end
+
+-- Function to equip totem by UUID (Totems use UUID like Rods)
+local function equipTotemByUUID(totemUUID)
+    if not totemUUID or not PlayerData then return false end
+
+    local equippedItems = PlayerData:GetExpect("EquippedItems")
+    for _, equippedUUID in ipairs(equippedItems) do
+        if equippedUUID == totemUUID then
+            print(string.format("[equipTotemByUUID] Totem with UUID '%s' is already equipped.", totemUUID))
+            return true -- Already equipped
+        end
+    end
+
+    print(string.format("[equipTotemByUUID] Equipping totem with UUID: %s", totemUUID))
+    -- The category for totems is "Totems"
+    EquipItemEvent:FireServer(totemUUID, "Totems")
     return true
 end
 
@@ -1344,6 +1368,58 @@ local function detectBaits()
     return true
 end
 
+-- Totem Detection Function
+local function detectTotems()
+    detectedTotems = {}
+    isDetecting = true
+    print("[Totem Detector] Starting totem detection from PlayerData...")
+
+    if not PlayerData then
+        warn("[Totem Detector] PlayerData is not available.")
+        isDetecting = false
+        return false
+    end
+
+    local success, inventory = pcall(function()
+        return PlayerData:Get("Inventory")
+    end)
+
+    if not success or not inventory then
+        warn("[Totem Detector] Failed to get inventory from PlayerData:", tostring(inventory))
+        isDetecting = false
+        return false
+    end
+
+    -- The category is "Totems" as seen in InventoryMapping.lua
+    local totems = inventory["Totems"]
+    if not totems or type(totems) ~= "table" then
+        warn("[Totem Detector] 'Totems' category not found in inventory data.")
+        isDetecting = false
+        return false
+    end
+
+    print(string.format("[Totem Detector] Found %d total items in 'Totems' category.", #totems))
+
+    for i, totemItem in ipairs(totems) do
+        -- totemItem contains Id and UUID (Totems use UUID like Rods)
+        local totemData = ItemUtility.GetItemDataFromItemType("Totems", totemItem.Id)
+        if totemData and totemData.Data then
+            local totemName = trim(totemData.Data.Name)
+            local totemUUID = totemItem.UUID
+            local totemIcon = totemData.Data.Icon or ""
+            local totemTier = totemData.Data.Tier or 0
+            print(string.format("[Totem Detector] Found totem: '%s' (UUID: %s, Tier: %d)", totemName, totemUUID, totemTier))
+            table.insert(detectedTotems, {index = #detectedTotems + 1, name = totemName, uuid = totemUUID, icon = totemIcon, tier = totemTier})
+        else
+            warn("[Totem Detector] Could not get data for totem with ID:", totemItem.Id)
+        end
+    end
+
+    print(string.format("[Totem Detector] Detection complete. Found %d totems.", #detectedTotems))
+    isDetecting = false
+    return true
+end
+
 updateDisplay = function()
     if not fishDetectionWindow then return end
 
@@ -1368,10 +1444,10 @@ updateDisplay = function()
     local function createTab(text, tabName)
         local tabButton = Instance.new("TextButton")
         tabButton.Name = tabName .. "Tab"
-        tabButton.Size = UDim2.new(0.166, -4, 1, 0) -- Adjusted for 6 tabs (1/6 = 0.166)
+        tabButton.Size = UDim2.new(0.142, -4, 1, 0) -- Adjusted for 7 tabs (1/7 = 0.142)
         tabButton.Font = Enum.Font.GothamSemibold
         tabButton.Text = text
-        tabButton.TextSize = 11 -- Slightly smaller to fit better
+        tabButton.TextSize = 10 -- Slightly smaller to fit better
         tabButton.AutoButtonColor = false
         tabButton.Parent = tabContainer
 
@@ -1399,6 +1475,7 @@ updateDisplay = function()
     createTab("🐟 Fish", "Fish")
     createTab("🎣 Rods", "Rods")
     createTab("🪝 Baits", "Baits")
+    createTab("🗿 Totems", "Totems")
     createTab("👥 Players", "Players")
     createTab("🤖 Auto Trade", "AutoTrade")
     createTab("✨ Enchant", "Enchant")
@@ -1661,6 +1738,69 @@ updateDisplay = function()
             updateDisplay()
         end))
 
+    elseif currentTab == "Totems" then
+        local order = 1
+        local function add(inst) inst.LayoutOrder = order; order = order + 1; return inst end
+
+        add(fishDetectionWindow:AddLabel("🗿 Totems"))
+
+        if #detectedTotems == 0 then
+            add(fishDetectionWindow:AddLabel("No totems detected. Try detecting first!"))
+            add(fishDetectionWindow:AddButton("🔍 Detect Totems", function()
+                if isDetecting then return end
+                detectTotems()
+                updateDisplay()
+            end))
+            return
+        end
+
+        add(fishDetectionWindow:AddLabel(string.format("Total Totems: %d", #detectedTotems)))
+
+        -- Function to open the inventory to the Totems tab
+        local function openTotemsInventory()
+            local GuiControl = require(ReplicatedStorage.Modules.GuiControl)
+            local InventoryController = require(ReplicatedStorage.Controllers.InventoryController)
+
+            if GuiControl:IsOpen("Inventory") then
+                GuiControl:Close()
+            else
+                -- Use the controller to set the page and open it
+                InventoryController:SetPage("Items")
+                InventoryController:SetCategory("Totems")
+                if InventoryController.InventoryStateChanged then
+                    -- Fire the event to trigger a redraw
+                    InventoryController.InventoryStateChanged:Fire("Inventory")
+                end
+                GuiControl:Open("Inventory", false)
+            end
+        end
+        add(fishDetectionWindow:AddButton("📖 Open Game Inventory to Totems", openTotemsInventory))
+
+        -- Display all totems with click-to-equip
+        for i, totem in ipairs(detectedTotems) do
+            local isCurrent = (i == currentTotemIndex)
+            local tierText = totem.tier > 0 and (" [T" .. totem.tier .. "]") or ""
+            local buttonText = isCurrent and ("▶ " .. totem.name .. tierText) or ("  " .. totem.name .. tierText)
+
+            add(fishDetectionWindow:AddButton(buttonText, function()
+                currentTotemIndex = i
+                -- Equip the totem when clicked, using its UUID
+                if totem.uuid then
+                    equipTotemByUUID(totem.uuid)
+                else
+                    warn("[UI] Totem has no UUID:", totem.name)
+                end
+                updateDisplay()
+            end))
+        end
+
+        add(fishDetectionWindow:AddButton("🔍 Detect Totems Again", function()
+            if isDetecting then return end
+            detectTotems()
+            currentTotemIndex = 1
+            updateDisplay()
+        end))
+
     elseif currentTab == "Players" then
         local order = 1
         local function add(inst) inst.LayoutOrder = order; order = order + 1; return inst end
@@ -1846,7 +1986,7 @@ local function initializeFishDetector()
     LightweightInventory.start()
     task.wait(3)
 
-    fishDetectionWindow = FishDetectorLib.CreateWindow("🐟 Fish & Trade + Enchant v1.4")
+    fishDetectionWindow = FishDetectorLib.CreateWindow("🐟 Fish & Trade + Enchant v1.5")
     updateDisplay()
 
     -- Event Listeners for Auto Trade
@@ -1891,7 +2031,7 @@ local function initializeFishDetector()
         end
     end)
 
-    print("🐟 Fish & Trade + Enchant v1.4 initialized!")
+    print("🐟 Fish & Trade + Enchant v1.5 initialized!")
 end
 
 -- Global functions for easy access
@@ -1924,7 +2064,7 @@ task.wait(2)
 initializeFishDetector()
 
 print("=" .. string.rep("=", 55) .. "=")
-print("🐟 FISH & TRADE + ENCHANT v1.4 - READY TO USE!")
+print("🐟 FISH & TRADE + ENCHANT v1.5 - READY TO USE!")
 print("=" .. string.rep("=", 55) .. "=")
 print("   showFishDetector() - Show the UI")
 print("   hideFishDetector() - Hide the UI")
@@ -1932,9 +2072,10 @@ print("")
 print("   🐟 Fish tab - Detect and select fish/items")
 print("   🎣 Rods tab - Detect and equip fishing rods")
 print("   🪝 Baits tab - Detect and equip baits")
+print("   🗿 Totems tab - Detect and equip totems")
 print("   👥 Players tab - Select trade partner")
 print("   🤖 Auto Trade tab - Start automatic trading")
 print("   ✨ Enchant tab - Auto TP + Auto Equip + Auto Enchant!")
 print("")
-print("   NEW: Baits detection and auto-equip added!")
+print("   NEW: Totems detection and auto-equip added!")
 print("=" .. string.rep("=", 55) .. "=")
