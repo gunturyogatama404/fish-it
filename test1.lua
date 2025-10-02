@@ -951,45 +951,89 @@ end
 
 -- ====== TOTEM PURCHASE & PLACEMENT FUNCTIONS ======
 local function findTotemUUID()
-    if not PlayerData then
-        warn("[Find Totem] PlayerData not available")
-        return nil
-    end
+    print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("[Find Totem] Scanning inventory GUI for 'Luck Totem'...")
+    print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     local success, result = pcall(function()
-        local inventoryItems = PlayerData:GetExpect("Inventory").Items
+        -- Access inventory GUI tiles
+        local inventoryGui = player.PlayerGui:FindFirstChild("Inventory")
+        if not inventoryGui then
+            warn("[Find Totem] Inventory GUI not found")
+            return nil
+        end
 
-        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print("[Find Totem] Scanning inventory for 'Luck Totem'...")
-        print("[Find Totem] Total items in Inventory.Items: " .. #inventoryItems)
-        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        local mainFrame = inventoryGui:FindFirstChild("Main")
+        if not mainFrame then
+            warn("[Find Totem] Main frame not found")
+            return nil
+        end
 
-        -- Search ONLY by name "Luck Totem" (exact match or contains)
-        for _, item in ipairs(inventoryItems) do
-            local itemData = ItemUtility:GetItemData(item.Id)
-            if itemData and itemData.Data and itemData.Data.Name then
-                local itemName = itemData.Data.Name
+        local content = mainFrame:FindFirstChild("Content")
+        if not content then
+            warn("[Find Totem] Content frame not found")
+            return nil
+        end
 
-                -- Exact match for "Luck Totem"
-                if itemName == "Luck Totem" then
-                    local itemType = itemData.Data.Type or "Unknown"
-                    print(string.format("[Find Totem] ✅ FOUND: %s (Type: %s, ID: %d, UUID: %s)",
-                        itemName, itemType, item.Id, item.UUID))
-                    return item.UUID
+        local pages = content:FindFirstChild("Pages")
+        if not pages then
+            warn("[Find Totem] Pages frame not found")
+            return nil
+        end
+
+        local inventoryPage = pages:FindFirstChild("Inventory")
+        if not inventoryPage then
+            warn("[Find Totem] Inventory page not found")
+            return nil
+        end
+
+        -- Get all children (tiles) from inventory page
+        local tiles = inventoryPage:GetChildren()
+        print("[Find Totem] Found " .. #tiles .. " tiles in inventory GUI")
+
+        -- Scan each tile for "Luck Totem"
+        for index, tile in ipairs(tiles) do
+            -- Check if this tile has ItemName
+            local itemNameLabel = tile:FindFirstChild("ItemName")
+            if itemNameLabel and itemNameLabel:IsA("TextLabel") then
+                local itemText = itemNameLabel.Text
+
+                -- Debug: print each item found
+                if itemText and itemText ~= "" then
+                    print(string.format("[Find Totem] Tile[%d]: %s", index, itemText))
+                end
+
+                -- Check for exact match "Luck Totem"
+                if itemText == "Luck Totem" then
+                    print(string.format("[Find Totem] ✅ FOUND at Tile[%d]: %s", index, itemText))
+
+                    -- Now get UUID from PlayerData.Inventory.Items by matching the tile index
+                    if PlayerData then
+                        local inventoryItems = PlayerData:GetExpect("Inventory").Items
+                        -- Tiles might not be 1:1 with items, so we need to match by name via ItemUtility
+                        for _, item in ipairs(inventoryItems) do
+                            local itemData = ItemUtility:GetItemData(item.Id)
+                            if itemData and itemData.Data and itemData.Data.Name == "Luck Totem" then
+                                print(string.format("[Find Totem] ✅ UUID found: %s (ID: %d)", item.UUID, item.Id))
+                                return item.UUID
+                            end
+                        end
+                    end
                 end
             end
         end
 
-        print("[Find Totem] ❌ 'Luck Totem' not found in inventory")
+        print("[Find Totem] ❌ 'Luck Totem' not found in inventory GUI")
         print("[Find Totem] ⚠️ Make sure you purchased it first with 'Buy Totem' button")
         return nil
     end)
 
     if not success then
-        warn("[Find Totem] Error scanning inventory: " .. tostring(result))
+        warn("[Find Totem] Error scanning inventory GUI: " .. tostring(result))
         return nil
     end
 
+    print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     return result
 end
 
