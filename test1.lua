@@ -959,22 +959,45 @@ local function findTotemUUID()
     local success, result = pcall(function()
         local inventory = PlayerData:GetExpect("Inventory")
         local inventoryItems = inventory.Items
+        local equippedItems = PlayerData:GetExpect("EquippedItems")
 
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print("[Find Totem] Scanning " .. #inventoryItems .. " items in inventory...")
+        print("[Find Totem] Total items in data: " .. #inventoryItems)
+        print("[Find Totem] Total equipped items: " .. #equippedItems)
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-        -- Debug: Print first 10 items to see structure
-        print("[Find Totem] [DEBUG] First 10 items in inventory:")
-        for i = 1, math.min(10, #inventoryItems) do
-            local item = inventoryItems[i]
+        -- Count unique items by Type
+        local typeCount = {}
+        for _, item in ipairs(inventoryItems) do
             local itemData = ItemUtility:GetItemData(item.Id)
             if itemData and itemData.Data then
-                local itemName = itemData.Data.Name or "Unknown"
                 local itemType = itemData.Data.Type or "Unknown"
-                print(string.format("[Find Totem] [DEBUG] #%d: %s (Type: %s, ID: %d)", i, itemName, itemType, item.Id))
+                typeCount[itemType] = (typeCount[itemType] or 0) + 1
             end
         end
+
+        print("[Find Totem] [DEBUG] Items by Type:")
+        for itemType, count in pairs(typeCount) do
+            print(string.format("[Find Totem] [DEBUG]   - %s: %d items", itemType, count))
+        end
+        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+        -- First, print ALL items with Type "Totems" to see what's there
+        print("[Find Totem] [DEBUG] Scanning for ALL Totems type items:")
+        local totemTypeCount = 0
+        for i, item in ipairs(inventoryItems) do
+            local itemData = ItemUtility:GetItemData(item.Id)
+            if itemData and itemData.Data then
+                local itemType = itemData.Data.Type or ""
+                if itemType == "Totems" then
+                    totemTypeCount = totemTypeCount + 1
+                    local itemName = itemData.Data.Name or "Unknown"
+                    print(string.format("[Find Totem] [DEBUG] Totem #%d: %s (ID: %d, UUID: %s)",
+                        totemTypeCount, itemName, item.Id, item.UUID))
+                end
+            end
+        end
+        print(string.format("[Find Totem] [DEBUG] Total Totems type found: %d", totemTypeCount))
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
         -- Search all items for anything related to totem
@@ -1114,7 +1137,10 @@ local function equipAndPlaceTotem()
         if wasAutoFarmActive then
             print("[Place Totem] 🛑 Temporarily disabling auto farm...")
             isAutoFarmOn = false
-            cancelFishing() -- Cancel any ongoing fishing
+            -- Cancel fishing if function exists
+            if cancelFishing then
+                pcall(cancelFishing)
+            end
             task.wait(3) -- Wait longer for auto farm to fully stop
         end
 
