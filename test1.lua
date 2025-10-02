@@ -982,22 +982,32 @@ local function findTotemUUID()
         end
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-        -- First, print ALL items with Type "Totems" to see what's there
-        print("[Find Totem] [DEBUG] Scanning for ALL Totems type items:")
+        -- First, print ALL items with Type "Totems" OR "Potions" to see what's there
+        print("[Find Totem] [DEBUG] Scanning for Totems and Potions type items:")
         local totemTypeCount = 0
+        local potionTypeCount = 0
         for i, item in ipairs(inventoryItems) do
             local itemData = ItemUtility:GetItemData(item.Id)
             if itemData and itemData.Data then
                 local itemType = itemData.Data.Type or ""
+                local itemName = itemData.Data.Name or "Unknown"
+
                 if itemType == "Totems" then
                     totemTypeCount = totemTypeCount + 1
-                    local itemName = itemData.Data.Name or "Unknown"
                     print(string.format("[Find Totem] [DEBUG] Totem #%d: %s (ID: %d, UUID: %s)",
                         totemTypeCount, itemName, item.Id, item.UUID))
+                elseif itemType == "Potions" then
+                    potionTypeCount = potionTypeCount + 1
+                    -- Only print if it contains "totem" or "luck"
+                    local itemNameLower = string.lower(itemName)
+                    if string.find(itemNameLower, "totem") or string.find(itemNameLower, "luck") then
+                        print(string.format("[Find Totem] [DEBUG] Potion #%d: %s (ID: %d, UUID: %s)",
+                            potionTypeCount, itemName, item.Id, item.UUID))
+                    end
                 end
             end
         end
-        print(string.format("[Find Totem] [DEBUG] Total Totems type found: %d", totemTypeCount))
+        print(string.format("[Find Totem] [DEBUG] Total Totems type: %d, Total Potions type: %d", totemTypeCount, potionTypeCount))
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
         -- Search all items for anything related to totem
@@ -1010,9 +1020,10 @@ local function findTotemUUID()
                 local itemNameLower = string.lower(itemName)
                 local itemTypeLower = string.lower(itemType)
 
-                -- Check if it's totem-related by name or type
+                -- Check if it's totem-related by name or type (including Potions type with "Luck Totem" name)
                 if string.find(itemNameLower, "totem") or string.find(itemTypeLower, "totem") or
-                   string.find(itemNameLower, "luck") or itemType == "Totems" then
+                   string.find(itemNameLower, "luck") or itemType == "Totems" or
+                   (itemType == "Potions" and string.find(itemNameLower, "totem")) then
                     table.insert(foundItems, {
                         name = itemName,
                         type = itemType,
@@ -1175,11 +1186,21 @@ local function equipAndPlaceTotem()
             return
         end
 
-        -- Step 2: Equip totem to hotbar (Luck Totem is Type "Totems")
+        -- Step 2: Equip totem to hotbar (try both "Totems" and "Potions" category)
         print("[Place Totem] Step 1: Equipping totem to hotbar...")
-        pcall(function()
+
+        -- First try "Totems" category
+        local equipSuccess = pcall(function()
             networkEvents.equipItemEvent:FireServer(totemUUID, "Totems")
         end)
+
+        if not equipSuccess then
+            print("[Place Totem] Totems category failed, trying Potions category...")
+            pcall(function()
+                networkEvents.equipItemEvent:FireServer(totemUUID, "Potions")
+            end)
+        end
+
         task.wait(1.5)
 
         -- Step 3: Find which hotbar slot the totem is in
