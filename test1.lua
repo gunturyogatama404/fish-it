@@ -989,37 +989,47 @@ local function findTotemUUID()
         end
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-        -- First, print ALL items with Type "Totems" OR "Potions" to see what's there
-        print("[Find Totem] [DEBUG] Scanning for Totems and Potions type items:")
-        local totemTypeCount = 0
-        local potionTypeCount = 0
+        -- Print RAW items with ID 1 or 11 (Luck Totem IDs from desc file)
+        print("[Find Totem] [DEBUG] Searching for items with ID 1 or 11 (Luck Totem):")
+        local foundLuckTotem = false
         for i, item in ipairs(inventoryItems) do
-            local itemData = ItemUtility:GetItemData(item.Id)
-            if itemData and itemData.Data then
-                local itemType = itemData.Data.Type or ""
-                local itemName = itemData.Data.Name or "Unknown"
+            if item.Id == 1 or item.Id == 11 then
+                print(string.format("[Find Totem] [DEBUG] ✅ FOUND ID %d! UUID: %s, Raw data: %s",
+                    item.Id, item.UUID, game:GetService("HttpService"):JSONEncode(item)))
+                foundLuckTotem = true
 
-                if itemType == "Totems" then
-                    totemTypeCount = totemTypeCount + 1
-                    print(string.format("[Find Totem] [DEBUG] Totem #%d: %s (ID: %d, UUID: %s)",
-                        totemTypeCount, itemName, item.Id, item.UUID))
-                elseif itemType == "Potions" then
-                    potionTypeCount = potionTypeCount + 1
-                    -- Only print if it contains "totem" or "luck"
-                    local itemNameLower = string.lower(itemName)
-                    if string.find(itemNameLower, "totem") or string.find(itemNameLower, "luck") then
-                        print(string.format("[Find Totem] [DEBUG] Potion #%d: %s (ID: %d, UUID: %s)",
-                            potionTypeCount, itemName, item.Id, item.UUID))
-                    end
+                -- Try to get ItemData
+                local itemData = ItemUtility:GetItemData(item.Id)
+                if itemData and itemData.Data then
+                    print(string.format("[Find Totem] [DEBUG]   ItemData.Name: %s, Type: %s",
+                        itemData.Data.Name or "nil", itemData.Data.Type or "nil"))
+                else
+                    print("[Find Totem] [DEBUG]   ItemUtility returned nil or invalid data")
                 end
             end
         end
-        print(string.format("[Find Totem] [DEBUG] Total Totems type: %d, Total Potions type: %d", totemTypeCount, potionTypeCount))
+
+        if not foundLuckTotem then
+            print("[Find Totem] [DEBUG] ❌ No items with ID 1 or 11 found")
+        end
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-        -- Search all items for anything related to totem
+        -- Search all items for anything related to totem (including by ID)
         local foundItems = {}
         for i, item in ipairs(inventoryItems) do
+            -- First check: Direct ID match (ID 1 or 11 are Luck Totem IDs)
+            if item.Id == 1 or item.Id == 11 then
+                table.insert(foundItems, {
+                    name = "Luck Totem (ID " .. item.Id .. ")",
+                    type = "Totems/Potions",
+                    id = item.Id,
+                    uuid = item.UUID
+                })
+                print(string.format("[Find Totem] ✅ FOUND BY ID: Luck Totem (ID: %d, UUID: %s)", item.Id, item.UUID))
+                -- Continue to check via ItemUtility as well
+            end
+
+            -- Second check: Via ItemUtility (as before)
             local itemData = ItemUtility:GetItemData(item.Id)
             if itemData and itemData.Data then
                 local itemName = itemData.Data.Name or ""
@@ -1027,18 +1037,30 @@ local function findTotemUUID()
                 local itemNameLower = string.lower(itemName)
                 local itemTypeLower = string.lower(itemType)
 
-                -- Check if it's totem-related by name or type (including Potions type with "Luck Totem" name)
+                -- Check if it's totem-related by name or type
                 if string.find(itemNameLower, "totem") or string.find(itemTypeLower, "totem") or
                    string.find(itemNameLower, "luck") or itemType == "Totems" or
                    (itemType == "Potions" and string.find(itemNameLower, "totem")) then
-                    table.insert(foundItems, {
-                        name = itemName,
-                        type = itemType,
-                        id = item.Id,
-                        uuid = item.UUID
-                    })
-                    print(string.format("[Find Totem] ✅ FOUND POTENTIAL TOTEM: %s (Type: %s, ID: %d, UUID: %s)",
-                        itemName, itemType, item.Id, item.UUID))
+
+                    -- Only add if not already added by ID check
+                    local alreadyAdded = false
+                    for _, existing in ipairs(foundItems) do
+                        if existing.uuid == item.UUID then
+                            alreadyAdded = true
+                            break
+                        end
+                    end
+
+                    if not alreadyAdded then
+                        table.insert(foundItems, {
+                            name = itemName,
+                            type = itemType,
+                            id = item.Id,
+                            uuid = item.UUID
+                        })
+                        print(string.format("[Find Totem] ✅ FOUND BY NAME: %s (Type: %s, ID: %d, UUID: %s)",
+                            itemName, itemType, item.Id, item.UUID))
+                    end
                 end
             end
         end
@@ -1173,10 +1195,17 @@ local function equipAndPlaceTotem()
             task.wait(3) -- Wait longer for auto farm to fully stop
         end
 
-        -- Step 1: Use hardcoded UUID (based on reference files)
-        -- Luck Totem seems to use a fixed UUID: bf27e53b-284c-400b-9a89-737f54a4cc4a
-        local totemUUID = "bf27e53b-284c-400b-9a89-737f54a4cc4a"
-        print("[Place Totem] Using Luck Totem UUID: " .. totemUUID)
+        -- Step 1: Find totem UUID (try scan first, fallback to hardcoded)
+        print("[Place Totem] Searching for Luck Totem in inventory...")
+        local totemUUID = findTotemUUID()
+
+        if not totemUUID then
+            -- Fallback to hardcoded UUID
+            totemUUID = "bf27e53b-284c-400b-9a89-737f54a4cc4a"
+            print("[Place Totem] ⚠️ Using fallback hardcoded UUID: " .. totemUUID)
+        else
+            print("[Place Totem] ✅ Found totem UUID: " .. totemUUID)
+        end
 
         -- Step 2: Equip totem to hotbar (try both "Totems" and "Potions" category)
         print("[Place Totem] Step 1: Equipping totem to hotbar...")
