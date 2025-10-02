@@ -514,9 +514,9 @@ local function detectAndEquipBestRod()
         return false
     end
 
-    print(string.format("[Auto Equip Rod] Found %d total rods in inventory.", #fishingRods))
+    print(string.format("[Auto Equip Rod] Scanning %d total rods in inventory...", #fishingRods))
 
-    -- Scan all owned rods and find the best one
+    -- Scan ALL owned rods and find the best one
     local ownedRods = {}
 
     for i, rodItem in ipairs(fishingRods) do
@@ -525,6 +525,8 @@ local function detectAndEquipBestRod()
             local rodName = trim(rodData.Data.Name)
             local rodUUID = rodItem.UUID
             local rodID = rodItem.Id
+
+            print(string.format("[Auto Equip Rod] Scanning rod %d/%d: '%s' (ID: %d, UUID: %s)", i, #fishingRods, rodName, rodID, rodUUID))
 
             -- Check if this rod is in our upgrade list
             for rodIndex, listRodID in ipairs(rodIDs) do
@@ -535,7 +537,7 @@ local function detectAndEquipBestRod()
                         name = rodName,
                         priority = rodIndex
                     })
-                    print(string.format("[Auto Equip Rod] Found: '%s' (Priority: %d/%d)", rodName, rodIndex, #rodIDs))
+                    print(string.format("[Auto Equip Rod] ✅ Rod in upgrade list: '%s' (Priority: %d/%d)", rodName, rodIndex, #rodIDs))
                     break
                 end
             end
@@ -547,25 +549,29 @@ local function detectAndEquipBestRod()
         return false
     end
 
+    print(string.format("[Auto Equip Rod] Total rods in upgrade list: %d", #ownedRods))
+
     -- Sort by priority (higher = better)
     table.sort(ownedRods, function(a, b)
         return a.priority > b.priority
     end)
 
     local bestRod = ownedRods[1]
-    print(string.format("[Auto Equip Rod] 🏆 Best owned: '%s' (Priority: %d/%d)", bestRod.name, bestRod.priority, #rodIDs))
+    print(string.format("[Auto Equip Rod] 🏆 Best owned rod: '%s' (ID: %d, Priority: %d/%d, UUID: %s)",
+        bestRod.name, bestRod.id, bestRod.priority, #rodIDs, bestRod.uuid))
 
     -- Check if already equipped
     local equippedItems = PlayerData:GetExpect("EquippedItems")
     for _, equippedUUID in ipairs(equippedItems) do
         if equippedUUID == bestRod.uuid then
             print(string.format("[Auto Equip Rod] ✅ '%s' already equipped!", bestRod.name))
+            print("[Auto Equip Rod] ================================================")
             return true
         end
     end
 
     -- Equip the best rod
-    print(string.format("[Auto Equip Rod] 🔧 Equipping: '%s'", bestRod.name))
+    print(string.format("[Auto Equip Rod] 🔧 Equipping best rod: '%s' (UUID: %s)", bestRod.name, bestRod.uuid))
 
     local equipSuccess = pcall(function()
         local EquipItemEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/EquipItem")
@@ -574,10 +580,12 @@ local function detectAndEquipBestRod()
 
     if equipSuccess then
         print(string.format("[Auto Equip Rod] ✅ Successfully equipped '%s'!", bestRod.name))
+        print("[Auto Equip Rod] ================================================")
         task.wait(1)
         return true
     else
         warn(string.format("[Auto Equip Rod] ❌ Failed to equip '%s'", bestRod.name))
+        print("[Auto Equip Rod] ================================================")
         return false
     end
 end
@@ -607,9 +615,9 @@ local function detectAndEquipBestBait()
         return false
     end
 
-    print(string.format("[Auto Equip Bait] Found %d total baits in inventory.", #baits))
+    print(string.format("[Auto Equip Bait] Scanning %d total baits in inventory...", #baits))
 
-    -- Scan all owned baits and find the best one
+    -- Scan ALL owned baits and find the best one
     local ownedBaits = {}
 
     for i, baitItem in ipairs(baits) do
@@ -617,6 +625,8 @@ local function detectAndEquipBestBait()
         if baitData and baitData.Data then
             local baitName = trim(baitData.Data.Name)
             local baitID = baitData.Data.Id
+
+            print(string.format("[Auto Equip Bait] Scanning bait %d/%d: '%s' (ID: %d)", i, #baits, baitName, baitID))
 
             -- Check if this bait is in our upgrade list
             for baitIndex, listBaitID in ipairs(baitIDs) do
@@ -626,7 +636,7 @@ local function detectAndEquipBestBait()
                         name = baitName,
                         priority = baitIndex
                     })
-                    print(string.format("[Auto Equip Bait] Found: '%s' (Priority: %d/%d)", baitName, baitIndex, #baitIDs))
+                    print(string.format("[Auto Equip Bait] ✅ Bait in upgrade list: '%s' (Priority: %d/%d)", baitName, baitIndex, #baitIDs))
                     break
                 end
             end
@@ -638,23 +648,27 @@ local function detectAndEquipBestBait()
         return false
     end
 
+    print(string.format("[Auto Equip Bait] Total baits in upgrade list: %d", #ownedBaits))
+
     -- Sort by priority (higher = better)
     table.sort(ownedBaits, function(a, b)
         return a.priority > b.priority
     end)
 
     local bestBait = ownedBaits[1]
-    print(string.format("[Auto Equip Bait] 🏆 Best owned: '%s' (Priority: %d/%d)", bestBait.name, bestBait.priority, #baitIDs))
+    print(string.format("[Auto Equip Bait] 🏆 Best owned bait: '%s' (ID: %d, Priority: %d/%d)",
+        bestBait.name, bestBait.id, bestBait.priority, #baitIDs))
 
     -- Check if already equipped
     local equippedBaitId = PlayerData:GetExpect("EquippedBaitId")
     if equippedBaitId == bestBait.id then
         print(string.format("[Auto Equip Bait] ✅ '%s' already equipped!", bestBait.name))
+        print("[Auto Equip Bait] ================================================")
         return true
     end
 
     -- Equip the best bait
-    print(string.format("[Auto Equip Bait] 🔧 Equipping: '%s'", bestBait.name))
+    print(string.format("[Auto Equip Bait] 🔧 Equipping best bait: '%s' (ID: %d)", bestBait.name, bestBait.id))
 
     local equipSuccess = pcall(function()
         local EquipBaitEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/EquipBait")
@@ -663,10 +677,12 @@ local function detectAndEquipBestBait()
 
     if equipSuccess then
         print(string.format("[Auto Equip Bait] ✅ Successfully equipped '%s'!", bestBait.name))
+        print("[Auto Equip Bait] ================================================")
         task.wait(1)
         return true
     else
         warn(string.format("[Auto Equip Bait] ❌ Failed to equip '%s'", bestBait.name))
+        print("[Auto Equip Bait] ================================================")
         return false
     end
 end
@@ -3712,6 +3728,11 @@ local function startManualConfig()
         upgradeState.rod = true
         print("[Manual Config] Auto Upgrade Rod enabled")
         task.wait(0.5)
+
+        -- Initial equip check - equip best rod on startup
+        print("[Manual Config] Checking for best rod to equip on startup...")
+        task.wait(1)
+        detectAndEquipBestRod()
     end
 
     -- Enable Auto Upgrade Bait if configured
@@ -3719,6 +3740,11 @@ local function startManualConfig()
         upgradeState.bait = true
         print("[Manual Config] Auto Upgrade Bait enabled")
         task.wait(0.5)
+
+        -- Initial equip check - equip best bait on startup
+        print("[Manual Config] Checking for best bait to equip on startup...")
+        task.wait(1)
+        detectAndEquipBestBait()
     end
 end
 
@@ -3887,9 +3913,9 @@ task.spawn(function()
                 end
 
                 if purchaseSuccess then
-                    -- Wait for inventory to update
-                    print("[Auto Upgrade Rod] Waiting for inventory update...")
-                    task.wait(2)
+                    -- Wait 3 seconds for inventory to update
+                    print("[Auto Upgrade Rod] Waiting 3 seconds for inventory update...")
+                    task.wait(3)
 
                     -- Scan and equip best owned rod using new system
                     print("[Auto Upgrade Rod] Scanning inventory for best rod...")
@@ -3989,9 +4015,9 @@ task.spawn(function()
                 end
 
                 if purchaseSuccess then
-                    -- Wait for inventory to update
-                    print("[Auto Upgrade Bait] Waiting for inventory update...")
-                    task.wait(2)
+                    -- Wait 3 seconds for inventory to update
+                    print("[Auto Upgrade Bait] Waiting 3 seconds for inventory update...")
+                    task.wait(3)
 
                     -- Scan and equip best owned bait using new system
                     print("[Auto Upgrade Bait] Scanning inventory for best bait...")
