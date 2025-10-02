@@ -1069,9 +1069,11 @@ end
 
 local function equipAndPlaceTotem()
     task.spawn(function()
-        print("[Place Totem] Starting totem equip and placement...")
+        print("[Place Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("[Place Totem] Starting totem placement process...")
+        print("[Place Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-        -- Step 0: Save auto farm status and disable it
+        -- Step 1: Disable auto farm temporarily
         local wasAutoFarmActive = isAutoFarmOn
         if wasAutoFarmActive then
             print("[Place Totem] 🛑 Temporarily disabling auto farm...")
@@ -1080,10 +1082,10 @@ local function equipAndPlaceTotem()
             if cancelFishing then
                 pcall(cancelFishing)
             end
-            task.wait(3) -- Wait longer for auto farm to fully stop
+            task.wait(2) -- Wait for auto farm to fully stop
         end
 
-        -- Step 1: Find Luck Totem UUID from inventory
+        -- Step 2: Find Luck Totem UUID from inventory
         print("[Place Totem] Searching for 'Luck Totem' in inventory...")
         local totemUUID = findTotemUUID()
 
@@ -1102,88 +1104,37 @@ local function equipAndPlaceTotem()
 
         print("[Place Totem] ✅ Found Luck Totem UUID: " .. totemUUID)
 
-        -- Step 2: Equip totem to hotbar (try both "Totems" and "Potions" category)
-        print("[Place Totem] Step 1: Equipping totem to hotbar...")
-
-        -- First try "Totems" category
-        local equipSuccess = pcall(function()
-            networkEvents.equipItemEvent:FireServer(totemUUID, "Totems")
-        end)
-
-        if not equipSuccess then
-            print("[Place Totem] Totems category failed, trying Potions category...")
-            pcall(function()
-                networkEvents.equipItemEvent:FireServer(totemUUID, "Potions")
-            end)
-        end
-
-        task.wait(1.5)
-
-        -- Step 3: Find which hotbar slot the totem is in
-        local totemSlot = findTotemHotbarSlot()
-        if not totemSlot then
-            warn("[Place Totem] ❌ Could not find totem in hotbar after equipping")
-
-            -- Re-enable auto farm
-            if wasAutoFarmActive then
-                print("[Place Totem] 🔄 Re-enabling auto farm...")
-                isAutoFarmOn = true
-                equipRod() -- Re-equip rod
-            end
-            return
-        end
-
-        print("[Place Totem] Step 2: Totem in slot " .. totemSlot .. ", equipping tool...")
-
-        -- Step 4: Equip the totem tool from hotbar
-        pcall(function()
-            networkEvents.equipEvent:FireServer(totemSlot)
-        end)
-        task.wait(1)
-
-        -- Step 5: Get player position and place totem
-        local character = player.Character
-        if not character then
-            warn("[Place Totem] ❌ Character not found")
-
-            -- Re-enable auto farm
-            if wasAutoFarmActive then
-                print("[Place Totem] 🔄 Re-enabling auto farm...")
-                isAutoFarmOn = true
-                equipRod() -- Re-equip rod
-            end
-            return
-        end
-
-        local rootPart = character:FindFirstChild("HumanoidRootPart")
-        if not rootPart then
-            warn("[Place Totem] ❌ HumanoidRootPart not found")
-
-            -- Re-enable auto farm
-            if wasAutoFarmActive then
-                print("[Place Totem] 🔄 Re-enabling auto farm...")
-                isAutoFarmOn = true
-                equipRod() -- Re-equip rod
-            end
-            return
-        end
-
-        local playerPosition = rootPart.Position
-        print("[Place Totem] Step 3: Placing totem at position: " .. tostring(playerPosition))
-
-        -- Step 6: Place the totem (FireServer with UUID)
-        pcall(function()
+        -- Step 3: Directly spawn totem (NO hotbar equip needed!)
+        print("[Place Totem] Spawning totem directly with RE/SpawnTotem...")
+        local spawnSuccess, spawnError = pcall(function()
             networkEvents.spawnTotemEvent:FireServer(totemUUID)
         end)
 
-        print("[Place Totem] ✅ Totem placed successfully!")
+        if not spawnSuccess then
+            warn("[Place Totem] ❌ Failed to spawn totem: " .. tostring(spawnError))
 
-        -- Step 7: Wait a bit then re-enable auto farm
+            -- Re-enable auto farm
+            if wasAutoFarmActive then
+                print("[Place Totem] 🔄 Re-enabling auto farm...")
+                isAutoFarmOn = true
+                equipRod() -- Re-equip rod
+            end
+            return
+        end
+
+        print("[Place Totem] ✅ Totem spawned successfully!")
+
+        -- Step 4: Wait a bit then re-enable auto farm
         task.wait(2)
         if wasAutoFarmActive then
             print("[Place Totem] 🔄 Re-enabling auto farm...")
-            _G.useAutoFarm = true
+            isAutoFarmOn = true
+            equipRod() -- Re-equip rod
         end
+
+        print("[Place Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("[Place Totem] ✅ Process completed!")
+        print("[Place Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     end)
 end
 
