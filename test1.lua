@@ -933,8 +933,24 @@ function getQuestText(a)local b,c=pcall(function()local d=workspace:FindFirstChi
 -- ====== STATS/FORMAT FUNCTIONS (GLOBAL TO SAVE REGISTERS) ======
 function FormatTime(a)a=tonumber(a)or 0;a=math.max(0,math.floor(a))local b=math.floor(a/3600)local c=math.floor((a%3600)/60)local d=a%60;return string.format("%02d:%02d:%02d",b,c,d)end
 function FormatNumber(a)local b=tonumber(a)or 0;local c=tostring(math.floor(b))local d;while true do c,d=string.gsub(c,"^(-?%d+)(%d%d%d)",'%1,%2')if d==0 then break end end;return c end
+function FormatCoins(coins)
+    local num = tonumber(coins) or 0
+    if num >= 1000000 then
+        return string.format("%.1fM", num / 1000000)
+    elseif num >= 1000 then
+        return string.format("%.1fK", num / 1000)
+    else
+        return tostring(math.floor(num))
+    end
+end
 
 -- ====== GPU SAVER VARIABLES ======
+-- Read GPU_FPS_LIMIT from main_noui.lua if available, otherwise default to 8
+if not GPU_FPS_LIMIT then
+    GPU_FPS_LIMIT = 8
+end
+GPU_FPS_LIMIT = tonumber(GPU_FPS_LIMIT) or 8 -- Ensure it's a number
+
 local originalSettings = {}
 local whiteScreenGui = nil
 local connections = {}
@@ -1080,7 +1096,7 @@ local function createWhiteScreen()
     coinLabel.Size = UDim2.new(0, 400, 0, 40)
     coinLabel.Position = UDim2.new(0.5, -200, 0, 240)
     coinLabel.BackgroundTransparency = 1
-    coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
+    coinLabel.Text = "💰 Coins: " .. FormatCoins(getCurrentCoins())
     coinLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
     coinLabel.TextSize = 22
     coinLabel.Font = Enum.Font.SourceSans
@@ -1198,6 +1214,23 @@ local function createWhiteScreen()
         disableGPUSaver()
     end)
 
+    -- Buy Totem button
+    local buyTotemButton = Instance.new("TextButton")
+    buyTotemButton.Size = UDim2.new(0, 200, 0, 40)
+    buyTotemButton.Position = UDim2.new(1, -220, 0, 150)
+    buyTotemButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
+    buyTotemButton.BorderSizePixel = 0
+    buyTotemButton.Text = "🗿 Buy Totem 2M"
+    buyTotemButton.TextColor3 = Color3.new(1, 1, 1)
+    buyTotemButton.TextSize = 16
+    buyTotemButton.Font = Enum.Font.SourceSansBold
+    buyTotemButton.Parent = frame
+
+    buyTotemButton.MouseButton1Click:Connect(function()
+        -- Function will be added later
+        print("Buy Totem button clicked")
+    end)
+
     -- ====== IMPROVED UPDATE SYSTEM (from reference) ====== 
     task.spawn(function()
         local lastUpdate = tick()
@@ -1236,7 +1269,7 @@ local function createWhiteScreen()
                 -- Safe coins update
                 pcall(function()
                     if coinLabel and coinLabel.Parent then
-                        coinLabel.Text = "💰 Coins: " .. getCurrentCoins()
+                        coinLabel.Text = "💰 Coins: " .. FormatCoins(getCurrentCoins())
                     end
                 end)
 
@@ -1348,12 +1381,12 @@ function enableGPUSaver()
             end
         end
         
-        pcall(function() setfpscap(8) end) -- Limit FPS to 8
+        pcall(function() setfpscap(GPU_FPS_LIMIT) end) -- Limit FPS based on GPU_FPS_LIMIT
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
 
-    -- Create FPS cap monitor to ensure it stays at 8 FPS
+    -- Create FPS cap monitor to ensure it stays at GPU_FPS_LIMIT
     if fpsCapConnection then
         fpsCapConnection:Disconnect()
         fpsCapConnection = nil
@@ -1363,7 +1396,7 @@ function enableGPUSaver()
         if gpuSaverEnabled then
             pcall(function()
                 if setfpscap then
-                    setfpscap(8)
+                    setfpscap(GPU_FPS_LIMIT)
                 end
             end)
         end
@@ -1865,6 +1898,11 @@ end
 local function resumeFarmingAfterMegalodon(previousAutoFarmState)
     task.spawn(function()
         task.wait(1) -- Wait a moment before resuming
+
+        -- Teleport back to original farming location
+        local farmLocation = config.teleportLocation or "Sisyphus Statue"
+        teleportToNamedLocation(farmLocation)
+        task.wait(2)
 
         -- Check which preset was active
         local activePreset = config.activePreset
@@ -3056,7 +3094,7 @@ end
 -- ====================================================================
 -- Configuration from main_noui.lua loader OR saved config.json
 
-print("🎣 [Auto Fish] Starting NO-UI mode (Manual Config)...")
+-- Starting NO-UI mode
 
 -- First, load config (will load from JSON if exists, otherwise use defaults)
 loadConfig()
@@ -3073,7 +3111,6 @@ local useAutoFarm, useAutoSell, useAutoCatch, useAutoWeather, useAutoMegalodon, 
 
 if configExists then
     -- Config exists, use saved settings from JSON
-    print("📂 [Config] Loading from saved file...")
     useAutoFarm = config.autoFarm
     useAutoSell = config.autoSell
     useAutoCatch = config.autoCatch
@@ -3084,11 +3121,8 @@ if configExists then
 
     -- Apply delays from config (using applyDelayConfig)
     applyDelayConfig()
-
-    print("✅ [Config] Loaded from JSON (ignoring main_noui.lua)")
 else
     -- No config file, use settings from main_noui.lua and save them
-    print("📝 [Config] No saved file found, using main_noui.lua settings...")
     useAutoFarm = AUTO_FARM or false
     useAutoSell = AUTO_SELL or false
     useAutoCatch = AUTO_CATCH or false
@@ -3121,19 +3155,13 @@ else
     config.weatherCycleDelay = weatherCycleDelay
 
     saveConfig()
-    print("💾 [Config] Saved to JSON for future sessions")
 end
 
 local GPU_FPS_CAP = GPU_FPS_LIMIT or 8
 
-print("⏱️  [Delays] Fish:", autoFishMainDelay, "| Sell:", autoSellDelay, "| Catch:", autoCatchDelay)
-
 -- Manual configuration function
 local function startManualConfig()
     task.wait(3)  -- Wait for everything to load
-
-    print("⚙️  [Manual Config] Starting features...")
-    print("📍 [Teleport] Target:", useTeleportLoc)
 
     -- Teleport first
     teleportToNamedLocation(useTeleportLoc)
@@ -3142,56 +3170,38 @@ local function startManualConfig()
     -- Enable GPU Saver if configured
     if useGPUSaver then
         enableGPUSaver()
-        print("🎨 [GPU Saver] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Farm if configured
     if useAutoFarm then
         setAutoFarm(true)
-        print("🎣 [Auto Farm] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Sell if configured
     if useAutoSell then
         setSell(true)
-        print("💰 [Auto Sell] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Catch if configured
     if useAutoCatch then
         setAutoCatch(true)
-        print("🐟 [Auto Catch] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Weather if configured
     if useAutoWeather then
         setAutoWeather(true)
-        print("🌤️  [Auto Weather] ✅ Enabled")
         task.wait(0.5)
     end
 
     -- Enable Auto Megalodon if configured
     if useAutoMegalodon then
         setAutoMegalodon(true)
-        print("🦈 [Auto Megalodon] ✅ Enabled")
         task.wait(0.5)
     end
-
-    print("✅ [Auto Fish] All configured features active!")
-    print("📊 [Monitor] Check console for status updates every 60s")
-    print("")
-    print("Current Config:")
-    print("  - Auto Farm:", useAutoFarm and "ON" or "OFF")
-    print("  - Auto Sell:", useAutoSell and "ON" or "OFF")
-    print("  - Auto Catch:", useAutoCatch and "ON" or "OFF")
-    print("  - Auto Weather:", useAutoWeather and "ON" or "OFF")
-    print("  - Auto Megalodon:", useAutoMegalodon and "ON" or "OFF")
-    print("  - GPU Saver:", useGPUSaver and "ON" or "OFF")
-    print("  - Location:", useTeleportLoc)
 end
 
 -- ====================================================================
@@ -3240,7 +3250,6 @@ task.spawn(function()
             pcall(function()
                 if sellEvent then
                     sellEvent:InvokeServer()
-                    print("💰 [Auto Sell] Sold fish")
                 end
             end)
         end
@@ -3267,7 +3276,6 @@ task.spawn(function()
                 pcall(function()
                     if WeatherEvent then
                         WeatherEvent:InvokeServer(id)
-                        print("🌤️  [Auto Weather] Bought:", id)
                     end
                 end)
                 local waited = 0
@@ -3306,30 +3314,122 @@ task.spawn(function()
     end
 end)
 
-print("✅ [Auto Loops] All loops started!")
+-- Auto loops started
 
 -- Run manual config auto-start
 task.spawn(startManualConfig)
 
--- Status reporter every 60 seconds
+-- Initialization complete (no status reporter to save CPU/RAM)
+
+-- ====================================================================
+--                    SIMPLE GPU SAVER UI
+-- ====================================================================
+
+-- Create simple UI for GPU Saver toggle only
 task.spawn(function()
-    while true do
-        task.wait(60)
-        if startTime then
-            local uptime = os.time() - startTime
-            local hours = math.floor(uptime / 3600)
-            local minutes = math.floor((uptime % 3600) / 60)
-            local seconds = uptime % 60
-            local fish = (sessionStats and sessionStats.totalFish) or 0
-            print(string.format("📊 [Status] Uptime: %02d:%02d:%02d | Fish: %d | Farm: %s | Sell: %s | Catch: %s",
-                hours, minutes, seconds,
-                fish,
-                isAutoFarmOn and "ON" or "OFF",
-                isAutoSellOn and "ON" or "OFF",
-                isAutoCatchOn and "ON" or "OFF"
-            ))
-        end
+    task.wait(5) -- Wait for everything to load
+
+    local success = pcall(function()
+        local CoreGui = game:GetService("CoreGui")
+        local Players = game:GetService("Players")
+        local player = Players.LocalPlayer
+
+        -- Create ScreenGui
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "GPUSaverUI"
+        screenGui.ResetOnSpawn = false
+        screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+        -- Main Frame (compact)
+        local mainFrame = Instance.new("Frame")
+        mainFrame.Name = "MainFrame"
+        mainFrame.Size = UDim2.new(0, 180, 0, 50)
+        mainFrame.Position = UDim2.new(0, 10, 0.5, -25)
+        mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        mainFrame.BorderSizePixel = 0
+        mainFrame.Parent = screenGui
+
+        -- Corner rounding
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = mainFrame
+
+        -- GPU Saver Toggle Button
+        local toggleButton = Instance.new("TextButton")
+        toggleButton.Name = "GPUToggle"
+        toggleButton.Size = UDim2.new(0, 160, 0, 35)
+        toggleButton.Position = UDim2.new(0, 10, 0, 7.5)
+        toggleButton.BackgroundColor3 = isGPUSaverOn and Color3.fromRGB(46, 125, 50) or Color3.fromRGB(183, 28, 28)
+        toggleButton.Text = isGPUSaverOn and "🎨 GPU Saver: ON" or "🎨 GPU Saver: OFF"
+        toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        toggleButton.TextSize = 14
+        toggleButton.Font = Enum.Font.GothamBold
+        toggleButton.Parent = mainFrame
+
+        local buttonCorner = Instance.new("UICorner")
+        buttonCorner.CornerRadius = UDim.new(0, 6)
+        buttonCorner.Parent = toggleButton
+
+        -- Toggle functionality
+        toggleButton.MouseButton1Click:Connect(function()
+            -- Toggle GPU Saver
+            if isGPUSaverOn then
+                disableGPUSaver()
+                toggleButton.BackgroundColor3 = Color3.fromRGB(183, 28, 28)
+                toggleButton.Text = "🎨 GPU Saver: OFF"
+                config.gpuSaver = false
+            else
+                enableGPUSaver()
+                toggleButton.BackgroundColor3 = Color3.fromRGB(46, 125, 50)
+                toggleButton.Text = "🎨 GPU Saver: ON"
+                config.gpuSaver = true
+            end
+
+            -- Save config
+            pcall(saveConfig)
+        end)
+
+        -- Make draggable
+        local dragging = false
+        local dragInput, mousePos, framePos
+
+        mainFrame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                mousePos = input.Position
+                framePos = mainFrame.Position
+
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        dragging = false
+                    end
+                end)
+            end
+        end)
+
+        mainFrame.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement then
+                dragInput = input
+            end
+        end)
+
+        game:GetService("UserInputService").InputChanged:Connect(function(input)
+            if input == dragInput and dragging then
+                local delta = input.Position - mousePos
+                mainFrame.Position = UDim2.new(
+                    framePos.X.Scale,
+                    framePos.X.Offset + delta.X,
+                    framePos.Y.Scale,
+                    framePos.Y.Offset + delta.Y
+                )
+            end
+        end)
+
+        -- Parent to CoreGui
+        screenGui.Parent = CoreGui
+    end)
+
+    if not success then
+        warn("[GPU Saver UI] Failed to create UI")
     end
 end)
-
-print("🚀 [Auto Fish] Initialization complete!")
