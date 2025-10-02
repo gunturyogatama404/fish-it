@@ -957,21 +957,27 @@ local function findTotemUUID()
     end
 
     local success, result = pcall(function()
-        local inventoryItems = PlayerData:GetExpect("Inventory").Items
+        local inventory = PlayerData:GetExpect("Inventory")
+        local inventoryItems = inventory.Items
 
         print("[Find Totem] Scanning " .. #inventoryItems .. " items in inventory...")
+        print("[Find Totem] Inventory structure: " .. tostring(inventory))
 
-        for _, item in ipairs(inventoryItems) do
+        -- Debug: Print all items in inventory
+        for i, item in ipairs(inventoryItems) do
             local itemData = ItemUtility:GetItemData(item.Id)
-            if itemData and itemData.Data and itemData.Data.Name then
-                local itemName = itemData.Data.Name
-                local itemNameLower = string.lower(itemName)
+            if itemData and itemData.Data then
+                local itemName = itemData.Data.Name or "Unknown"
+                local itemType = itemData.Data.Type or "Unknown"
+                print("[Find Totem] Item #" .. i .. ": " .. itemName .. " (Type: " .. itemType .. ", ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
 
-                -- Search specifically for "Luck Totem"
-                if string.find(itemNameLower, "luck totem") then
-                    print("[Find Totem] ✅ Found Luck Totem: " .. itemName .. " (ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
+                -- Search for "Luck Totem"
+                if itemName == "Luck Totem" then
+                    print("[Find Totem] ✅ Found Luck Totem! UUID: " .. item.UUID)
                     return item.UUID
                 end
+            else
+                print("[Find Totem] Item #" .. i .. ": No data (ID: " .. tostring(item.Id) .. ")")
             end
         end
 
@@ -1079,10 +1085,10 @@ local function equipAndPlaceTotem()
             return
         end
 
-        -- Step 2: Equip totem to hotbar (Luck Totem is Type "Potions")
+        -- Step 2: Equip totem to hotbar (Luck Totem is Type "Totems")
         print("[Place Totem] Step 1: Equipping totem to hotbar...")
         pcall(function()
-            networkEvents.equipItemEvent:FireServer(totemUUID, "Potions")
+            networkEvents.equipItemEvent:FireServer(totemUUID, "Totems")
         end)
         task.wait(1.5)
 
