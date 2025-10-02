@@ -1198,15 +1198,15 @@ local function createWhiteScreen()
     extraStatusLabel.TextYAlignment = Enum.TextYAlignment.Center
     extraStatusLabel.Parent = frame
 
-    -- Nearby Players Display (pojok kanan atas) - dengan border untuk visibility
+    -- Nearby Players Display (pojok kanan atas) - transparan tanpa border
     local nearbyPlayersFrame = Instance.new("ScrollingFrame")
     nearbyPlayersFrame.Name = "NearbyPlayersFrame"
     nearbyPlayersFrame.Size = UDim2.new(0, 220, 0, 400)
     nearbyPlayersFrame.Position = UDim2.new(1, -240, 0, 20)
-    nearbyPlayersFrame.BackgroundColor3 = Color3.new(0.15, 0.15, 0.15)
-    nearbyPlayersFrame.BorderSizePixel = 2
-    nearbyPlayersFrame.BorderColor3 = Color3.new(1, 1, 1)
-    nearbyPlayersFrame.ScrollBarThickness = 6
+    nearbyPlayersFrame.BackgroundTransparency = 0.3
+    nearbyPlayersFrame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+    nearbyPlayersFrame.BorderSizePixel = 0
+    nearbyPlayersFrame.ScrollBarThickness = 4
     nearbyPlayersFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
     nearbyPlayersFrame.Parent = frame
 
@@ -1215,6 +1215,7 @@ local function createWhiteScreen()
     nearbyTitle.Name = "NearbyTitle"
     nearbyTitle.Size = UDim2.new(1, 0, 0, 30)
     nearbyTitle.Position = UDim2.new(0, 0, 0, 0)
+    nearbyTitle.BackgroundTransparency = 0.2
     nearbyTitle.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
     nearbyTitle.BorderSizePixel = 0
     nearbyTitle.Text = "👥 Nearby Players"
