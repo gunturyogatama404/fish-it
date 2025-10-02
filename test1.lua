@@ -1223,17 +1223,10 @@ local function equipAndPlaceTotem()
             task.wait(3) -- Wait longer for auto farm to fully stop
         end
 
-        -- Step 1: Find totem UUID (try scan first, fallback to hardcoded)
-        print("[Place Totem] Searching for Luck Totem in inventory...")
-        local totemUUID = findTotemUUID()
-
-        if not totemUUID then
-            -- Fallback to hardcoded UUID
-            totemUUID = "bf27e53b-284c-400b-9a89-737f54a4cc4a"
-            print("[Place Totem] ⚠️ Using fallback hardcoded UUID: " .. totemUUID)
-        else
-            print("[Place Totem] ✅ Found totem UUID: " .. totemUUID)
-        end
+        -- Step 1: Use hardcoded Luck Totem UUID (universal UUID from reference file)
+        local totemUUID = "bf27e53b-284c-400b-9a89-737f54a4cc4a"
+        print("[Place Totem] Using universal Luck Totem UUID: " .. totemUUID)
+        print("[Place Totem] (Based on reference file - this should work for all Luck Totems)")
 
         -- Step 2: Equip totem to hotbar (try both "Totems" and "Potions" category)
         print("[Place Totem] Step 1: Equipping totem to hotbar...")
