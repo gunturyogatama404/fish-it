@@ -1062,14 +1062,15 @@ local function buyTotem()
         end
 
         print("[Buy Totem] ✅ Purchase request sent! Waiting for confirmation...")
-        task.wait(3)
+        task.wait(5) -- Increased wait time for inventory to update
 
+        print("[Buy Totem] Now checking inventory for Luck Totem...")
         local totemUUID = findTotemUUID()
         if totemUUID then
             print("[Buy Totem] ✅ Totem successfully purchased and found in inventory!")
         else
             warn("[Buy Totem] ⚠️ Purchase sent, but totem not found in inventory yet.")
-            warn("[Buy Totem] ⚠️ Check if you have enough coins (2M required) or if totem already exists.")
+            warn("[Buy Totem] ⚠️ Try waiting a few more seconds and clicking 'Place Totem' again.")
         end
     end)
 end
