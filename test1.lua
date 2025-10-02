@@ -1311,8 +1311,8 @@ local function createWhiteScreen()
                 pcall(function() if quest3Label and quest3Label.Parent then quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3") end end)
                 pcall(function() if quest4Label and quest4Label.Parent then quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4") end end)
 
-                -- Update nearby players list (every 5 seconds only)
-                if currentTime - lastPlayerUpdate >= 5 then
+                -- Update nearby players list (every 30 seconds only)
+                if currentTime - lastPlayerUpdate >= 30 then
                     lastPlayerUpdate = currentTime
                     pcall(function()
                         if nearbyPlayersContainer and nearbyPlayersContainer.Parent then
