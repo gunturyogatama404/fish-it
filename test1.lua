@@ -459,6 +459,11 @@ local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
+-- Modules for totem functionality
+local ItemUtility = require(replicatedStorage.Shared.ItemUtility)
+local Replion = require(replicatedStorage.Packages.Replion)
+local PlayerData = Replion.Client:WaitReplion("Data")
+
 local leaderstats = player:WaitForChild("leaderstats")
 local BestCaught = leaderstats:WaitForChild("Rarest Fish")
 local AllTimeCaught = leaderstats:WaitForChild("Caught")
@@ -944,6 +949,116 @@ function FormatCoins(coins)
     end
 end
 
+-- ====== TOTEM PURCHASE & PLACEMENT FUNCTIONS ======
+local function findTotemUUID()
+    if not PlayerData then return nil end
+    local success, result = pcall(function()
+        local inventoryItems = PlayerData:GetExpect("Inventory").Items
+        for _, item in ipairs(inventoryItems) do
+            local itemData = ItemUtility:GetItemData(item.Id)
+            if itemData and itemData.Data.Name then
+                local itemName = itemData.Data.Name
+                if string.find(string.lower(itemName), "luck totem") or string.find(string.lower(itemName), "totem") then
+                    print("[Buy Totem] Found totem: " .. itemName .. " (UUID: " .. item.UUID .. ")")
+                    return item.UUID
+                end
+            end
+        end
+    end)
+    if success and result then return result end
+    return nil
+end
+
+local function findTotemHotbarSlot()
+    if not PlayerData then return nil end
+    local success, result = pcall(function()
+        local equippedItems = PlayerData:GetExpect("EquippedItems")
+        local totemUUID = findTotemUUID()
+        if not totemUUID then return nil end
+
+        for slot = 1, 10 do
+            if equippedItems[slot] == totemUUID then
+                print("[Buy Totem] Totem found in hotbar slot: " .. slot)
+                return slot
+            end
+        end
+    end)
+    if success and result then return result end
+    return nil
+end
+
+local function buyAndPlaceTotem()
+    task.spawn(function()
+        print("[Buy Totem] Starting totem purchase and placement...")
+
+        -- Step 1: Purchase totem from market (ID 5 = Luck Totem 2M)
+        print("[Buy Totem] Step 1: Purchasing Luck Totem from market...")
+        local purchaseSuccess = pcall(function()
+            networkEvents.purchaseMarketItemEvent:InvokeServer(5)
+        end)
+
+        if not purchaseSuccess then
+            warn("[Buy Totem] Failed to purchase totem")
+            return
+        end
+
+        print("[Buy Totem] Purchase successful! Waiting for item to appear...")
+        task.wait(2)
+
+        -- Step 2: Find totem UUID in inventory
+        local totemUUID = findTotemUUID()
+        if not totemUUID then
+            warn("[Buy Totem] Totem not found in inventory after purchase")
+            return
+        end
+
+        -- Step 3: Equip totem to hotbar
+        print("[Buy Totem] Step 2: Equipping totem to hotbar...")
+        pcall(function()
+            networkEvents.equipItemEvent:FireServer(totemUUID, "Totems")
+        end)
+        task.wait(1.5)
+
+        -- Step 4: Find which hotbar slot the totem is in
+        local totemSlot = findTotemHotbarSlot()
+        if not totemSlot then
+            warn("[Buy Totem] Could not find totem in hotbar")
+            return
+        end
+
+        print("[Buy Totem] Step 3: Totem equipped to slot " .. totemSlot .. ", equipping tool...")
+
+        -- Step 5: Equip the totem tool from hotbar
+        pcall(function()
+            networkEvents.equipEvent:FireServer(totemSlot)
+        end)
+        task.wait(1)
+
+        -- Step 6: Get player position and place totem
+        local character = player.Character
+        if not character then
+            warn("[Buy Totem] Character not found")
+            return
+        end
+
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        if not rootPart then
+            warn("[Buy Totem] HumanoidRootPart not found")
+            return
+        end
+
+        local playerPosition = rootPart.Position
+        print("[Buy Totem] Step 4: Placing totem at player position: " .. tostring(playerPosition))
+
+        -- Step 7: Place the totem (FireServer with UUID)
+        pcall(function()
+            networkEvents.spawnTotemEvent:FireServer(totemUUID)
+        end)
+
+        print("[Buy Totem] ✅ Totem placed successfully!")
+    end)
+end
+
 -- ====== GPU SAVER VARIABLES ======
 -- Read GPU_FPS_LIMIT from main_noui.lua if available, otherwise default to 8
 if not GPU_FPS_LIMIT then
@@ -986,7 +1101,10 @@ local function getNetworkEvents()
             purchaseRodEvent = net:WaitForChild("RF/PurchaseFishingRod", 10),
             purchaseBaitEvent = net:WaitForChild("RF/PurchaseBait", 10),
             equipItemEvent = net:WaitForChild("RE/EquipItem", 10),
-            equipBaitEvent = net:WaitForChild("RE/EquipBait", 10)
+            equipBaitEvent = net:WaitForChild("RE/EquipBait", 10),
+            -- For Totem
+            purchaseMarketItemEvent = net:WaitForChild("RF/PurchaseMarketItem", 10),
+            spawnTotemEvent = net:WaitForChild("RE/SpawnTotem", 10)
         }
     end)
     
@@ -1251,8 +1369,7 @@ local function createWhiteScreen()
     buyTotemButton.Parent = frame
 
     buyTotemButton.MouseButton1Click:Connect(function()
-        -- Function will be added later
-        print("Buy Totem button clicked")
+        buyAndPlaceTotem()
     end)
 
     -- ====== IMPROVED UPDATE SYSTEM (from reference) ======
