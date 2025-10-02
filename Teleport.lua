@@ -1214,6 +1214,23 @@ local function createWhiteScreen()
         disableGPUSaver()
     end)
 
+    -- Buy Totem button
+    local buyTotemButton = Instance.new("TextButton")
+    buyTotemButton.Size = UDim2.new(0, 200, 0, 40)
+    buyTotemButton.Position = UDim2.new(1, -220, 0, 150)
+    buyTotemButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
+    buyTotemButton.BorderSizePixel = 0
+    buyTotemButton.Text = "🗿 Buy Totem 2M"
+    buyTotemButton.TextColor3 = Color3.new(1, 1, 1)
+    buyTotemButton.TextSize = 16
+    buyTotemButton.Font = Enum.Font.SourceSansBold
+    buyTotemButton.Parent = frame
+
+    buyTotemButton.MouseButton1Click:Connect(function()
+        -- Function will be added later
+        print("Buy Totem button clicked")
+    end)
+
     -- ====== IMPROVED UPDATE SYSTEM (from reference) ====== 
     task.spawn(function()
         local lastUpdate = tick()
