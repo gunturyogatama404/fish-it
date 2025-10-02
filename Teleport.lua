@@ -933,7 +933,16 @@ function getQuestText(a)local b,c=pcall(function()local d=workspace:FindFirstChi
 -- ====== STATS/FORMAT FUNCTIONS (GLOBAL TO SAVE REGISTERS) ======
 function FormatTime(a)a=tonumber(a)or 0;a=math.max(0,math.floor(a))local b=math.floor(a/3600)local c=math.floor((a%3600)/60)local d=a%60;return string.format("%02d:%02d:%02d",b,c,d)end
 function FormatNumber(a)local b=tonumber(a)or 0;local c=tostring(math.floor(b))local d;while true do c,d=string.gsub(c,"^(-?%d+)(%d%d%d)",'%1,%2')if d==0 then break end end;return c end
-function FormatCoins(a)local b=tonumber(a)or 0;if b>=1000000 then return string.format("%.1fM",b/1000000)elseif b>=1000 then return string.format("%.1fK",b/1000)else return tostring(math.floor(b))end end
+function FormatCoins(coins)
+    local num = tonumber(coins) or 0
+    if num >= 1000000 then
+        return string.format("%.1fM", num / 1000000)
+    elseif num >= 1000 then
+        return string.format("%.1fK", num / 1000)
+    else
+        return tostring(math.floor(num))
+    end
+end
 
 -- ====== GPU SAVER VARIABLES ======
 -- Read GPU_FPS_LIMIT from main_noui.lua if available, otherwise default to 8
