@@ -1079,10 +1079,10 @@ local function equipAndPlaceTotem()
             return
         end
 
-        -- Step 2: Equip totem to hotbar
+        -- Step 2: Equip totem to hotbar (Luck Totem is Type "Potions")
         print("[Place Totem] Step 1: Equipping totem to hotbar...")
         pcall(function()
-            networkEvents.equipItemEvent:FireServer(totemUUID, "Totems")
+            networkEvents.equipItemEvent:FireServer(totemUUID, "Potions")
         end)
         task.wait(1.5)
 
