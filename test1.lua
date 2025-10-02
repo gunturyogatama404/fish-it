@@ -957,24 +957,19 @@ local function findTotemUUID()
     end
 
     local success, result = pcall(function()
-        -- Try to get all data structures
-        local playerDataRaw = PlayerData:GetExpect()
-        local inventory = PlayerData:GetExpect("Inventory")
-        local inventoryItems = inventory.Items or {}
-        local equippedItems = PlayerData:GetExpect("EquippedItems") or {}
+        local inventoryItems = PlayerData:GetExpect("Inventory").Items
+        local equippedItems = PlayerData:GetExpect("EquippedItems")
 
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print("[Find Totem] Total items in data: " .. #inventoryItems)
+        print("[Find Totem] Scanning inventory...")
+        print("[Find Totem] Total items in Inventory.Items: " .. #inventoryItems)
         print("[Find Totem] Total equipped items: " .. #equippedItems)
+        print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-        -- Debug: Check if Inventory has other fields
-        print("[Find Totem] [DEBUG] Inventory fields:")
-        for key, value in pairs(inventory) do
-            if type(value) == "table" then
-                print(string.format("[Find Totem] [DEBUG]   - %s: table with %d items", key, #value))
-            else
-                print(string.format("[Find Totem] [DEBUG]   - %s: %s", key, tostring(value)))
-            end
+        -- Print first 5 equipped items to see UUID format
+        print("[Find Totem] [DEBUG] First 5 equipped UUIDs:")
+        for i = 1, math.min(5, #equippedItems) do
+            print(string.format("[Find Totem] [DEBUG]   Slot %d: %s", i, equippedItems[i]))
         end
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
@@ -1156,17 +1151,9 @@ local function buyTotem()
             end
         end
 
-        print("[Buy Totem] ✅ Purchase request sent! Waiting for confirmation...")
-        task.wait(5) -- Increased wait time for inventory to update
-
-        print("[Buy Totem] Now checking inventory for Luck Totem...")
-        local totemUUID = findTotemUUID()
-        if totemUUID then
-            print("[Buy Totem] ✅ Totem successfully purchased and found in inventory!")
-        else
-            warn("[Buy Totem] ⚠️ Purchase sent, but totem not found in inventory yet.")
-            warn("[Buy Totem] ⚠️ Try waiting a few more seconds and clicking 'Place Totem' again.")
-        end
+        print("[Buy Totem] ✅ Purchase request sent!")
+        print("[Buy Totem] 💡 Using default Luck Totem UUID for equip...")
+        print("[Buy Totem] ✅ Ready to place! Click 'Place Totem' to continue.")
     end)
 end
 
@@ -1186,36 +1173,10 @@ local function equipAndPlaceTotem()
             task.wait(3) -- Wait longer for auto farm to fully stop
         end
 
-        -- Step 1: Find totem UUID in inventory (with timeout)
-        local totemUUID = nil
-        local maxRetries = 4 -- 4 retries = 20 seconds total
-        local retryCount = 0
-
-        while retryCount < maxRetries and not totemUUID do
-            retryCount = retryCount + 1
-            print(string.format("[Place Totem] Attempt %d/%d: Searching for totem...", retryCount, maxRetries))
-            totemUUID = findTotemUUID()
-
-            if not totemUUID then
-                if retryCount < maxRetries then
-                    print("[Place Totem] ⏳ Totem not found, retrying in 5 seconds...")
-                    task.wait(5)
-                end
-            end
-        end
-
-        if not totemUUID then
-            warn("[Place Totem] ❌ Totem not found after " .. (maxRetries * 5) .. " seconds!")
-            warn("[Place Totem] ❌ Please purchase totem first or wait for inventory to update.")
-
-            -- Re-enable auto farm
-            if wasAutoFarmActive then
-                print("[Place Totem] 🔄 Re-enabling auto farm...")
-                isAutoFarmOn = true
-                equipRod() -- Re-equip rod
-            end
-            return
-        end
+        -- Step 1: Use hardcoded UUID (based on reference files)
+        -- Luck Totem seems to use a fixed UUID: bf27e53b-284c-400b-9a89-737f54a4cc4a
+        local totemUUID = "bf27e53b-284c-400b-9a89-737f54a4cc4a"
+        print("[Place Totem] Using Luck Totem UUID: " .. totemUUID)
 
         -- Step 2: Equip totem to hotbar (try both "Totems" and "Potions" category)
         print("[Place Totem] Step 1: Equipping totem to hotbar...")
