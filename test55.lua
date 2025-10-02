@@ -953,18 +953,24 @@ end
 
 local function buyTotem()
     task.spawn(function()
+        print("[Buy Totem] ================================================")
         print("[Buy Totem] Starting totem purchase sequence...")
+        print("[Buy Totem] ================================================")
 
-        -- Step 1: Force stop auto farm
-        print("[Buy Totem] Step 1: Stopping auto farm...")
+        -- Step 1: Force stop auto farm and ensure it stays off
+        print("[Buy Totem] [1/7] Stopping auto farm...")
         local wasAutoFarmOn = isAutoFarmOn
-        if isAutoFarmOn then
-            isAutoFarmOn = false
-            task.wait(1) -- Wait for auto farm to fully stop
-        end
+        isAutoFarmOn = false -- Force disable immediately
+
+        -- Double check to ensure auto farm is really off
+        task.wait(0.5)
+        isAutoFarmOn = false -- Force again
+        task.wait(1.5) -- Wait total 2 seconds for auto farm to fully stop
+
+        print("[Buy Totem] ✅ Auto farm stopped (was " .. (wasAutoFarmOn and "ON" or "OFF") .. ")")
 
         -- Step 2: Force sell all
-        print("[Buy Totem] Step 2: Selling all items...")
+        print("[Buy Totem] [2/7] Selling all items...")
         local sellSuccess = false
 
         -- Try using the existing sellEvent first
@@ -983,58 +989,70 @@ local function buyTotem()
                 if sellEventDirect then
                     sellEventDirect:InvokeServer()
                     print("[Buy Totem] ✅ Sell event called (method 2)")
+                    sellSuccess = true
                 end
             end)
         end
 
-        task.wait(3) -- Wait for sell to complete (longer wait to ensure completion)
+        if not sellSuccess then
+            warn("[Buy Totem] ⚠️ Sell event failed, continuing anyway...")
+        end
+
+        task.wait(3) -- Wait for sell to complete
 
         -- Step 3: Check current coins
+        print("[Buy Totem] [3/7] Checking coins...")
         local currentCoins = getCurrentCoins()
         print("[Buy Totem] Current coins: " .. FormatCoins(currentCoins))
+
         if currentCoins < 2000000 then
             warn("[Buy Totem] ❌ Not enough coins! Need 2M, you have: " .. FormatCoins(currentCoins))
-            -- Restore auto farm if it was on
+            -- Wait 3 seconds cooldown before restoring
+            task.wait(3)
             if wasAutoFarmOn then
                 isAutoFarmOn = true
+                print("[Buy Totem] Auto farm restored after failure")
             end
             return
         end
 
         -- Step 4: Purchase totem
-        print("[Buy Totem] Step 3: Purchasing Luck Totem...")
+        print("[Buy Totem] [4/7] Purchasing Luck Totem...")
         local purchaseSuccess = false
 
         if networkEvents and networkEvents.purchaseMarketItemEvent then
             purchaseSuccess = pcall(function()
                 local result = networkEvents.purchaseMarketItemEvent:InvokeServer(5)
-                print("[Buy Totem] Server response: " .. tostring(result))
+                print("[Buy Totem] Purchase response: " .. tostring(result))
             end)
         else
             -- Alternative method: Direct access
             purchaseSuccess = pcall(function()
-                local net = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
+                local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
                 local purchaseEvent = net:FindFirstChild("RF/PurchaseMarketItem")
                 if purchaseEvent then
                     local result = purchaseEvent:InvokeServer(5)
-                    print("[Buy Totem] Server response: " .. tostring(result))
+                    print("[Buy Totem] Purchase response: " .. tostring(result))
                 end
             end)
         end
 
         if not purchaseSuccess then
             warn("[Buy Totem] ❌ Failed to purchase totem")
+            -- Wait 3 seconds cooldown before restoring
+            task.wait(3)
             if wasAutoFarmOn then
                 isAutoFarmOn = true
+                print("[Buy Totem] Auto farm restored after failure")
             end
             return
         end
 
-        print("[Buy Totem] ✅ Totem purchased!")
-        task.wait(2) -- Wait longer for inventory to update
+        print("[Buy Totem] ✅ Totem purchased successfully!")
+        task.wait(2) -- Wait for inventory to update
 
-        -- Step 5: Get totem data and spawn it
-        print("[Buy Totem] Step 4: Placing totem...")
+        -- Step 5: Place totem
+        print("[Buy Totem] [5/7] Placing totem...")
         local totemPlaced = false
 
         pcall(function()
@@ -1061,18 +1079,15 @@ local function buyTotem()
             end
 
             if totemUUID then
-                -- Fire spawn totem event (from "0 totem spawn outgoing.lua")
+                -- Fire spawn totem event
                 local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
                 local spawnTotemEvent = net:FindFirstChild("RE/SpawnTotem")
 
                 if spawnTotemEvent then
-                    -- FireServer with the totem UUID
                     spawnTotemEvent:FireServer(totemUUID)
-                    print("[Buy Totem] ✅ Totem placement request sent with UUID: " .. totemUUID)
+                    print("[Buy Totem] ✅ Totem placement request sent!")
                     totemPlaced = true
-
-                    -- Wait for totem to spawn and trigger visual effects
-                    task.wait(1)
+                    task.wait(1.5)
                 else
                     warn("[Buy Totem] ⚠️ SpawnTotem event not found")
                 end
@@ -1081,31 +1096,42 @@ local function buyTotem()
             end
         end)
 
-        if not totemPlaced then
-            warn("[Buy Totem] ⚠️ Failed to place totem, but purchase was successful")
+        if totemPlaced then
+            print("[Buy Totem] ✅ Totem placed successfully!")
+        else
+            warn("[Buy Totem] ⚠️ Totem placement failed (but purchase succeeded)")
         end
 
-        task.wait(1)
-
-        -- Step 6: Re-equip fishing rod to hotbar slot 2
-        print("[Buy Totem] Step 5: Re-equipping fishing rod...")
+        -- Step 6: Equip hotbar slot 2 (fishing rod or whatever is there)
+        print("[Buy Totem] [6/7] Equipping hotbar slot 2...")
         pcall(function()
-            if equipEvent then
-                equipEvent:FireServer(HOTBAR_SLOT)
-                print("[Buy Totem] ✅ Fishing rod re-equipped to slot " .. HOTBAR_SLOT)
+            local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
+            local equipHotbarEvent = net["RE/EquipToolFromHotbar"]
+
+            if equipHotbarEvent then
+                equipHotbarEvent:FireServer(2)
+                print("[Buy Totem] ✅ Hotbar slot 2 equipped")
+            else
+                warn("[Buy Totem] ⚠️ EquipToolFromHotbar event not found")
             end
         end)
 
         task.wait(1)
 
-        -- Step 7: Restore auto farm
-        print("[Buy Totem] Step 6: Restoring auto farm...")
+        -- Step 7: Wait cooldown then restore auto farm
+        print("[Buy Totem] [7/7] Waiting 3 second cooldown before resuming...")
+        task.wait(3) -- 3 second cooldown
+
         if wasAutoFarmOn then
             isAutoFarmOn = true
-            print("[Buy Totem] ✅ Auto farm resumed")
+            print("[Buy Totem] ✅ Auto farm resumed after cooldown")
+        else
+            print("[Buy Totem] Auto farm was off, keeping it off")
         end
 
+        print("[Buy Totem] ================================================")
         print("[Buy Totem] 🎉 Totem purchase sequence completed!")
+        print("[Buy Totem] ================================================")
     end)
 end
 
