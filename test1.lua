@@ -951,22 +951,41 @@ end
 
 -- ====== TOTEM PURCHASE & PLACEMENT FUNCTIONS ======
 local function findTotemUUID()
-    if not PlayerData then return nil end
+    if not PlayerData then
+        warn("[Find Totem] PlayerData not available")
+        return nil
+    end
+
     local success, result = pcall(function()
         local inventoryItems = PlayerData:GetExpect("Inventory").Items
+
+        print("[Find Totem] Scanning " .. #inventoryItems .. " items in inventory...")
+
         for _, item in ipairs(inventoryItems) do
+            -- Debug: Print item ID
             local itemData = ItemUtility:GetItemData(item.Id)
-            if itemData and itemData.Data.Name then
+            if itemData and itemData.Data and itemData.Data.Name then
                 local itemName = itemData.Data.Name
-                if string.find(string.lower(itemName), "luck totem") or string.find(string.lower(itemName), "totem") then
-                    print("[Buy Totem] Found totem: " .. itemName .. " (UUID: " .. item.UUID .. ")")
+                local itemNameLower = string.lower(itemName)
+
+                -- More flexible totem detection
+                if string.find(itemNameLower, "totem") then
+                    print("[Find Totem] ✅ Found totem: " .. itemName .. " (ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
                     return item.UUID
                 end
             end
         end
+
+        print("[Find Totem] ❌ No totem found in inventory")
+        return nil
     end)
-    if success and result then return result end
-    return nil
+
+    if not success then
+        warn("[Find Totem] Error scanning inventory: " .. tostring(result))
+        return nil
+    end
+
+    return result
 end
 
 local function findTotemHotbarSlot()
