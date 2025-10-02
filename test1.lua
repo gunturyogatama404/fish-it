@@ -962,21 +962,20 @@ local function findTotemUUID()
         print("[Find Totem] Scanning " .. #inventoryItems .. " items in inventory...")
 
         for _, item in ipairs(inventoryItems) do
-            -- Debug: Print item ID
             local itemData = ItemUtility:GetItemData(item.Id)
             if itemData and itemData.Data and itemData.Data.Name then
                 local itemName = itemData.Data.Name
                 local itemNameLower = string.lower(itemName)
 
-                -- More flexible totem detection
-                if string.find(itemNameLower, "totem") then
-                    print("[Find Totem] ✅ Found totem: " .. itemName .. " (ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
+                -- Search specifically for "Luck Totem"
+                if string.find(itemNameLower, "luck totem") then
+                    print("[Find Totem] ✅ Found Luck Totem: " .. itemName .. " (ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
                     return item.UUID
                 end
             end
         end
 
-        print("[Find Totem] ❌ No totem found in inventory")
+        print("[Find Totem] ❌ Luck Totem not found in inventory")
         return nil
     end)
 
