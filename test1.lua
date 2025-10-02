@@ -1255,15 +1255,16 @@ local function createWhiteScreen()
         print("Buy Totem button clicked")
     end)
 
-    -- ====== IMPROVED UPDATE SYSTEM (from reference) ====== 
+    -- ====== IMPROVED UPDATE SYSTEM (from reference) ======
     task.spawn(function()
         local lastUpdate = tick()
+        local lastPlayerUpdate = tick()
         local frameCount = 0
-        
+
         connections.renderConnection = RunService.RenderStepped:Connect(function()
             frameCount = frameCount + 1
             local currentTime = tick()
-            
+
             if currentTime - lastUpdate >= 1 then
                 local fps = frameCount / (currentTime - lastUpdate)
                 
@@ -1310,60 +1311,64 @@ local function createWhiteScreen()
                 pcall(function() if quest3Label and quest3Label.Parent then quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3") end end)
                 pcall(function() if quest4Label and quest4Label.Parent then quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4") end end)
 
-                -- Update nearby players list
-                pcall(function()
-                    if nearbyPlayersContainer and nearbyPlayersContainer.Parent then
-                        local myChar = LocalPlayer.Character
-                        if not myChar then return end
-                        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
-                        if not myRoot then return end
+                -- Update nearby players list (every 5 seconds only)
+                if currentTime - lastPlayerUpdate >= 5 then
+                    lastPlayerUpdate = currentTime
+                    pcall(function()
+                        if nearbyPlayersContainer and nearbyPlayersContainer.Parent then
+                            local myChar = LocalPlayer.Character
+                            if not myChar then return end
+                            local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+                            if not myRoot then return end
 
-                        -- Clear existing player labels (except title)
-                        for _, child in ipairs(nearbyPlayersContainer:GetChildren()) do
-                            if child:IsA("TextLabel") and child.Name ~= "NearbyTitle" then
-                                child:Destroy()
+                            -- Clear existing player labels (except title)
+                            for _, child in ipairs(nearbyPlayersContainer:GetChildren()) do
+                                if child:IsA("TextLabel") and child.Name ~= "NearbyTitle" then
+                                    child:Destroy()
+                                end
                             end
-                        end
 
-                        local nearbyPlayers = {}
-                        local charactersFolder = workspace:FindFirstChild("Characters")
-                        if charactersFolder then
-                            for _, charModel in ipairs(charactersFolder:GetChildren()) do
-                                if charModel:IsA("Model") then
-                                    local otherRoot = charModel:FindFirstChild("HumanoidRootPart")
-                                    if otherRoot and charModel.Name ~= LocalPlayer.Name then
-                                        local distance = (myRoot.Position - otherRoot.Position).Magnitude
-                                        if distance <= 100 then -- Within 100 studs
-                                            table.insert(nearbyPlayers, {
-                                                name = charModel.Name,
-                                                distance = distance
-                                            })
+                            local nearbyPlayers = {}
+                            local charactersFolder = workspace:FindFirstChild("Characters")
+                            if charactersFolder then
+                                for _, charModel in ipairs(charactersFolder:GetChildren()) do
+                                    if charModel:IsA("Model") then
+                                        local otherRoot = charModel:FindFirstChild("HumanoidRootPart")
+                                        if otherRoot and charModel.Name ~= LocalPlayer.Name then
+                                            local distance = (myRoot.Position - otherRoot.Position).Magnitude
+                                            if distance <= 100 then -- Within 100 studs
+                                                table.insert(nearbyPlayers, {
+                                                    name = charModel.Name,
+                                                    distance = distance
+                                                })
+                                            end
                                         end
                                     end
                                 end
                             end
-                        end
 
-                        -- Sort by distance
-                        table.sort(nearbyPlayers, function(a, b) return a.distance < b.distance end)
+                            -- Sort by distance
+                            table.sort(nearbyPlayers, function(a, b) return a.distance < b.distance end)
 
-                        -- Display players (simple text labels)
-                        local yOffset = 30
-                        for i, playerData in ipairs(nearbyPlayers) do
-                            local playerLabel = Instance.new("TextLabel")
-                            playerLabel.Size = UDim2.new(1, 0, 0, 20)
-                            playerLabel.Position = UDim2.new(0, 0, 0, yOffset)
-                            playerLabel.BackgroundTransparency = 1
-                            playerLabel.Text = string.format("%s (%.0fm)", playerData.name, playerData.distance)
-                            playerLabel.TextColor3 = Color3.new(1, 1, 1)
-                            playerLabel.TextSize = 14
-                            playerLabel.Font = Enum.Font.SourceSans
-                            playerLabel.TextXAlignment = Enum.TextXAlignment.Left
-                            playerLabel.Parent = nearbyPlayersContainer
-                            yOffset = yOffset + 20
+                            -- Display players (simple text labels)
+                            local yOffset = 30
+                            for i, playerData in ipairs(nearbyPlayers) do
+                                if i > 15 then break end -- Limit to 15 players max for performance
+                                local playerLabel = Instance.new("TextLabel")
+                                playerLabel.Size = UDim2.new(1, 0, 0, 20)
+                                playerLabel.Position = UDim2.new(0, 0, 0, yOffset)
+                                playerLabel.BackgroundTransparency = 1
+                                playerLabel.Text = string.format("%s (%.0fm)", playerData.name, playerData.distance)
+                                playerLabel.TextColor3 = Color3.new(1, 1, 1)
+                                playerLabel.TextSize = 14
+                                playerLabel.Font = Enum.Font.SourceSans
+                                playerLabel.TextXAlignment = Enum.TextXAlignment.Left
+                                playerLabel.Parent = nearbyPlayersContainer
+                                yOffset = yOffset + 20
+                            end
                         end
-                    end
-                end)
+                    end)
+                end
                 
                 -- Safe status update
                 pcall(function()
