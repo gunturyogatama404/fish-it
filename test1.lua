@@ -1110,10 +1110,41 @@ local function equipAndPlaceTotem()
     task.spawn(function()
         print("[Place Totem] Starting totem equip and placement...")
 
-        -- Step 1: Find totem UUID in inventory
-        local totemUUID = findTotemUUID()
+        -- Step 0: Save auto farm status and disable it
+        local wasAutoFarmActive = useAutoFarm
+        if wasAutoFarmActive then
+            print("[Place Totem] 🛑 Temporarily disabling auto farm...")
+            useAutoFarm = false
+            task.wait(2) -- Wait for auto farm to stop
+        end
+
+        -- Step 1: Find totem UUID in inventory (with timeout)
+        local totemUUID = nil
+        local maxRetries = 4 -- 4 retries = 20 seconds total
+        local retryCount = 0
+
+        while retryCount < maxRetries and not totemUUID do
+            retryCount = retryCount + 1
+            print(string.format("[Place Totem] Attempt %d/%d: Searching for totem...", retryCount, maxRetries))
+            totemUUID = findTotemUUID()
+
+            if not totemUUID then
+                if retryCount < maxRetries then
+                    print("[Place Totem] ⏳ Totem not found, retrying in 5 seconds...")
+                    task.wait(5)
+                end
+            end
+        end
+
         if not totemUUID then
-            warn("[Place Totem] ❌ Totem not found in inventory! Purchase it first.")
+            warn("[Place Totem] ❌ Totem not found after " .. (maxRetries * 5) .. " seconds!")
+            warn("[Place Totem] ❌ Please purchase totem first or wait for inventory to update.")
+
+            -- Re-enable auto farm
+            if wasAutoFarmActive then
+                print("[Place Totem] 🔄 Re-enabling auto farm...")
+                useAutoFarm = true
+            end
             return
         end
 
@@ -1128,6 +1159,12 @@ local function equipAndPlaceTotem()
         local totemSlot = findTotemHotbarSlot()
         if not totemSlot then
             warn("[Place Totem] ❌ Could not find totem in hotbar after equipping")
+
+            -- Re-enable auto farm
+            if wasAutoFarmActive then
+                print("[Place Totem] 🔄 Re-enabling auto farm...")
+                useAutoFarm = true
+            end
             return
         end
 
@@ -1143,12 +1180,24 @@ local function equipAndPlaceTotem()
         local character = player.Character
         if not character then
             warn("[Place Totem] ❌ Character not found")
+
+            -- Re-enable auto farm
+            if wasAutoFarmActive then
+                print("[Place Totem] 🔄 Re-enabling auto farm...")
+                useAutoFarm = true
+            end
             return
         end
 
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if not rootPart then
             warn("[Place Totem] ❌ HumanoidRootPart not found")
+
+            -- Re-enable auto farm
+            if wasAutoFarmActive then
+                print("[Place Totem] 🔄 Re-enabling auto farm...")
+                useAutoFarm = true
+            end
             return
         end
 
@@ -1161,6 +1210,13 @@ local function equipAndPlaceTotem()
         end)
 
         print("[Place Totem] ✅ Totem placed successfully!")
+
+        -- Step 7: Wait a bit then re-enable auto farm
+        task.wait(2)
+        if wasAutoFarmActive then
+            print("[Place Totem] 🔄 Re-enabling auto farm...")
+            useAutoFarm = true
+        end
     end)
 end
 
