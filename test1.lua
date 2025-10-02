@@ -993,19 +993,19 @@ local function findTotemUUID()
             end
         end
 
-        -- Third pass: Print items with Type "Potions" (in case it's categorized there)
-        print("[Find Totem] Still not found, checking Potions type...")
+        -- Third pass: Print items with Type "Items" (in case it's categorized there)
+        print("[Find Totem] Still not found, checking Items type...")
         for i, item in ipairs(inventoryItems) do
             local itemData = ItemUtility:GetItemData(item.Id)
             if itemData and itemData.Data then
                 local itemType = itemData.Data.Type or ""
 
-                if itemType == "Potions" then
+                if itemType == "Items" then
                     local itemName = itemData.Data.Name or "Unknown"
-                    print("[Find Totem] Potion item: " .. itemName .. " (ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
+                    print("[Find Totem] Item: " .. itemName .. " (ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
 
                     if string.find(string.lower(itemName), "totem") then
-                        print("[Find Totem] ✅ Found totem in Potions!")
+                        print("[Find Totem] ✅ Found totem in Items!")
                         return item.UUID
                     end
                 end
@@ -1111,11 +1111,12 @@ local function equipAndPlaceTotem()
         print("[Place Totem] Starting totem equip and placement...")
 
         -- Step 0: Save auto farm status and disable it
-        local wasAutoFarmActive = useAutoFarm
+        local wasAutoFarmActive = isAutoFarmOn
         if wasAutoFarmActive then
             print("[Place Totem] 🛑 Temporarily disabling auto farm...")
-            useAutoFarm = false
-            task.wait(2) -- Wait for auto farm to stop
+            isAutoFarmOn = false
+            cancelFishing() -- Cancel any ongoing fishing
+            task.wait(3) -- Wait longer for auto farm to fully stop
         end
 
         -- Step 1: Find totem UUID in inventory (with timeout)
@@ -1143,7 +1144,8 @@ local function equipAndPlaceTotem()
             -- Re-enable auto farm
             if wasAutoFarmActive then
                 print("[Place Totem] 🔄 Re-enabling auto farm...")
-                useAutoFarm = true
+                isAutoFarmOn = true
+                equipRod() -- Re-equip rod
             end
             return
         end
@@ -1163,7 +1165,8 @@ local function equipAndPlaceTotem()
             -- Re-enable auto farm
             if wasAutoFarmActive then
                 print("[Place Totem] 🔄 Re-enabling auto farm...")
-                useAutoFarm = true
+                isAutoFarmOn = true
+                equipRod() -- Re-equip rod
             end
             return
         end
@@ -1184,7 +1187,8 @@ local function equipAndPlaceTotem()
             -- Re-enable auto farm
             if wasAutoFarmActive then
                 print("[Place Totem] 🔄 Re-enabling auto farm...")
-                useAutoFarm = true
+                isAutoFarmOn = true
+                equipRod() -- Re-equip rod
             end
             return
         end
@@ -1196,7 +1200,8 @@ local function equipAndPlaceTotem()
             -- Re-enable auto farm
             if wasAutoFarmActive then
                 print("[Place Totem] 🔄 Re-enabling auto farm...")
-                useAutoFarm = true
+                isAutoFarmOn = true
+                equipRod() -- Re-equip rod
             end
             return
         end
@@ -1215,7 +1220,7 @@ local function equipAndPlaceTotem()
         task.wait(2)
         if wasAutoFarmActive then
             print("[Place Totem] 🔄 Re-enabling auto farm...")
-            useAutoFarm = true
+            _G.useAutoFarm = true
         end
     end)
 end
@@ -3535,6 +3540,9 @@ else
 
     saveConfig()
 end
+
+-- Set global variable for totem functions
+_G.useAutoFarm = useAutoFarm
 
 local GPU_FPS_CAP = GPU_FPS_LIMIT or 8
 
