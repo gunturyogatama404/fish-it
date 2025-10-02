@@ -961,27 +961,58 @@ local function findTotemUUID()
         local inventoryItems = inventory.Items
 
         print("[Find Totem] Scanning " .. #inventoryItems .. " items in inventory...")
-        print("[Find Totem] Inventory structure: " .. tostring(inventory))
 
-        -- Debug: Print all items in inventory
+        -- First pass: Look for items with "Totem" in Type
         for i, item in ipairs(inventoryItems) do
             local itemData = ItemUtility:GetItemData(item.Id)
             if itemData and itemData.Data then
-                local itemName = itemData.Data.Name or "Unknown"
-                local itemType = itemData.Data.Type or "Unknown"
-                print("[Find Totem] Item #" .. i .. ": " .. itemName .. " (Type: " .. itemType .. ", ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
+                local itemType = itemData.Data.Type or ""
 
-                -- Search for "Luck Totem"
-                if itemName == "Luck Totem" then
-                    print("[Find Totem] ✅ Found Luck Totem! UUID: " .. item.UUID)
+                -- Check if Type is "Totems"
+                if itemType == "Totems" then
+                    local itemName = itemData.Data.Name or "Unknown"
+                    print("[Find Totem] ✅ FOUND TOTEM TYPE! Name: " .. itemName .. " (Type: " .. itemType .. ", ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
                     return item.UUID
                 end
-            else
-                print("[Find Totem] Item #" .. i .. ": No data (ID: " .. tostring(item.Id) .. ")")
             end
         end
 
-        print("[Find Totem] ❌ Luck Totem not found in inventory")
+        -- Second pass: Search by name containing "totem"
+        print("[Find Totem] First pass failed, trying name search...")
+        for i, item in ipairs(inventoryItems) do
+            local itemData = ItemUtility:GetItemData(item.Id)
+            if itemData and itemData.Data and itemData.Data.Name then
+                local itemName = itemData.Data.Name
+                local itemNameLower = string.lower(itemName)
+
+                if string.find(itemNameLower, "totem") or string.find(itemNameLower, "luck") then
+                    local itemType = itemData.Data.Type or "Unknown"
+                    print("[Find Totem] ✅ Found item with 'totem/luck': " .. itemName .. " (Type: " .. itemType .. ", ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
+                    return item.UUID
+                end
+            end
+        end
+
+        -- Third pass: Print items with Type "Potions" (in case it's categorized there)
+        print("[Find Totem] Still not found, checking Potions type...")
+        for i, item in ipairs(inventoryItems) do
+            local itemData = ItemUtility:GetItemData(item.Id)
+            if itemData and itemData.Data then
+                local itemType = itemData.Data.Type or ""
+
+                if itemType == "Potions" then
+                    local itemName = itemData.Data.Name or "Unknown"
+                    print("[Find Totem] Potion item: " .. itemName .. " (ID: " .. item.Id .. ", UUID: " .. item.UUID .. ")")
+
+                    if string.find(string.lower(itemName), "totem") then
+                        print("[Find Totem] ✅ Found totem in Potions!")
+                        return item.UUID
+                    end
+                end
+            end
+        end
+
+        print("[Find Totem] ❌ No totem found after 3 passes")
         return nil
     end)
 
