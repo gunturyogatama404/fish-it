@@ -1198,31 +1198,26 @@ local function createWhiteScreen()
     extraStatusLabel.TextYAlignment = Enum.TextYAlignment.Center
     extraStatusLabel.Parent = frame
 
-    -- Nearby Players Display (pojok kanan atas) - transparan tanpa border
-    local nearbyPlayersFrame = Instance.new("ScrollingFrame")
-    nearbyPlayersFrame.Name = "NearbyPlayersFrame"
-    nearbyPlayersFrame.Size = UDim2.new(0, 220, 0, 400)
-    nearbyPlayersFrame.Position = UDim2.new(1, -240, 0, 20)
-    nearbyPlayersFrame.BackgroundTransparency = 0.3
-    nearbyPlayersFrame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
-    nearbyPlayersFrame.BorderSizePixel = 0
-    nearbyPlayersFrame.ScrollBarThickness = 4
-    nearbyPlayersFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-    nearbyPlayersFrame.Parent = frame
+    -- Nearby Players Display (pojok kanan atas) - simple text labels
+    local nearbyPlayersContainer = Instance.new("Frame")
+    nearbyPlayersContainer.Name = "NearbyPlayersContainer"
+    nearbyPlayersContainer.Size = UDim2.new(0, 250, 0, 500)
+    nearbyPlayersContainer.Position = UDim2.new(1, -270, 0, 20)
+    nearbyPlayersContainer.BackgroundTransparency = 1
+    nearbyPlayersContainer.Parent = frame
 
     -- Title untuk nearby players
     local nearbyTitle = Instance.new("TextLabel")
     nearbyTitle.Name = "NearbyTitle"
-    nearbyTitle.Size = UDim2.new(1, 0, 0, 30)
+    nearbyTitle.Size = UDim2.new(1, 0, 0, 25)
     nearbyTitle.Position = UDim2.new(0, 0, 0, 0)
-    nearbyTitle.BackgroundTransparency = 0.2
-    nearbyTitle.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
-    nearbyTitle.BorderSizePixel = 0
+    nearbyTitle.BackgroundTransparency = 1
     nearbyTitle.Text = "👥 Nearby Players"
-    nearbyTitle.TextColor3 = Color3.new(1, 1, 1)
-    nearbyTitle.TextSize = 14
+    nearbyTitle.TextColor3 = Color3.new(1, 1, 0)
+    nearbyTitle.TextSize = 16
     nearbyTitle.Font = Enum.Font.SourceSansBold
-    nearbyTitle.Parent = nearbyPlayersFrame
+    nearbyTitle.TextXAlignment = Enum.TextXAlignment.Left
+    nearbyTitle.Parent = nearbyPlayersContainer
 
     -- Buttons container di bawah (centered)
     -- Close button
@@ -1317,14 +1312,14 @@ local function createWhiteScreen()
 
                 -- Update nearby players list
                 pcall(function()
-                    if nearbyPlayersFrame and nearbyPlayersFrame.Parent then
+                    if nearbyPlayersContainer and nearbyPlayersContainer.Parent then
                         local myChar = LocalPlayer.Character
                         if not myChar then return end
                         local myRoot = myChar:FindFirstChild("HumanoidRootPart")
                         if not myRoot then return end
 
                         -- Clear existing player labels (except title)
-                        for _, child in ipairs(nearbyPlayersFrame:GetChildren()) do
+                        for _, child in ipairs(nearbyPlayersContainer:GetChildren()) do
                             if child:IsA("TextLabel") and child.Name ~= "NearbyTitle" then
                                 child:Destroy()
                             end
@@ -1352,24 +1347,21 @@ local function createWhiteScreen()
                         -- Sort by distance
                         table.sort(nearbyPlayers, function(a, b) return a.distance < b.distance end)
 
-                        -- Display players
-                        local yOffset = 35
+                        -- Display players (simple text labels)
+                        local yOffset = 30
                         for i, playerData in ipairs(nearbyPlayers) do
                             local playerLabel = Instance.new("TextLabel")
-                            playerLabel.Size = UDim2.new(1, -10, 0, 25)
-                            playerLabel.Position = UDim2.new(0, 5, 0, yOffset)
+                            playerLabel.Size = UDim2.new(1, 0, 0, 20)
+                            playerLabel.Position = UDim2.new(0, 0, 0, yOffset)
                             playerLabel.BackgroundTransparency = 1
                             playerLabel.Text = string.format("%s (%.0fm)", playerData.name, playerData.distance)
-                            playerLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
-                            playerLabel.TextSize = 12
+                            playerLabel.TextColor3 = Color3.new(1, 1, 1)
+                            playerLabel.TextSize = 14
                             playerLabel.Font = Enum.Font.SourceSans
                             playerLabel.TextXAlignment = Enum.TextXAlignment.Left
-                            playerLabel.Parent = nearbyPlayersFrame
-                            yOffset = yOffset + 25
+                            playerLabel.Parent = nearbyPlayersContainer
+                            yOffset = yOffset + 20
                         end
-
-                        -- Update canvas size
-                        nearbyPlayersFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 10)
                     end
                 end)
                 
