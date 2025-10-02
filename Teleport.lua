@@ -1201,7 +1201,7 @@ local function createWhiteScreen()
     -- Close button for Android/mobile users
     local closeButton = Instance.new("TextButton")
     closeButton.Size = UDim2.new(0, 200, 0, 40)
-    closeButton.Position = UDim2.new(1, -220, 0, 100)
+    closeButton.Position = UDim2.new(0.5, -100, 0, 520)
     closeButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
     closeButton.BorderSizePixel = 0
     closeButton.Text = "❌ Disable GPU Saver"
@@ -1217,7 +1217,7 @@ local function createWhiteScreen()
     -- Buy Totem button
     local buyTotemButton = Instance.new("TextButton")
     buyTotemButton.Size = UDim2.new(0, 200, 0, 40)
-    buyTotemButton.Position = UDim2.new(1, -220, 0, 150)
+    buyTotemButton.Position = UDim2.new(0.5, -100, 0, 570)
     buyTotemButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
     buyTotemButton.BorderSizePixel = 0
     buyTotemButton.Text = "🗿 Buy Totem 2M"
