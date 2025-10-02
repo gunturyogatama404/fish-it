@@ -965,40 +965,48 @@ local function buyTotem()
         -- Double check to ensure auto farm is really off
         task.wait(0.5)
         isAutoFarmOn = false -- Force again
-        task.wait(1.5) -- Wait total 2 seconds for auto farm to fully stop
+
+        -- Wait 3 seconds for fishing to complete if player is waiting for fish
+        print("[Buy Totem] Waiting 3 seconds for any pending fishing to complete...")
+        task.wait(3)
 
         print("[Buy Totem] ✅ Auto farm stopped (was " .. (wasAutoFarmOn and "ON" or "OFF") .. ")")
 
-        -- Step 2: Force sell all
-        print("[Buy Totem] [2/7] Selling all items...")
-        local sellSuccess = false
+        -- Step 2: Spam sell all 3x to ensure everything is sold
+        print("[Buy Totem] [2/7] Selling all items (3x spam)...")
 
-        -- Try using the existing sellEvent first
-        if sellEvent then
-            sellSuccess = pcall(function()
-                sellEvent:InvokeServer()
-                print("[Buy Totem] ✅ Sell event called (method 1)")
-            end)
-        end
+        -- Sell attempt 1
+        pcall(function()
+            local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
+            local sellEventDirect = net["RF/SellAllItems"]
+            if sellEventDirect then
+                sellEventDirect:InvokeServer()
+                print("[Buy Totem] ✅ Sell attempt 1/3")
+            end
+        end)
+        task.wait(1)
 
-        -- If failed, try direct access
-        if not sellSuccess then
-            pcall(function()
-                local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
-                local sellEventDirect = net["RF/SellAllItems"]
-                if sellEventDirect then
-                    sellEventDirect:InvokeServer()
-                    print("[Buy Totem] ✅ Sell event called (method 2)")
-                    sellSuccess = true
-                end
-            end)
-        end
+        -- Sell attempt 2
+        pcall(function()
+            local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
+            local sellEventDirect = net["RF/SellAllItems"]
+            if sellEventDirect then
+                sellEventDirect:InvokeServer()
+                print("[Buy Totem] ✅ Sell attempt 2/3")
+            end
+        end)
+        task.wait(1)
 
-        if not sellSuccess then
-            warn("[Buy Totem] ⚠️ Sell event failed, continuing anyway...")
-        end
-
-        task.wait(3) -- Wait for sell to complete
+        -- Sell attempt 3
+        pcall(function()
+            local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
+            local sellEventDirect = net["RF/SellAllItems"]
+            if sellEventDirect then
+                sellEventDirect:InvokeServer()
+                print("[Buy Totem] ✅ Sell attempt 3/3")
+            end
+        end)
+        task.wait(2) -- Final wait for all sells to complete
 
         -- Step 3: Check current coins
         print("[Buy Totem] [3/7] Checking coins...")
@@ -1051,53 +1059,86 @@ local function buyTotem()
         print("[Buy Totem] ✅ Totem purchased successfully!")
         task.wait(2) -- Wait for inventory to update
 
-        -- Step 5: Place totem
-        print("[Buy Totem] [5/7] Placing totem...")
+        -- Step 5: Place totem at current player position
+        print("[Buy Totem] [5/7] Placing totem at current position...")
         local totemPlaced = false
 
+        -- Get current player position first
+        local playerPosition = nil
         pcall(function()
-            -- Get all totems from inventory
-            local inventoryData = PlayerData.Data.Inventory
-            local totemUUID = nil
-
-            -- Find the Luck Totem in inventory (ID 5 = Luck Totem)
-            for itemUUID, itemData in pairs(inventoryData) do
-                if itemData and itemData.id == 5 then
-                    totemUUID = itemUUID
-                    print("[Buy Totem] Found Luck Totem with UUID: " .. tostring(totemUUID))
-                    break
+            local character = player.Character
+            if character then
+                local rootPart = character:FindFirstChild("HumanoidRootPart")
+                if rootPart then
+                    playerPosition = rootPart.Position
+                    print("[Buy Totem] Player position: " .. tostring(playerPosition))
                 end
-            end
-
-            -- If not found in inventory, try PlayerData.Data.TotemSelected
-            if not totemUUID then
-                local totemSelected = PlayerData.Data.TotemSelected
-                if totemSelected and totemSelected.Value then
-                    totemUUID = totemSelected.Value
-                    print("[Buy Totem] Using selected totem UUID: " .. tostring(totemUUID))
-                end
-            end
-
-            if totemUUID then
-                -- Fire spawn totem event
-                local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
-                local spawnTotemEvent = net:FindFirstChild("RE/SpawnTotem")
-
-                if spawnTotemEvent then
-                    spawnTotemEvent:FireServer(totemUUID)
-                    print("[Buy Totem] ✅ Totem placement request sent!")
-                    totemPlaced = true
-                    task.wait(1.5)
-                else
-                    warn("[Buy Totem] ⚠️ SpawnTotem event not found")
-                end
-            else
-                warn("[Buy Totem] ⚠️ Could not find Luck Totem in inventory")
             end
         end)
 
+        if not playerPosition then
+            warn("[Buy Totem] ⚠️ Could not get player position!")
+        else
+            pcall(function()
+                -- Get all totems from inventory
+                local inventoryData = PlayerData.Data.Inventory
+                local totemUUID = nil
+
+                -- Find the Luck Totem in inventory (ID 5 = Luck Totem)
+                for itemUUID, itemData in pairs(inventoryData) do
+                    if itemData and itemData.id == 5 then
+                        totemUUID = itemUUID
+                        print("[Buy Totem] Found Luck Totem with UUID: " .. tostring(totemUUID))
+                        break
+                    end
+                end
+
+                -- If not found in inventory, try PlayerData.Data.TotemSelected
+                if not totemUUID then
+                    local totemSelected = PlayerData.Data.TotemSelected
+                    if totemSelected and totemSelected.Value then
+                        totemUUID = totemSelected.Value
+                        print("[Buy Totem] Using selected totem UUID: " .. tostring(totemUUID))
+                    end
+                end
+
+                if totemUUID then
+                    -- Fire spawn totem event at current player position
+                    local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
+                    local spawnTotemEvent = net:FindFirstChild("RE/SpawnTotem")
+
+                    if spawnTotemEvent then
+                        -- According to "0 totem spawn outgoing.lua", SpawnTotem takes UUID as parameter
+                        spawnTotemEvent:FireServer(totemUUID)
+                        print("[Buy Totem] ✅ Totem spawn request sent with UUID: " .. totemUUID)
+
+                        -- Wait a bit then trigger the visual effect at player position
+                        task.wait(0.5)
+
+                        -- Optionally fire TotemSpawned event for visual effects
+                        local totemSpawnedEvent = net:FindFirstChild("RE/TotemSpawned")
+                        if totemSpawnedEvent then
+                            -- Use firesignal to trigger client event at player position
+                            local spawnPosition = playerPosition + Vector3.new(0, 0, 5) -- 5 studs in front
+                            pcall(function()
+                                firesignal(totemSpawnedEvent.OnClientEvent, spawnPosition)
+                                print("[Buy Totem] Visual effects triggered at: " .. tostring(spawnPosition))
+                            end)
+                        end
+
+                        totemPlaced = true
+                        task.wait(1)
+                    else
+                        warn("[Buy Totem] ⚠️ SpawnTotem event not found")
+                    end
+                else
+                    warn("[Buy Totem] ⚠️ Could not find Luck Totem in inventory")
+                end
+            end)
+        end
+
         if totemPlaced then
-            print("[Buy Totem] ✅ Totem placed successfully!")
+            print("[Buy Totem] ✅ Totem placed successfully at player position!")
         else
             warn("[Buy Totem] ⚠️ Totem placement failed (but purchase succeeded)")
         end
