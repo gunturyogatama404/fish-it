@@ -1070,7 +1070,7 @@ local function findTotemUUID()
 
         -- Scan tiles directly (simpler approach)
         local tiles = inventoryPage:GetChildren()
-        local totemFound = false
+        local totemTile = nil
         local totemUUID = nil
 
         for i, tile in ipairs(tiles) do
@@ -1083,7 +1083,31 @@ local function findTotemUUID()
                     if itemText == "Luck Totem" then
                         print(string.format("[Find Totem] ✅ FOUND 'Luck Totem' at Tile[%d]!", i))
                         print("[Find Totem] Full Path: " .. itemNameElement:GetFullName())
-                        totemFound = true
+                        totemTile = tile
+
+                        -- Try to extract UUID from tile
+                        print("[Find Totem] Extracting UUID from tile...")
+                        print("[Find Totem] Tile attributes:")
+                        for attrName, attrValue in pairs(tile:GetAttributes()) do
+                            print(string.format("  - %s = %s", attrName, tostring(attrValue)))
+                            if attrName:lower():find("uuid") or attrName:lower():find("id") then
+                                totemUUID = tostring(attrValue)
+                                print(string.format("[Find Totem] ✅ Found UUID in attribute '%s': %s", attrName, totemUUID))
+                            end
+                        end
+
+                        -- Also check tile children for UUID
+                        print("[Find Totem] Tile children:")
+                        for _, child in ipairs(tile:GetChildren()) do
+                            print(string.format("  - %s (%s)", child.Name, child.ClassName))
+                            if child.Name:lower():find("uuid") or child.Name:lower():find("id") then
+                                if child:IsA("StringValue") or child:IsA("ObjectValue") then
+                                    totemUUID = tostring(child.Value)
+                                    print(string.format("[Find Totem] ✅ Found UUID in child '%s': %s", child.Name, totemUUID))
+                                end
+                            end
+                        end
+
                         break
                     end
                 end
@@ -1096,9 +1120,15 @@ local function findTotemUUID()
         inventoryGui.Enabled = wasEnabled
         mainFrame.Visible = wasVisible
 
-        -- If found in GUI, get UUID from PlayerData
-        if totemFound and PlayerData then
-            print("[Find Totem] Searching for UUID in PlayerData...")
+        -- If UUID found from tile, return it
+        if totemUUID then
+            print(string.format("[Find Totem] ✅ UUID extracted from tile: %s", totemUUID))
+            return totemUUID
+        end
+
+        -- Fallback: Try to match by name in PlayerData (if tile didn't have UUID)
+        if totemTile and PlayerData then
+            print("[Find Totem] UUID not in tile, searching PlayerData as fallback...")
             local inventoryItems = PlayerData:GetExpect("Inventory").Items
             print("[Find Totem] Total items in PlayerData: " .. #inventoryItems)
 
@@ -1106,17 +1136,17 @@ local function findTotemUUID()
                 local itemData = ItemUtility:GetItemData(item.Id)
                 if itemData and itemData.Data and itemData.Data.Name then
                     if itemData.Data.Name == "Luck Totem" then
-                        print(string.format("[Find Totem] ✅ UUID found: %s (ID: %d)", item.UUID, item.Id))
+                        print(string.format("[Find Totem] ✅ UUID found in PlayerData: %s (ID: %d)", item.UUID, item.Id))
                         return item.UUID
                     end
                 end
             end
         end
 
-        if not totemFound then
+        if not totemTile then
             print("[Find Totem] ❌ 'Luck Totem' not found in Items category GUI")
         else
-            print("[Find Totem] ❌ 'Luck Totem' found in GUI but UUID not in PlayerData")
+            print("[Find Totem] ❌ 'Luck Totem' found in GUI but could not extract UUID")
         end
 
         return nil
