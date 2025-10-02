@@ -1126,53 +1126,42 @@ local function findTotemUUID()
             return totemUUID
         end
 
-        -- Fallback: Try to match by name in PlayerData (if tile didn't have UUID)
+        -- Search for UUID in PlayerData by matching name
         if totemTile and PlayerData then
-            print("[Find Totem] UUID not in tile, searching PlayerData as fallback...")
+            print("[Find Totem] Searching PlayerData for UUID...")
             local inventoryItems = PlayerData:GetExpect("Inventory").Items
             print("[Find Totem] Total items in PlayerData: " .. #inventoryItems)
 
-            -- DEBUG: Print all item names to see what's available
-            print("[Find Totem] DEBUG - All items in PlayerData.Inventory.Items:")
-            local itemNames = {}
+            -- First pass: Look for exact match "Luck Totem"
             for idx, item in ipairs(inventoryItems) do
                 local itemData = ItemUtility:GetItemData(item.Id)
                 if itemData and itemData.Data and itemData.Data.Name then
                     local itemName = itemData.Data.Name
-                    local itemType = itemData.Data.Type or "Unknown"
-
-                    -- Store unique names
-                    if not itemNames[itemName] then
-                        itemNames[itemName] = {count = 0, type = itemType, id = item.Id}
-                    end
-                    itemNames[itemName].count = itemNames[itemName].count + 1
-
-                    -- Check for Luck Totem with any variation
-                    local itemNameLower = itemName:lower()
-                    if itemNameLower:find("luck") or itemNameLower:find("totem") then
-                        print(string.format("[Find Totem] 🔍 POTENTIAL MATCH [%d]: '%s' (Type: %s, ID: %d, UUID: %s)",
-                            idx, itemName, itemType, item.Id, item.UUID))
-                    end
 
                     -- Exact match check
                     if itemName == "Luck Totem" then
-                        print(string.format("[Find Totem] ✅ EXACT MATCH FOUND: UUID: %s (ID: %d)", item.UUID, item.Id))
+                        local itemType = itemData.Data.Type or "Unknown"
+                        print(string.format("[Find Totem] ✅ EXACT MATCH FOUND [%d]: '%s' (Type: %s, ID: %d, UUID: %s)",
+                            idx, itemName, itemType, item.Id, item.UUID))
                         return item.UUID
                     end
                 end
             end
 
-            -- Print summary of unique items
-            print("[Find Totem] DEBUG - Unique item summary:")
-            local sortedNames = {}
-            for name, _ in pairs(itemNames) do
-                table.insert(sortedNames, name)
-            end
-            table.sort(sortedNames)
+            -- Second pass: DEBUG - Print all items containing "luck" or "totem"
+            print("[Find Totem] ⚠️ Exact match not found. Searching for similar items...")
+            for idx, item in ipairs(inventoryItems) do
+                local itemData = ItemUtility:GetItemData(item.Id)
+                if itemData and itemData.Data and itemData.Data.Name then
+                    local itemName = itemData.Data.Name
+                    local itemType = itemData.Data.Type or "Unknown"
+                    local itemNameLower = itemName:lower()
 
-            for _, name in ipairs(sortedNames) do
-                local info = itemNames[name]
-                print(string.format("  - %s (Type: %s, ID: %d, Count: %d)", name, info.type, info.id, info.count))
+                    if itemNameLower:find("luck") or itemNameLower:find("totem") then
+                        print(string.format("[Find Totem] 🔍 POTENTIAL [%d]: '%s' (Type: %s, ID: %d, UUID: %s)",
+                            idx, itemName, itemType, item.Id, item.UUID))
+                    end
+                end
             end
         end
 
