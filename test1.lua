@@ -957,13 +957,25 @@ local function findTotemUUID()
     end
 
     local success, result = pcall(function()
+        -- Try to get all data structures
+        local playerDataRaw = PlayerData:GetExpect()
         local inventory = PlayerData:GetExpect("Inventory")
-        local inventoryItems = inventory.Items
-        local equippedItems = PlayerData:GetExpect("EquippedItems")
+        local inventoryItems = inventory.Items or {}
+        local equippedItems = PlayerData:GetExpect("EquippedItems") or {}
 
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         print("[Find Totem] Total items in data: " .. #inventoryItems)
         print("[Find Totem] Total equipped items: " .. #equippedItems)
+
+        -- Debug: Check if Inventory has other fields
+        print("[Find Totem] [DEBUG] Inventory fields:")
+        for key, value in pairs(inventory) do
+            if type(value) == "table" then
+                print(string.format("[Find Totem] [DEBUG]   - %s: table with %d items", key, #value))
+            else
+                print(string.format("[Find Totem] [DEBUG]   - %s: %s", key, tostring(value)))
+            end
+        end
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
         -- Count unique items by Type
@@ -1043,9 +1055,28 @@ local function findTotemUUID()
             return foundItems[1].uuid
         end
 
+        -- Fallback: Try using hardcoded UUID from reference file
         print("[Find Totem] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print("[Find Totem] ❌ No totem found in inventory")
-        print("[Find Totem] ⚠️ Totem might not be purchased yet, or inventory needs time to refresh")
+        print("[Find Totem] ❌ No totem found in Inventory.Items")
+        print("[Find Totem] 🔄 Trying hardcoded UUID: bf27e53b-284c-400b-9a89-737f54a4cc4a")
+
+        -- Check if this UUID exists in equipped items
+        for _, uuid in ipairs(equippedItems) do
+            if uuid == "bf27e53b-284c-400b-9a89-737f54a4cc4a" then
+                print("[Find Totem] ✅ Hardcoded UUID found in equipped items!")
+                return uuid
+            end
+        end
+
+        -- Check if exists in raw inventory
+        for _, item in ipairs(inventoryItems) do
+            if item.UUID == "bf27e53b-284c-400b-9a89-737f54a4cc4a" then
+                print("[Find Totem] ✅ Hardcoded UUID found in inventory!")
+                return item.UUID
+            end
+        end
+
+        print("[Find Totem] ⚠️ Hardcoded UUID also not found. Totem might not be purchased yet.")
         return nil
     end)
 
