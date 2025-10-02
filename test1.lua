@@ -987,75 +987,86 @@ local function findTotemHotbarSlot()
     return nil
 end
 
-local function buyAndPlaceTotem()
+local function buyTotem()
     task.spawn(function()
-        print("[Buy Totem] Starting totem purchase and placement...")
+        print("[Buy Totem] Purchasing Luck Totem from market...")
 
-        -- Step 1: Purchase totem from market (ID 5 = Luck Totem 2M)
-        print("[Buy Totem] Step 1: Purchasing Luck Totem from market...")
-        local purchaseSuccess = pcall(function()
+        local purchaseSuccess, purchaseError = pcall(function()
             networkEvents.purchaseMarketItemEvent:InvokeServer(5)
         end)
 
         if not purchaseSuccess then
-            warn("[Buy Totem] Failed to purchase totem")
+            warn("[Buy Totem] Failed to purchase totem: " .. tostring(purchaseError))
             return
         end
 
-        print("[Buy Totem] Purchase successful! Waiting for item to appear...")
+        print("[Buy Totem] ✅ Purchase request sent! Waiting for confirmation...")
         task.wait(2)
 
-        -- Step 2: Find totem UUID in inventory
+        local totemUUID = findTotemUUID()
+        if totemUUID then
+            print("[Buy Totem] ✅ Totem successfully purchased and found in inventory!")
+        else
+            warn("[Buy Totem] ⚠️ Purchase sent, but totem not found in inventory yet. Try again or wait.")
+        end
+    end)
+end
+
+local function equipAndPlaceTotem()
+    task.spawn(function()
+        print("[Place Totem] Starting totem equip and placement...")
+
+        -- Step 1: Find totem UUID in inventory
         local totemUUID = findTotemUUID()
         if not totemUUID then
-            warn("[Buy Totem] Totem not found in inventory after purchase")
+            warn("[Place Totem] ❌ Totem not found in inventory! Purchase it first.")
             return
         end
 
-        -- Step 3: Equip totem to hotbar
-        print("[Buy Totem] Step 2: Equipping totem to hotbar...")
+        -- Step 2: Equip totem to hotbar
+        print("[Place Totem] Step 1: Equipping totem to hotbar...")
         pcall(function()
             networkEvents.equipItemEvent:FireServer(totemUUID, "Totems")
         end)
         task.wait(1.5)
 
-        -- Step 4: Find which hotbar slot the totem is in
+        -- Step 3: Find which hotbar slot the totem is in
         local totemSlot = findTotemHotbarSlot()
         if not totemSlot then
-            warn("[Buy Totem] Could not find totem in hotbar")
+            warn("[Place Totem] ❌ Could not find totem in hotbar after equipping")
             return
         end
 
-        print("[Buy Totem] Step 3: Totem equipped to slot " .. totemSlot .. ", equipping tool...")
+        print("[Place Totem] Step 2: Totem in slot " .. totemSlot .. ", equipping tool...")
 
-        -- Step 5: Equip the totem tool from hotbar
+        -- Step 4: Equip the totem tool from hotbar
         pcall(function()
             networkEvents.equipEvent:FireServer(totemSlot)
         end)
         task.wait(1)
 
-        -- Step 6: Get player position and place totem
+        -- Step 5: Get player position and place totem
         local character = player.Character
         if not character then
-            warn("[Buy Totem] Character not found")
+            warn("[Place Totem] ❌ Character not found")
             return
         end
 
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if not rootPart then
-            warn("[Buy Totem] HumanoidRootPart not found")
+            warn("[Place Totem] ❌ HumanoidRootPart not found")
             return
         end
 
         local playerPosition = rootPart.Position
-        print("[Buy Totem] Step 4: Placing totem at player position: " .. tostring(playerPosition))
+        print("[Place Totem] Step 3: Placing totem at position: " .. tostring(playerPosition))
 
-        -- Step 7: Place the totem (FireServer with UUID)
+        -- Step 6: Place the totem (FireServer with UUID)
         pcall(function()
             networkEvents.spawnTotemEvent:FireServer(totemUUID)
         end)
 
-        print("[Buy Totem] ✅ Totem placed successfully!")
+        print("[Place Totem] ✅ Totem placed successfully!")
     end)
 end
 
@@ -1337,17 +1348,17 @@ local function createWhiteScreen()
     nearbyTitle.TextXAlignment = Enum.TextXAlignment.Left
     nearbyTitle.Parent = nearbyPlayersContainer
 
-    -- Buttons container di bawah (centered)
-    -- Close button
+    -- Buttons container di bawah (3 buttons horizontal)
+    -- Close button (kiri)
     local closeButton = Instance.new("TextButton")
-    closeButton.Size = UDim2.new(0, 200, 0, 40)
-    closeButton.Position = UDim2.new(0.5, -210, 1, -60)
+    closeButton.Size = UDim2.new(0, 130, 0, 40)
+    closeButton.Position = UDim2.new(0.5, -200, 1, -60)
     closeButton.AnchorPoint = Vector2.new(0, 1)
     closeButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
     closeButton.BorderSizePixel = 0
-    closeButton.Text = "❌ Disable GPU Saver"
+    closeButton.Text = "❌ Disable GPU"
     closeButton.TextColor3 = Color3.new(1, 0, 0)
-    closeButton.TextSize = 16
+    closeButton.TextSize = 14
     closeButton.Font = Enum.Font.SourceSansBold
     closeButton.Parent = frame
 
@@ -1355,21 +1366,38 @@ local function createWhiteScreen()
         disableGPUSaver()
     end)
 
-    -- Buy Totem button
+    -- Buy Totem button (tengah)
     local buyTotemButton = Instance.new("TextButton")
-    buyTotemButton.Size = UDim2.new(0, 200, 0, 40)
-    buyTotemButton.Position = UDim2.new(0.5, 10, 1, -60)
+    buyTotemButton.Size = UDim2.new(0, 130, 0, 40)
+    buyTotemButton.Position = UDim2.new(0.5, -65, 1, -60)
     buyTotemButton.AnchorPoint = Vector2.new(0, 1)
     buyTotemButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
     buyTotemButton.BorderSizePixel = 0
-    buyTotemButton.Text = "🗿 Buy Totem 2M"
+    buyTotemButton.Text = "💰 Buy Totem"
     buyTotemButton.TextColor3 = Color3.new(1, 1, 1)
-    buyTotemButton.TextSize = 16
+    buyTotemButton.TextSize = 14
     buyTotemButton.Font = Enum.Font.SourceSansBold
     buyTotemButton.Parent = frame
 
     buyTotemButton.MouseButton1Click:Connect(function()
-        buyAndPlaceTotem()
+        buyTotem()
+    end)
+
+    -- Place Totem button (kanan)
+    local placeTotemButton = Instance.new("TextButton")
+    placeTotemButton.Size = UDim2.new(0, 130, 0, 40)
+    placeTotemButton.Position = UDim2.new(0.5, 70, 1, -60)
+    placeTotemButton.AnchorPoint = Vector2.new(0, 1)
+    placeTotemButton.BackgroundColor3 = Color3.new(0.6, 0.2, 0.6)
+    placeTotemButton.BorderSizePixel = 0
+    placeTotemButton.Text = "🗿 Place Totem"
+    placeTotemButton.TextColor3 = Color3.new(1, 1, 1)
+    placeTotemButton.TextSize = 14
+    placeTotemButton.Font = Enum.Font.SourceSansBold
+    placeTotemButton.Parent = frame
+
+    placeTotemButton.MouseButton1Click:Connect(function()
+        equipAndPlaceTotem()
     end)
 
     -- ====== IMPROVED UPDATE SYSTEM (from reference) ======
