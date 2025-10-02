@@ -1132,14 +1132,47 @@ local function findTotemUUID()
             local inventoryItems = PlayerData:GetExpect("Inventory").Items
             print("[Find Totem] Total items in PlayerData: " .. #inventoryItems)
 
-            for _, item in ipairs(inventoryItems) do
+            -- DEBUG: Print all item names to see what's available
+            print("[Find Totem] DEBUG - All items in PlayerData.Inventory.Items:")
+            local itemNames = {}
+            for idx, item in ipairs(inventoryItems) do
                 local itemData = ItemUtility:GetItemData(item.Id)
                 if itemData and itemData.Data and itemData.Data.Name then
-                    if itemData.Data.Name == "Luck Totem" then
-                        print(string.format("[Find Totem] ✅ UUID found in PlayerData: %s (ID: %d)", item.UUID, item.Id))
+                    local itemName = itemData.Data.Name
+                    local itemType = itemData.Data.Type or "Unknown"
+
+                    -- Store unique names
+                    if not itemNames[itemName] then
+                        itemNames[itemName] = {count = 0, type = itemType, id = item.Id}
+                    end
+                    itemNames[itemName].count = itemNames[itemName].count + 1
+
+                    -- Check for Luck Totem with any variation
+                    local itemNameLower = itemName:lower()
+                    if itemNameLower:find("luck") or itemNameLower:find("totem") then
+                        print(string.format("[Find Totem] 🔍 POTENTIAL MATCH [%d]: '%s' (Type: %s, ID: %d, UUID: %s)",
+                            idx, itemName, itemType, item.Id, item.UUID))
+                    end
+
+                    -- Exact match check
+                    if itemName == "Luck Totem" then
+                        print(string.format("[Find Totem] ✅ EXACT MATCH FOUND: UUID: %s (ID: %d)", item.UUID, item.Id))
                         return item.UUID
                     end
                 end
+            end
+
+            -- Print summary of unique items
+            print("[Find Totem] DEBUG - Unique item summary:")
+            local sortedNames = {}
+            for name, _ in pairs(itemNames) do
+                table.insert(sortedNames, name)
+            end
+            table.sort(sortedNames)
+
+            for _, name in ipairs(sortedNames) do
+                local info = itemNames[name]
+                print(string.format("  - %s (Type: %s, ID: %d, Count: %d)", name, info.type, info.id, info.count))
             end
         end
 
