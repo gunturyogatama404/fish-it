@@ -1,7 +1,11 @@
 --[[
-    Fish Detection and Selection System v1.0
-    Tujuan: Mendeteksi daftar ikan di inventory dan memungkinkan seleksi berurutan
-    Fitur: GUI untuk melihat nama ikan + mutasi, dengan navigasi berurutan
+    Fish Detection and Selection System v1.4
+    Tujuan: Mendeteksi daftar ikan, rods, dan baits di inventory
+    Fitur:
+    - GUI untuk melihat nama ikan + mutasi, dengan navigasi berurutan
+    - Tab Rods: Deteksi dan equip fishing rods menggunakan UUID
+    - Tab Baits: Deteksi dan equip baits menggunakan ID
+    - Auto Trade & Auto Enchant
 --]]
 
 local Players = game:GetService("Players")
@@ -34,6 +38,11 @@ local detectedRods = {}
 local currentRodIndex = 1
 local selectedRodIndex = nil
 local currentCategory = "Fishes" -- "Fishes" or "Items"
+
+-- Variables for bait detection
+local detectedBaits = {}
+local currentBaitIndex = 1
+local selectedBaitIndex = nil
 
 -- Auto Enchant Variables
 local isAutoEnchantOn = false
@@ -485,6 +494,23 @@ local function equipRodByUUID(rodUUID)
     print(string.format("[equipRodByUUID] Equipping rod with UUID: %s", rodUUID))
     -- The category for rods is "Fishing Rods"
     EquipItemEvent:FireServer(rodUUID, "Fishing Rods")
+    return true
+end
+
+-- Function to equip bait by ID (Baits use ID, not UUID)
+local function equipBaitByID(baitID)
+    if not baitID or not PlayerData then return false end
+
+    local equippedBaitId = PlayerData:GetExpect("EquippedBaitId")
+    if equippedBaitId == baitID then
+        print(string.format("[equipBaitByID] Bait with ID '%s' is already equipped.", baitID))
+        return true -- Already equipped
+    end
+
+    print(string.format("[equipBaitByID] Equipping bait with ID: %s", baitID))
+    -- Use the EquipBait remote event
+    local EquipBaitEvent = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/EquipBait")
+    EquipBaitEvent:FireServer(baitID)
     return true
 end
 
@@ -1267,6 +1293,57 @@ local function detectRods()
     return true
 end
 
+-- Bait Detection Function
+local function detectBaits()
+    detectedBaits = {}
+    isDetecting = true
+    print("[Bait Detector] Starting bait detection from PlayerData...")
+
+    if not PlayerData then
+        warn("[Bait Detector] PlayerData is not available.")
+        isDetecting = false
+        return false
+    end
+
+    local success, inventory = pcall(function()
+        return PlayerData:Get("Inventory")
+    end)
+
+    if not success or not inventory then
+        warn("[Bait Detector] Failed to get inventory from PlayerData:", tostring(inventory))
+        isDetecting = false
+        return false
+    end
+
+    -- The category is "Baits" as seen in InventoryMapping.lua
+    local baits = inventory["Baits"]
+    if not baits or type(baits) ~= "table" then
+        warn("[Bait Detector] 'Baits' category not found in inventory data.")
+        isDetecting = false
+        return false
+    end
+
+    print(string.format("[Bait Detector] Found %d total items in 'Baits' category.", #baits))
+
+    for i, baitItem in ipairs(baits) do
+        -- baitItem contains Id (Baits use Id, not UUID like rods)
+        local baitData = ItemUtility:GetBaitData(baitItem.Id)
+        if baitData and baitData.Data then
+            local baitName = trim(baitData.Data.Name)
+            local baitID = baitData.Data.Id
+            local baitIcon = baitData.Data.Icon or ""
+            print(string.format("[Bait Detector] Found bait: '%s' (ID: %s)", baitName, baitID))
+            table.insert(detectedBaits, {index = #detectedBaits + 1, name = baitName, id = baitID, icon = baitIcon})
+        else
+            warn("[Bait Detector] Could not get data for bait with ID:", baitItem.Id)
+        end
+    end
+
+    print(string.format("[Bait Detector] Detection complete. Found %d baits.", #detectedBaits))
+    isDetecting = false
+    return true
+end
+
 updateDisplay = function()
     if not fishDetectionWindow then return end
 
@@ -1291,10 +1368,10 @@ updateDisplay = function()
     local function createTab(text, tabName)
         local tabButton = Instance.new("TextButton")
         tabButton.Name = tabName .. "Tab"
-        tabButton.Size = UDim2.new(0.25, -4, 1, 0) -- Adjusted for 4 tabs
+        tabButton.Size = UDim2.new(0.166, -4, 1, 0) -- Adjusted for 6 tabs (1/6 = 0.166)
         tabButton.Font = Enum.Font.GothamSemibold
         tabButton.Text = text
-        tabButton.TextSize = 12
+        tabButton.TextSize = 11 -- Slightly smaller to fit better
         tabButton.AutoButtonColor = false
         tabButton.Parent = tabContainer
 
@@ -1321,6 +1398,7 @@ updateDisplay = function()
 
     createTab("🐟 Fish", "Fish")
     createTab("🎣 Rods", "Rods")
+    createTab("🪝 Baits", "Baits")
     createTab("👥 Players", "Players")
     createTab("🤖 Auto Trade", "AutoTrade")
     createTab("✨ Enchant", "Enchant")
@@ -1521,6 +1599,68 @@ updateDisplay = function()
             updateDisplay()
         end))
 
+    elseif currentTab == "Baits" then
+        local order = 1
+        local function add(inst) inst.LayoutOrder = order; order = order + 1; return inst end
+
+        add(fishDetectionWindow:AddLabel("🪝 Baits"))
+
+        if #detectedBaits == 0 then
+            add(fishDetectionWindow:AddLabel("No baits detected. Try detecting first!"))
+            add(fishDetectionWindow:AddButton("🔍 Detect Baits", function()
+                if isDetecting then return end
+                detectBaits()
+                updateDisplay()
+            end))
+            return
+        end
+
+        add(fishDetectionWindow:AddLabel(string.format("Total Baits: %d", #detectedBaits)))
+
+        -- Function to open the inventory to the Baits tab
+        local function openBaitsInventory()
+            local GuiControl = require(ReplicatedStorage.Modules.GuiControl)
+            local InventoryController = require(ReplicatedStorage.Controllers.InventoryController)
+
+            if GuiControl:IsOpen("Inventory") then
+                GuiControl:Close()
+            else
+                -- Use the controller to set the page and open it
+                InventoryController:SetPage("Baits")
+                InventoryController:SetCategory("Baits")
+                if InventoryController.InventoryStateChanged then
+                    -- Fire the event to trigger a redraw
+                    InventoryController.InventoryStateChanged:Fire("Baits")
+                end
+                GuiControl:Open("Inventory", false)
+            end
+        end
+        add(fishDetectionWindow:AddButton("📖 Open Game Inventory to Baits", openBaitsInventory))
+
+        -- Display all baits with click-to-equip
+        for i, bait in ipairs(detectedBaits) do
+            local isCurrent = (i == currentBaitIndex)
+            local buttonText = isCurrent and ("▶ " .. bait.name) or ("  " .. bait.name)
+
+            add(fishDetectionWindow:AddButton(buttonText, function()
+                currentBaitIndex = i
+                -- Equip the bait when clicked, using its ID
+                if bait.id then
+                    equipBaitByID(bait.id)
+                else
+                    warn("[UI] Bait has no ID:", bait.name)
+                end
+                updateDisplay()
+            end))
+        end
+
+        add(fishDetectionWindow:AddButton("🔍 Detect Baits Again", function()
+            if isDetecting then return end
+            detectBaits()
+            currentBaitIndex = 1
+            updateDisplay()
+        end))
+
     elseif currentTab == "Players" then
         local order = 1
         local function add(inst) inst.LayoutOrder = order; order = order + 1; return inst end
@@ -1706,7 +1846,7 @@ local function initializeFishDetector()
     LightweightInventory.start()
     task.wait(3)
 
-    fishDetectionWindow = FishDetectorLib.CreateWindow("🐟 Fish & Trade + Enchant v1.3")
+    fishDetectionWindow = FishDetectorLib.CreateWindow("🐟 Fish & Trade + Enchant v1.4")
     updateDisplay()
 
     -- Event Listeners for Auto Trade
@@ -1751,7 +1891,7 @@ local function initializeFishDetector()
         end
     end)
 
-    print("🐟 Fish & Trade + Enchant v1.3 initialized!")
+    print("🐟 Fish & Trade + Enchant v1.4 initialized!")
 end
 
 -- Global functions for easy access
@@ -1784,15 +1924,17 @@ task.wait(2)
 initializeFishDetector()
 
 print("=" .. string.rep("=", 55) .. "=")
-print("🐟 FISH & TRADE + ENCHANT v1.3 - READY TO USE!")
+print("🐟 FISH & TRADE + ENCHANT v1.4 - READY TO USE!")
 print("=" .. string.rep("=", 55) .. "=")
 print("   showFishDetector() - Show the UI")
 print("   hideFishDetector() - Hide the UI")
 print("")
 print("   🐟 Fish tab - Detect and select fish/items")
+print("   🎣 Rods tab - Detect and equip fishing rods")
+print("   🪝 Baits tab - Detect and equip baits")
 print("   👥 Players tab - Select trade partner")
 print("   🤖 Auto Trade tab - Start automatic trading")
 print("   ✨ Enchant tab - Auto TP + Auto Equip + Auto Enchant!")
 print("")
-print("   NEW: Auto teleport to enchanting altar when starting!")
+print("   NEW: Baits detection and auto-equip added!")
 print("=" .. string.rep("=", 55) .. "=")
