@@ -935,6 +935,12 @@ function FormatTime(a)a=tonumber(a)or 0;a=math.max(0,math.floor(a))local b=math.
 function FormatNumber(a)local b=tonumber(a)or 0;local c=tostring(math.floor(b))local d;while true do c,d=string.gsub(c,"^(-?%d+)(%d%d%d)",'%1,%2')if d==0 then break end end;return c end
 
 -- ====== GPU SAVER VARIABLES ======
+-- Read GPU_FPS_LIMIT from main_noui.lua if available, otherwise default to 8
+if not GPU_FPS_LIMIT then
+    GPU_FPS_LIMIT = 8
+end
+GPU_FPS_LIMIT = tonumber(GPU_FPS_LIMIT) or 8 -- Ensure it's a number
+
 local originalSettings = {}
 local whiteScreenGui = nil
 local connections = {}
@@ -1348,12 +1354,12 @@ function enableGPUSaver()
             end
         end
         
-        pcall(function() setfpscap(8) end) -- Limit FPS to 8
+        pcall(function() setfpscap(GPU_FPS_LIMIT) end) -- Limit FPS based on GPU_FPS_LIMIT
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         workspace.CurrentCamera.FieldOfView = 1
     end)
 
-    -- Create FPS cap monitor to ensure it stays at 8 FPS
+    -- Create FPS cap monitor to ensure it stays at GPU_FPS_LIMIT
     if fpsCapConnection then
         fpsCapConnection:Disconnect()
         fpsCapConnection = nil
@@ -1363,7 +1369,7 @@ function enableGPUSaver()
         if gpuSaverEnabled then
             pcall(function()
                 if setfpscap then
-                    setfpscap(8)
+                    setfpscap(GPU_FPS_LIMIT)
                 end
             end)
         end
