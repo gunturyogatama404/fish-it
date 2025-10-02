@@ -1198,13 +1198,14 @@ local function createWhiteScreen()
     extraStatusLabel.TextYAlignment = Enum.TextYAlignment.Center
     extraStatusLabel.Parent = frame
 
-    -- Nearby Players Display (pojok kanan atas)
+    -- Nearby Players Display (pojok kanan atas) - dengan border untuk visibility
     local nearbyPlayersFrame = Instance.new("ScrollingFrame")
     nearbyPlayersFrame.Name = "NearbyPlayersFrame"
     nearbyPlayersFrame.Size = UDim2.new(0, 220, 0, 400)
     nearbyPlayersFrame.Position = UDim2.new(1, -240, 0, 20)
     nearbyPlayersFrame.BackgroundColor3 = Color3.new(0.15, 0.15, 0.15)
-    nearbyPlayersFrame.BorderSizePixel = 0
+    nearbyPlayersFrame.BorderSizePixel = 2
+    nearbyPlayersFrame.BorderColor3 = Color3.new(1, 1, 1)
     nearbyPlayersFrame.ScrollBarThickness = 6
     nearbyPlayersFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
     nearbyPlayersFrame.Parent = frame
@@ -1222,10 +1223,12 @@ local function createWhiteScreen()
     nearbyTitle.Font = Enum.Font.SourceSansBold
     nearbyTitle.Parent = nearbyPlayersFrame
 
-    -- Close button for Android/mobile users (pindah ke bawah tengah)
+    -- Buttons container di bawah (centered)
+    -- Close button
     local closeButton = Instance.new("TextButton")
     closeButton.Size = UDim2.new(0, 200, 0, 40)
-    closeButton.Position = UDim2.new(0.5, -100, 0, 520)
+    closeButton.Position = UDim2.new(0.5, -210, 1, -60)
+    closeButton.AnchorPoint = Vector2.new(0, 1)
     closeButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
     closeButton.BorderSizePixel = 0
     closeButton.Text = "❌ Disable GPU Saver"
@@ -1238,10 +1241,11 @@ local function createWhiteScreen()
         disableGPUSaver()
     end)
 
-    -- Buy Totem button (pindah ke bawah tengah)
+    -- Buy Totem button
     local buyTotemButton = Instance.new("TextButton")
     buyTotemButton.Size = UDim2.new(0, 200, 0, 40)
-    buyTotemButton.Position = UDim2.new(0.5, -100, 0, 570)
+    buyTotemButton.Position = UDim2.new(0.5, 10, 1, -60)
+    buyTotemButton.AnchorPoint = Vector2.new(0, 1)
     buyTotemButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
     buyTotemButton.BorderSizePixel = 0
     buyTotemButton.Text = "🗿 Buy Totem 2M"
