@@ -580,8 +580,9 @@ local function detectAndEquipBestRod()
 
     if equipSuccess then
         print(string.format("[Auto Equip Rod] ✅ Successfully equipped '%s'!", bestRod.name))
+        print("[Auto Equip Rod] Waiting for equip to register...")
+        task.wait(2) -- Wait longer for equip to fully register
         print("[Auto Equip Rod] ================================================")
-        task.wait(1)
         return true
     else
         warn(string.format("[Auto Equip Rod] ❌ Failed to equip '%s'", bestRod.name))
@@ -677,8 +678,9 @@ local function detectAndEquipBestBait()
 
     if equipSuccess then
         print(string.format("[Auto Equip Bait] ✅ Successfully equipped '%s'!", bestBait.name))
+        print("[Auto Equip Bait] Waiting for equip to register...")
+        task.wait(2) -- Wait longer for equip to fully register
         print("[Auto Equip Bait] ================================================")
-        task.wait(1)
         return true
     else
         warn(string.format("[Auto Equip Bait] ❌ Failed to equip '%s'", bestBait.name))
@@ -3723,29 +3725,8 @@ local function startManualConfig()
         task.wait(0.5)
     end
 
-    -- Enable Auto Upgrade Rod if configured
-    if useAutoUpgradeRod then
-        upgradeState.rod = true
-        print("[Manual Config] Auto Upgrade Rod enabled")
-        task.wait(0.5)
-
-        -- Initial equip check - equip best rod on startup
-        print("[Manual Config] Checking for best rod to equip on startup...")
-        task.wait(1)
-        detectAndEquipBestRod()
-    end
-
-    -- Enable Auto Upgrade Bait if configured
-    if useAutoUpgradeBait then
-        upgradeState.bait = true
-        print("[Manual Config] Auto Upgrade Bait enabled")
-        task.wait(0.5)
-
-        -- Initial equip check - equip best bait on startup
-        print("[Manual Config] Checking for best bait to equip on startup...")
-        task.wait(1)
-        detectAndEquipBestBait()
-    end
+    -- Auto Upgrade Rod/Bait already enabled in main startup sequence
+    -- (Initial equip runs BEFORE this function is called)
 end
 
 -- ====================================================================
@@ -4062,7 +4043,45 @@ task.spawn(function()
     end
 end)
 
--- Auto loops started
+-- ====================================================================
+--     INITIAL EQUIP BEST ROD/BAIT (BEFORE AUTO LOOPS START)
+-- ====================================================================
+
+-- Initial equip MUST run BEFORE any auto loops start
+print("[Startup] ================================================")
+print("[Startup] Checking initial equipment...")
+
+-- Initial equip best rod if auto upgrade enabled
+if useAutoUpgradeRod then
+    print("[Startup] Auto Upgrade Rod is enabled - equipping best rod...")
+    task.wait(1)
+    detectAndEquipBestRod()
+    task.wait(1) -- Wait for equip to complete
+end
+
+-- Initial equip best bait if auto upgrade enabled
+if useAutoUpgradeBait then
+    print("[Startup] Auto Upgrade Bait is enabled - equipping best bait...")
+    task.wait(1)
+    detectAndEquipBestBait()
+    task.wait(1) -- Wait for equip to complete
+end
+
+print("[Startup] Initial equipment check complete!")
+print("[Startup] ================================================")
+
+-- Enable auto upgrade states AFTER initial equip
+if useAutoUpgradeRod then
+    upgradeState.rod = true
+    print("[Startup] Auto Upgrade Rod system enabled")
+end
+
+if useAutoUpgradeBait then
+    upgradeState.bait = true
+    print("[Startup] Auto Upgrade Bait system enabled")
+end
+
+-- Auto loops started AFTER initial equip complete
 
 -- Run manual config auto-start
 task.spawn(startManualConfig)
