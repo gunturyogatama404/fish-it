@@ -582,6 +582,12 @@ local function detectAndEquipBestRod()
         print(string.format("[Auto Equip Rod] ✅ Successfully equipped '%s'!", bestRod.name))
         print("[Auto Equip Rod] Waiting for equip to register...")
         task.wait(2) -- Wait longer for equip to fully register
+
+        -- Apply rod-specific delays if auto upgrade is enabled
+        if upgradeState.rod then
+            applyRodDelays(bestRod.id)
+        end
+
         print("[Auto Equip Rod] ================================================")
         return true
     else
@@ -1383,13 +1389,98 @@ local whiteScreenGui = nil
 local connections = {}
 local fpsCapConnection = nil
 
--- ====== DELAY VARIABLES ====== 
+-- ====== DELAY VARIABLES ======
 local chargeFishingDelay = 0.01
 local autoFishMainDelay = 0.9
 local autoSellDelay = 45
 local autoCatchDelay = 0.2
 local weatherIdDelay = 33
 local weatherCycleDelay = 100
+
+-- ====== ROD-SPECIFIC DELAY MAPPING (from List Best.lua) ======
+local rodDelaySettings = {
+    [79] = {fish = 7, catch = 1},      -- Luck Rod
+    [76] = {fish = 5, catch = 1},      -- Carbon Rod
+    [85] = {fish = 5, catch = 1},      -- Grass Rod
+    [77] = {fish = 5, catch = 1},      -- Demascus Rod
+    [78] = {fish = 5, catch = 1},      -- Ice Rod
+    [4] = {fish = 4, catch = 1},       -- Lucky Rod
+    [80] = {fish = 4, catch = 1},      -- Midnight Rod
+    [6] = {fish = 1, catch = 0.4},     -- Steampunk Rod
+    [7] = {fish = 0.3, catch = 0.3},   -- Chrome Rod
+    [5] = {fish = 0.1, catch = 0.1},   -- Astral Rod
+    [126] = {fish = 0.1, catch = 0.1}  -- Ares Rod
+}
+
+-- Function to get currently equipped rod ID
+local function getEquippedRodID()
+    if not PlayerData then return nil end
+
+    local success, inventory = pcall(function()
+        return PlayerData:Get("Inventory")
+    end)
+
+    if not success or not inventory then return nil end
+
+    local fishingRods = inventory["Fishing Rods"]
+    if not fishingRods or type(fishingRods) ~= "table" then return nil end
+
+    -- Get equipped items
+    local equippedItems = PlayerData:GetExpect("EquippedItems")
+
+    -- Find which rod is equipped
+    for i, rodItem in ipairs(fishingRods) do
+        for _, equippedUUID in ipairs(equippedItems) do
+            if equippedUUID == rodItem.UUID then
+                return rodItem.Id -- Return equipped rod ID
+            end
+        end
+    end
+
+    return nil
+end
+
+-- Function to apply rod-specific delays
+local function applyRodDelays(rodID)
+    if not rodID then return false end
+
+    local delaySetting = rodDelaySettings[rodID]
+    if not delaySetting then
+        warn("[Rod Delay] No delay setting found for rod ID: " .. tostring(rodID))
+        return false
+    end
+
+    -- Update delays
+    autoFishMainDelay = delaySetting.fish
+    autoCatchDelay = delaySetting.catch
+
+    -- Save to config
+    if config then
+        config.autoFishDelay = autoFishMainDelay
+        config.autoCatchDelay = autoCatchDelay
+        saveConfig()
+    end
+
+    print(string.format("[Rod Delay] ✅ Delays updated for rod ID %d: Fish=%.1fs, Catch=%.1fs",
+        rodID, autoFishMainDelay, autoCatchDelay))
+
+    return true
+end
+
+-- Function to detect equipped rod and apply delays
+local function detectAndApplyRodDelays()
+    local equippedRodID = getEquippedRodID()
+
+    if equippedRodID then
+        local rodName = rodNames[equippedRodID] or "Unknown"
+        print(string.format("[Rod Delay] Detected equipped rod: %s (ID: %d)", rodName, equippedRodID))
+        applyRodDelays(equippedRodID)
+        return true
+    else
+        warn("[Rod Delay] No rod equipped - using default delays")
+        return false
+    end
+end
 
 HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool (global)
 
@@ -4074,6 +4165,11 @@ print("[Startup] ================================================")
 if useAutoUpgradeRod then
     upgradeState.rod = true
     print("[Startup] Auto Upgrade Rod system enabled")
+
+    -- Detect and apply rod delays on startup
+    print("[Startup] Detecting equipped rod and applying delays...")
+    task.wait(1)
+    detectAndApplyRodDelays()
 end
 
 if useAutoUpgradeBait then
