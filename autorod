@@ -583,9 +583,44 @@ local function detectAndEquipBestRod()
         print("[Auto Equip Rod] Waiting for equip to register...")
         task.wait(2) -- Wait longer for equip to fully register
 
-        -- Apply rod-specific delays if auto upgrade is enabled
-        if upgradeState.rod then
-            applyRodDelays(bestRod.id)
+        -- Verify equip was successful (check if UUID is now in equipped items)
+        local verified = false
+        local equippedItems = PlayerData:GetExpect("EquippedItems")
+        for _, equippedUUID in ipairs(equippedItems) do
+            if equippedUUID == bestRod.uuid then
+                verified = true
+                break
+            end
+        end
+
+        if verified then
+            print(string.format("[Auto Equip Rod] ✅ Verified: '%s' is equipped!", bestRod.name))
+
+            -- Apply rod-specific delays if auto upgrade is enabled
+            if upgradeState.rod then
+                applyRodDelays(bestRod.id)
+            end
+        else
+            warn(string.format("[Auto Equip Rod] ⚠️ Equip verification failed for '%s' - retrying...", bestRod.name))
+
+            -- Retry equip once
+            task.wait(1)
+            local retrySuccess = pcall(function()
+                local EquipItemEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/EquipItem")
+                EquipItemEvent:FireServer(bestRod.uuid, "Fishing Rods")
+            end)
+
+            if retrySuccess then
+                task.wait(2)
+                print(string.format("[Auto Equip Rod] ✅ Retry successful: '%s' equipped!", bestRod.name))
+
+                -- Apply delays after retry
+                if upgradeState.rod then
+                    applyRodDelays(bestRod.id)
+                end
+            else
+                warn(string.format("[Auto Equip Rod] ❌ Retry failed for '%s'", bestRod.name))
+            end
         end
 
         print("[Auto Equip Rod] ================================================")
@@ -686,6 +721,34 @@ local function detectAndEquipBestBait()
         print(string.format("[Auto Equip Bait] ✅ Successfully equipped '%s'!", bestBait.name))
         print("[Auto Equip Bait] Waiting for equip to register...")
         task.wait(2) -- Wait longer for equip to fully register
+
+        -- Verify equip was successful (check if ID is now equipped)
+        local verified = false
+        local equippedBaitId = PlayerData:GetExpect("EquippedBaitId")
+        if equippedBaitId == bestBait.id then
+            verified = true
+        end
+
+        if verified then
+            print(string.format("[Auto Equip Bait] ✅ Verified: '%s' is equipped!", bestBait.name))
+        else
+            warn(string.format("[Auto Equip Bait] ⚠️ Equip verification failed for '%s' - retrying...", bestBait.name))
+
+            -- Retry equip once
+            task.wait(1)
+            local retrySuccess = pcall(function()
+                local EquipBaitEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/EquipBait")
+                EquipBaitEvent:FireServer(bestBait.id)
+            end)
+
+            if retrySuccess then
+                task.wait(2)
+                print(string.format("[Auto Equip Bait] ✅ Retry successful: '%s' equipped!", bestBait.name))
+            else
+                warn(string.format("[Auto Equip Bait] ❌ Retry failed for '%s'", bestBait.name))
+            end
+        end
+
         print("[Auto Equip Bait] ================================================")
         return true
     else
@@ -3938,6 +4001,9 @@ task.spawn(function()
 
     while true do
         if upgradeState.rod then
+            -- Track auto farm state OUTSIDE pcall
+            local wasAutoFarmEnabled = isAutoFarmOn
+
             local success, err = pcall(function()
                 local currentCurrency = getCurrentCoins()
                 local affordableRodId, rodPrice = getAffordableRod(currentCurrency)
@@ -3949,7 +4015,6 @@ task.spawn(function()
                 print("[Auto Upgrade Rod] Attempting to purchase rod " .. tostring(affordableRodId) .. " (price: " .. tostring(rodPrice) .. ", currency: " .. tostring(currentCurrency) .. ")")
 
                 -- Stop auto farm before purchase
-                local wasAutoFarmEnabled = isAutoFarmOn
                 if wasAutoFarmEnabled then
                     print("[Auto Upgrade Rod] Stopping auto farm for rod purchase...")
                     isAutoFarmOn = false
@@ -4017,12 +4082,13 @@ task.spawn(function()
                     end
                 end
 
-                -- Re-enable auto farm if it was enabled
-                if wasAutoFarmEnabled then
-                    isAutoFarmOn = true
-                    print("[Auto Upgrade Rod] Auto farm re-enabled after rod purchase process")
-                end
             end)
+
+            -- ALWAYS re-enable auto farm if it was enabled (even if error occurred)
+            if wasAutoFarmEnabled and not isAutoFarmOn then
+                isAutoFarmOn = true
+                print("[Auto Upgrade Rod] Auto farm re-enabled after rod purchase process")
+            end
 
             if not success then
                 warn("[Auto Upgrade Rod] Loop error: " .. tostring(err))
@@ -4040,6 +4106,9 @@ task.spawn(function()
 
     while true do
         if upgradeState.bait then
+            -- Track auto farm state OUTSIDE pcall
+            local wasAutoFarmEnabled = isAutoFarmOn
+
             local success, err = pcall(function()
                 local currentCurrency = getCurrentCoins()
                 local affordableBaitId, baitPrice = getAffordableBait(currentCurrency)
@@ -4051,7 +4120,6 @@ task.spawn(function()
                 print("[Auto Upgrade Bait] Attempting to purchase bait " .. tostring(affordableBaitId) .. " (price: " .. tostring(baitPrice) .. ", currency: " .. tostring(currentCurrency) .. ")")
 
                 -- Stop auto farm before purchase
-                local wasAutoFarmEnabled = isAutoFarmOn
                 if wasAutoFarmEnabled then
                     print("[Auto Upgrade Bait] Stopping auto farm for bait purchase...")
                     isAutoFarmOn = false
@@ -4119,12 +4187,13 @@ task.spawn(function()
                     end
                 end
 
-                -- Re-enable auto farm if it was enabled
-                if wasAutoFarmEnabled then
-                    isAutoFarmOn = true
-                    print("[Auto Upgrade Bait] Auto farm re-enabled after bait purchase process")
-                end
             end)
+
+            -- ALWAYS re-enable auto farm if it was enabled (even if error occurred)
+            if wasAutoFarmEnabled and not isAutoFarmOn then
+                isAutoFarmOn = true
+                print("[Auto Upgrade Bait] Auto farm re-enabled after bait purchase process")
+            end
 
             if not success then
                 warn("[Auto Upgrade Bait] Loop error: " .. tostring(err))
@@ -4181,171 +4250,6 @@ end
 
 -- Run manual config auto-start
 task.spawn(startManualConfig)
-
--- ====================================================================
---     BACKGROUND EQUIPMENT MONITORING (Every 20 seconds)
--- ====================================================================
-
--- Function to check if current equipped rod is the best
-local function isEquippedBestRod()
-    if not PlayerData then return true end
-
-    local success, inventory = pcall(function()
-        return PlayerData:Get("Inventory")
-    end)
-
-    if not success or not inventory then return true end
-
-    local fishingRods = inventory["Fishing Rods"]
-    if not fishingRods or type(fishingRods) ~= "table" then return true end
-
-    -- Find best rod owned
-    local ownedRods = {}
-    for i, rodItem in ipairs(fishingRods) do
-        local rodData = ItemUtility:GetItemData(rodItem.Id)
-        if rodData and rodData.Data then
-            for rodIndex, listRodID in ipairs(rodIDs) do
-                if listRodID == rodItem.Id then
-                    table.insert(ownedRods, {
-                        id = rodItem.Id,
-                        uuid = rodItem.UUID,
-                        priority = rodIndex
-                    })
-                    break
-                end
-            end
-        end
-    end
-
-    if #ownedRods == 0 then return true end
-
-    table.sort(ownedRods, function(a, b) return a.priority > b.priority end)
-    local bestRod = ownedRods[1]
-
-    -- Check if best rod is equipped
-    local equippedItems = PlayerData:GetExpect("EquippedItems")
-    for _, equippedUUID in ipairs(equippedItems) do
-        if equippedUUID == bestRod.uuid then
-            return true -- Best rod is equipped
-        end
-    end
-
-    return false -- Best rod is NOT equipped
-end
-
--- Function to check if current equipped bait is the best
-local function isEquippedBestBait()
-    if not PlayerData then return true end
-
-    local success, inventory = pcall(function()
-        return PlayerData:Get("Inventory")
-    end)
-
-    if not success or not inventory then return true end
-
-    local baits = inventory["Baits"]
-    if not baits or type(baits) ~= "table" then return true end
-
-    -- Find best bait owned
-    local ownedBaits = {}
-    for i, baitItem in ipairs(baits) do
-        local baitData = ItemUtility:GetBaitData(baitItem.Id)
-        if baitData and baitData.Data then
-            for baitIndex, listBaitID in ipairs(baitIDs) do
-                if listBaitID == baitData.Data.Id then
-                    table.insert(ownedBaits, {
-                        id = baitData.Data.Id,
-                        priority = baitIndex
-                    })
-                    break
-                end
-            end
-        end
-    end
-
-    if #ownedBaits == 0 then return true end
-
-    table.sort(ownedBaits, function(a, b) return a.priority > b.priority end)
-    local bestBait = ownedBaits[1]
-
-    -- Check if best bait is equipped
-    local equippedBaitId = PlayerData:GetExpect("EquippedBaitId")
-    if equippedBaitId == bestBait.id then
-        return true -- Best bait is equipped
-    end
-
-    return false -- Best bait is NOT equipped
-end
-
--- Background monitoring loop (every 20 seconds)
-task.spawn(function()
-    task.wait(30) -- Wait for everything to initialize first
-
-    while true do
-        -- Only check if auto upgrade is enabled
-        if upgradeState.rod or upgradeState.bait then
-            local success, err = pcall(function()
-                -- Check rod
-                if upgradeState.rod then
-                    if not isEquippedBestRod() then
-                        print("[Equipment Monitor] ⚠️ Best rod NOT equipped - re-equipping...")
-
-                        -- Stop auto farm temporarily
-                        local wasAutoFarmOn = isAutoFarmOn
-                        if wasAutoFarmOn then
-                            isAutoFarmOn = false
-                            task.wait(1)
-                        end
-
-                        -- Re-equip best rod
-                        detectAndEquipBestRod()
-
-                        -- Resume auto farm
-                        if wasAutoFarmOn then
-                            isAutoFarmOn = true
-                        end
-                    else
-                        print("[Equipment Monitor] ✅ Best rod is equipped")
-                    end
-                end
-
-                task.wait(2)
-
-                -- Check bait
-                if upgradeState.bait then
-                    if not isEquippedBestBait() then
-                        print("[Equipment Monitor] ⚠️ Best bait NOT equipped - re-equipping...")
-
-                        -- Stop auto farm temporarily
-                        local wasAutoFarmOn = isAutoFarmOn
-                        if wasAutoFarmOn then
-                            isAutoFarmOn = false
-                            task.wait(1)
-                        end
-
-                        -- Re-equip best bait
-                        detectAndEquipBestBait()
-
-                        -- Resume auto farm
-                        if wasAutoFarmOn then
-                            isAutoFarmOn = true
-                        end
-                    else
-                        print("[Equipment Monitor] ✅ Best bait is equipped")
-                    end
-                end
-            end)
-
-            if not success then
-                warn("[Equipment Monitor] Error: " .. tostring(err))
-            end
-        end
-
-        task.wait(20) -- Check every 20 seconds
-    end
-end)
-
-print("[Equipment Monitor] Background monitoring started (checks every 20 seconds)")
 
 -- Initialization complete (no status reporter to save CPU/RAM)
 
