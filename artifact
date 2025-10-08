@@ -560,21 +560,27 @@ do
     function AutoArtifact.startArtifactChecker()
         task.spawn(function()
             print("[Auto Artifact] ================================================")
-            print("[Auto Artifact] Auto Artifact System Started!")
+            print("[Auto Artifact] 🔍 Artifact Checker Loop Started!")
             print("[Auto Artifact] ================================================")
 
             while isAutoArtifactOn and artifactCurrentTemple <= 4 do
-                task.wait(5) -- Check every 5 seconds
-
                 -- Get current temple config
                 local currentConfig = ARTIFACT_CONFIG[artifactCurrentTemple]
+
+                print(string.format("[Auto Artifact] 🔍 Checking for %s at %s (Temple %d/4)",
+                    currentConfig.targetArtifact,
+                    currentConfig.templeName,
+                    artifactCurrentTemple))
 
                 if not artifactCollected[artifactCurrentTemple] then
                     -- Check if target artifact is in inventory
                     local hasArtifact, fullName = AutoArtifact.hasArtifactInInventory(currentConfig.targetArtifact)
 
                     if hasArtifact then
-                        print(string.format("[Auto Artifact] ✅ Found artifact: %s at %s", fullName, currentConfig.templeName))
+                        print("[Auto Artifact] ================================================")
+                        print(string.format("[Auto Artifact] ✅ ARTIFACT FOUND: %s", fullName))
+                        print(string.format("[Auto Artifact] 🏛️ Location: %s", currentConfig.templeName))
+                        print("[Auto Artifact] ================================================")
 
                         -- Mark as collected
                         artifactCollected[artifactCurrentTemple] = true
@@ -586,38 +592,54 @@ do
                             artifactCurrentTemple
                         )
 
+                        print("[Auto Artifact] 📤 Webhook notification sent!")
+
                         -- Wait a bit before moving to next temple
-                        task.wait(2)
+                        task.wait(3)
 
                         -- Move to next temple
                         artifactCurrentTemple = artifactCurrentTemple + 1
 
                         if artifactCurrentTemple <= 4 then
                             local nextConfig = ARTIFACT_CONFIG[artifactCurrentTemple]
-                            print(string.format("[Auto Artifact] 📍 Moving to %s for %s", nextConfig.templeName, nextConfig.targetArtifact))
+                            print("[Auto Artifact] ================================================")
+                            print(string.format("[Auto Artifact] 📍 NEXT TEMPLE: %s", nextConfig.templeName))
+                            print(string.format("[Auto Artifact] 🎯 TARGET: %s", nextConfig.targetArtifact))
+                            print("[Auto Artifact] ================================================")
 
                             -- Teleport to next temple
+                            task.wait(1)
                             AutoArtifact.teleportToTemple(nextConfig.cframe)
-                            task.wait(2)
+                            print("[Auto Artifact] ✅ Teleported to next temple!")
+                            task.wait(3)
                         else
                             -- All artifacts collected!
                             print("[Auto Artifact] ================================================")
-                            print("[Auto Artifact] 🎉 ALL ARTIFACTS COLLECTED!")
+                            print("[Auto Artifact] 🎉🎉🎉 ALL ARTIFACTS COLLECTED! 🎉🎉🎉")
                             print("[Auto Artifact] ================================================")
 
                             -- Send completion webhook
                             AutoArtifact.sendAllArtifactsCompleteWebhook()
+                            print("[Auto Artifact] 📤 Completion webhook sent!")
 
                             -- Stop the system
                             isAutoArtifactOn = false
+                            AUTO_ARTIFACT = false
+                            print("[Auto Artifact] ✅ System completed successfully!")
                             break
                         end
+                    else
+                        print(string.format("[Auto Artifact] ⏳ Waiting for %s... (checking again in 5s)", currentConfig.targetArtifact))
                     end
                 end
+
+                task.wait(5) -- Check every 5 seconds
             end
 
             if artifactCurrentTemple > 4 then
+                print("[Auto Artifact] ================================================")
                 print("[Auto Artifact] System stopped - All artifacts collected")
+                print("[Auto Artifact] ================================================")
             end
         end)
     end
@@ -629,16 +651,51 @@ do
             return
         end
 
-        -- Teleport to first temple
-        local firstConfig = ARTIFACT_CONFIG[1]
-        print(string.format("[Auto Artifact] 📍 Starting at %s for %s", firstConfig.templeName, firstConfig.targetArtifact))
+        print("[Auto Artifact] ================================================")
+        print("[Auto Artifact] 🏺 Auto Artifact System Initializing...")
+        print("[Auto Artifact] ================================================")
 
-        AutoArtifact.teleportToTemple(firstConfig.cframe)
+        -- Reset state if restarting
+        if artifactCurrentTemple > 4 then
+            artifactCurrentTemple = 1
+            artifactCollected = {false, false, false, false}
+            print("[Auto Artifact] State reset - starting fresh")
+        end
+
+        -- Teleport to current temple (or first if just starting)
+        local currentConfig = ARTIFACT_CONFIG[artifactCurrentTemple]
+        print(string.format("[Auto Artifact] 📍 Teleporting to %s for %s", currentConfig.templeName, currentConfig.targetArtifact))
+
+        task.wait(1)
+        AutoArtifact.teleportToTemple(currentConfig.cframe)
         task.wait(2)
+
+        print("[Auto Artifact] ✅ Teleport complete - Starting artifact checker...")
 
         -- Start the checker loop
         AutoArtifact.startArtifactChecker()
     end
+end
+
+-- Function to sync AUTO_ARTIFACT global variable with local state
+local function syncAutoArtifactState()
+    task.spawn(function()
+        while true do
+            task.wait(1) -- Check every second
+            if AUTO_ARTIFACT ~= isAutoArtifactOn then
+                isAutoArtifactOn = AUTO_ARTIFACT
+                if isAutoArtifactOn then
+                    print("[Auto Artifact] ✅ System enabled via AUTO_ARTIFACT")
+                    -- Restart the system
+                    pcall(function()
+                        AutoArtifact.initialize()
+                    end)
+                else
+                    print("[Auto Artifact] ❌ System disabled via AUTO_ARTIFACT")
+                end
+            end
+        end
+    end)
 end
 
 -- ====================================================================
@@ -1044,27 +1101,6 @@ end
 local isAutoArtifactOn = AUTO_ARTIFACT
 local artifactCurrentTemple = 1
 local artifactCollected = {false, false, false, false}
-
--- Function to sync AUTO_ARTIFACT global variable with local state
-local function syncAutoArtifactState()
-    task.spawn(function()
-        while true do
-            task.wait(1) -- Check every second
-            if AUTO_ARTIFACT ~= isAutoArtifactOn then
-                isAutoArtifactOn = AUTO_ARTIFACT
-                if isAutoArtifactOn then
-                    print("[Auto Artifact] ✅ System enabled via AUTO_ARTIFACT")
-                    -- Restart the system
-                    pcall(function()
-                        AutoArtifact.initialize()
-                    end)
-                else
-                    print("[Auto Artifact] ❌ System disabled via AUTO_ARTIFACT")
-                end
-            end
-        end
-    end)
-end
 
 -- Konfigurasi temple dan target artifact
 local ARTIFACT_CONFIG = {
