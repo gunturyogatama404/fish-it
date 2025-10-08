@@ -528,8 +528,8 @@ do
                 local itemData = ItemUtility:GetItemData(item.Id)
                 if itemData and itemData.Data.Name then
                     local itemName = itemData.Data.Name
-                    -- Check if item name contains the artifact name
-                    if string.find(itemName, artifactName) then
+                    -- Exact match - must match exactly (case-insensitive)
+                    if itemName:lower() == artifactName:lower() then
                         print(string.format("[Auto Artifact] Found artifact UUID: %s for %s", item.UUID, itemName))
                         return item.UUID, itemName
                     end
@@ -619,8 +619,8 @@ do
         for _, tile in ipairs(invContainer:GetChildren()) do
             if tile.Name == "Tile" and tile:FindFirstChild("ItemName") then
                 local itemName = tile.ItemName.Text
-                -- Check if item name contains the artifact name
-                if string.find(itemName, artifactName) then
+                -- Exact match - must match exactly (case-insensitive)
+                if itemName:lower() == artifactName:lower() then
                     return true, itemName
                 end
             end
