@@ -439,6 +439,47 @@ do
     end
 end
 
+-- ====================================================================
+--              AUTO ARTIFACT SYSTEM - CONFIGURATION
+-- ====================================================================
+-- Global variable untuk enable/disable dari GitHub
+if not AUTO_ARTIFACT then
+    AUTO_ARTIFACT = false
+end
+
+-- State variables untuk artifact system (MUST be defined before AutoArtifact module)
+local isAutoArtifactOn = AUTO_ARTIFACT
+local artifactCurrentTemple = 1
+local artifactCollected = {false, false, false, false}
+
+-- Konfigurasi temple dan target artifact (MUST be defined before AutoArtifact module)
+local ARTIFACT_CONFIG = {
+    -- Temple 1: Hourglass Diamond Artifact
+    {
+        templeName = "Temple 1",
+        targetArtifact = "Hourglass Diamond Artifact",
+        cframe = CFrame.new(1490.12305, 6.62499952, -850.539307, -0.982308805, -4.67861128e-09, -0.187268242, -7.57854224e-09, 1, 1.47694985e-08, 0.187268242, 1.59274283e-08, -0.982308805)
+    },
+    -- Temple 2: Arrow Artifact
+    {
+        templeName = "Temple 2",
+        targetArtifact = "Arrow Artifact",
+        cframe = CFrame.new(883.964233, 6.62499952, -360.91275, -0.128746182, 9.21072107e-09, 0.991677582, -4.92979968e-09, 1, -9.92803972e-09, -0.991677582, -6.16696871e-09, -0.128746182)
+    },
+    -- Temple 3: Diamond Artifact
+    {
+        templeName = "Temple 3",
+        targetArtifact = "Diamond Artifact",
+        cframe = CFrame.new(1836.77136, 6.62499952, -288.573303, 0.25269559, 7.76984699e-09, -0.967545807, 3.12285877e-08, 1, 1.61864921e-08, 0.967545807, -3.43053443e-08, 0.25269559)
+    },
+    -- Temple 4: Crescent Artifact
+    {
+        templeName = "Temple 4",
+        targetArtifact = "Crescent Artifact",
+        cframe = CFrame.new(1405.67358, 6.17587185, 119.126236, -0.951030135, -6.02376886e-08, 0.309098154, -8.03642095e-08, 1, -5.23817469e-08, -0.309098154, -7.4657045e-08, -0.951030135)
+    }
+}
+
 --[[------------------------------------------------------------------
     MODULE: Auto Artifact System
     Tujuan: Farming artifact di 4 temple secara berurutan dengan webhook notification
@@ -679,6 +720,11 @@ end
 
 -- Function to sync AUTO_ARTIFACT global variable with local state
 local function syncAutoArtifactState()
+    if not AutoArtifact then
+        warn("[Auto Artifact] AutoArtifact module not found - sync disabled")
+        return
+    end
+
     task.spawn(function()
         while true do
             task.wait(1) -- Check every second
@@ -688,7 +734,9 @@ local function syncAutoArtifactState()
                     print("[Auto Artifact] ✅ System enabled via AUTO_ARTIFACT")
                     -- Restart the system
                     pcall(function()
-                        AutoArtifact.initialize()
+                        if AutoArtifact and AutoArtifact.initialize then
+                            AutoArtifact.initialize()
+                        end
                     end)
                 else
                     print("[Auto Artifact] ❌ System disabled via AUTO_ARTIFACT")
@@ -717,15 +765,22 @@ end
 task.spawn(function()
     task.wait(3) -- Wait for inventory to fully load
 
-    -- Start the sync function for AUTO_ARTIFACT variable
-    syncAutoArtifactState()
+    if AutoArtifact and AutoArtifact.initialize then
+        local artifactSuccess, errorMsg = pcall(function()
+            AutoArtifact.initialize()
+        end)
 
-    local artifactSuccess = pcall(function()
-        AutoArtifact.initialize()
-    end)
+        if not artifactSuccess then
+            warn("⚠️ [Auto Artifact] Failed to initialize: " .. tostring(errorMsg))
+        end
+    else
+        warn("⚠️ [Auto Artifact] Module not found or incomplete")
+    end
 
-    if not artifactSuccess then
-        warn("⚠️ [Auto Artifact] Failed to initialize Auto Artifact system")
+    -- Start the sync function AFTER initialization
+    task.wait(1)
+    if syncAutoArtifactState then
+        pcall(syncAutoArtifactState)
     end
 end)
 
@@ -1092,43 +1147,7 @@ local isAutoPreset1On = false
 local isAutoPreset2On = false
 local isAutoPreset3On = false
 
--- ====== AUTO ARTIFACT SYSTEM ======
--- Global variable untuk enable/disable dari GitHub
-if not AUTO_ARTIFACT then
-    AUTO_ARTIFACT = false
-end
-
-local isAutoArtifactOn = AUTO_ARTIFACT
-local artifactCurrentTemple = 1
-local artifactCollected = {false, false, false, false}
-
--- Konfigurasi temple dan target artifact
-local ARTIFACT_CONFIG = {
-    -- Temple 1: Hourglass Diamond Artifact
-    {
-        templeName = "Temple 1",
-        targetArtifact = "Hourglass Diamond Artifact",
-        cframe = CFrame.new(1490.12305, 6.62499952, -850.539307, -0.982308805, -4.67861128e-09, -0.187268242, -7.57854224e-09, 1, 1.47694985e-08, 0.187268242, 1.59274283e-08, -0.982308805)
-    },
-    -- Temple 2: Arrow Artifact
-    {
-        templeName = "Temple 2",
-        targetArtifact = "Arrow Artifact",
-        cframe = CFrame.new(883.964233, 6.62499952, -360.91275, -0.128746182, 9.21072107e-09, 0.991677582, -4.92979968e-09, 1, -9.92803972e-09, -0.991677582, -6.16696871e-09, -0.128746182)
-    },
-    -- Temple 3: Diamond Artifact
-    {
-        templeName = "Temple 3",
-        targetArtifact = "Diamond Artifact",
-        cframe = CFrame.new(1836.77136, 6.62499952, -288.573303, 0.25269559, 7.76984699e-09, -0.967545807, 3.12285877e-08, 1, 1.61864921e-08, 0.967545807, -3.43053443e-08, 0.25269559)
-    },
-    -- Temple 4: Crescent Artifact
-    {
-        templeName = "Temple 4",
-        targetArtifact = "Crescent Artifact",
-        cframe = CFrame.new(1405.67358, 6.17587185, 119.126236, -0.951030135, -6.02376886e-08, 0.309098154, -8.03642095e-08, 1, -5.23817469e-08, -0.309098154, -7.4657045e-08, -0.951030135)
-    }
-}
+-- (Auto Artifact configuration moved to top of script - line 442+)
 
 -- Megalodon event variables
 local megalodonEventActive = false
