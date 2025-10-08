@@ -489,11 +489,123 @@ do
     local HttpService = game:GetService("HttpService")
     local Players = game:GetService("Players")
     local LocalPlayer = Players.LocalPlayer
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
     -- Use webhook2 from main.lua
     local WEBHOOK_URL = webhook2
 
-    -- Check if artifact exists in inventory
+    -- Load required modules for artifact favoriting
+    local ItemUtility, Replion, PlayerData, FavoriteItemEvent
+
+    -- Initialize modules function
+    local function initializeModules()
+        if not ItemUtility then
+            ItemUtility = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ItemUtility"))
+        end
+        if not Replion then
+            Replion = require(ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Replion"))
+        end
+        if not PlayerData then
+            PlayerData = Replion.Client:WaitReplion("Data")
+        end
+        if not FavoriteItemEvent then
+            FavoriteItemEvent = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/FavoriteItem")
+        end
+    end
+
+    -- Function to get artifact UUID from PlayerData inventory
+    function AutoArtifact.getArtifactUUID(artifactName)
+        -- Initialize modules if not already done
+        if not PlayerData then
+            initializeModules()
+        end
+
+        if not PlayerData then return nil end
+
+        local success, result = pcall(function()
+            local inventoryItems = PlayerData:GetExpect("Inventory").Items
+            for _, item in ipairs(inventoryItems) do
+                local itemData = ItemUtility:GetItemData(item.Id)
+                if itemData and itemData.Data.Name then
+                    local itemName = itemData.Data.Name
+                    -- Check if item name contains the artifact name
+                    if string.find(itemName, artifactName) then
+                        print(string.format("[Auto Artifact] Found artifact UUID: %s for %s", item.UUID, itemName))
+                        return item.UUID, itemName
+                    end
+                end
+            end
+            return nil
+        end)
+
+        if success and result then
+            return result
+        else
+            return nil
+        end
+    end
+
+    -- Function to favorite an artifact using UUID
+    function AutoArtifact.favoriteArtifact(artifactUUID, artifactName)
+        if not artifactUUID then
+            warn("[Auto Artifact] Cannot favorite - UUID is nil")
+            return false
+        end
+
+        -- Initialize modules if not already done
+        if not FavoriteItemEvent then
+            initializeModules()
+        end
+
+        print(string.format("[Auto Artifact] 🌟 Favoriting artifact: %s (UUID: %s)", artifactName, artifactUUID))
+
+        local success = pcall(function()
+            FavoriteItemEvent:FireServer(artifactUUID)
+        end)
+
+        if success then
+            print(string.format("[Auto Artifact] ✅ Successfully favorited: %s", artifactName))
+            return true
+        else
+            warn(string.format("[Auto Artifact] ❌ Failed to favorite: %s", artifactName))
+            return false
+        end
+    end
+
+    -- Function to auto-favorite all artifacts in inventory
+    function AutoArtifact.autoFavoriteAllArtifacts()
+        print("[Auto Artifact] 🔍 Checking inventory for artifacts to favorite...")
+
+        local artifactNames = {
+            "Arrow Artifact",
+            "Crescent Artifact",
+            "Diamond Artifact",
+            "Hourglass Diamond Artifact"
+        }
+
+        local favorited = 0
+
+        for _, artifactName in ipairs(artifactNames) do
+            local uuid, fullName = AutoArtifact.getArtifactUUID(artifactName)
+            if uuid then
+                task.wait(0.5) -- Small delay between favorites
+                local success = AutoArtifact.favoriteArtifact(uuid, fullName or artifactName)
+                if success then
+                    favorited = favorited + 1
+                end
+            end
+        end
+
+        if favorited > 0 then
+            print(string.format("[Auto Artifact] ✅ Favorited %d artifact(s)!", favorited))
+        else
+            print("[Auto Artifact] ℹ️ No unfavorited artifacts found in inventory")
+        end
+
+        return favorited
+    end
+
+    -- Check if artifact exists in inventory (GUI-based check)
     function AutoArtifact.hasArtifactInInventory(artifactName)
         local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
         local invContainer = playerGui and playerGui:FindFirstChild("Inventory")
@@ -626,6 +738,19 @@ do
                         -- Mark as collected
                         artifactCollected[artifactCurrentTemple] = true
 
+                        -- Auto-favorite the artifact to prevent auto-sell
+                        print("[Auto Artifact] 🌟 Auto-favoriting artifact...")
+                        task.wait(1) -- Wait for inventory to update
+
+                        local artifactUUID, artifactFullName = AutoArtifact.getArtifactUUID(currentConfig.targetArtifact)
+                        if artifactUUID then
+                            AutoArtifact.favoriteArtifact(artifactUUID, artifactFullName or fullName)
+                        else
+                            warn("[Auto Artifact] ⚠️ Could not find artifact UUID for favoriting")
+                        end
+
+                        task.wait(1) -- Wait for favorite to process
+
                         -- Send webhook notification
                         AutoArtifact.sendArtifactFoundWebhook(
                             currentConfig.templeName,
@@ -636,7 +761,7 @@ do
                         print("[Auto Artifact] 📤 Webhook notification sent!")
 
                         -- Wait a bit before moving to next temple
-                        task.wait(3)
+                        task.wait(2)
 
                         -- Move to next temple
                         artifactCurrentTemple = artifactCurrentTemple + 1
@@ -702,6 +827,12 @@ do
             artifactCollected = {false, false, false, false}
             print("[Auto Artifact] State reset - starting fresh")
         end
+
+        -- Auto-favorite any existing artifacts in inventory (on startup)
+        print("[Auto Artifact] 🌟 Checking for existing artifacts to favorite...")
+        task.wait(2) -- Wait for inventory to load
+        AutoArtifact.autoFavoriteAllArtifacts()
+        task.wait(1)
 
         -- Teleport to current temple (or first if just starting)
         local currentConfig = ARTIFACT_CONFIG[artifactCurrentTemple]
