@@ -129,17 +129,7 @@ local function cleanupEnvironment()
 end
 
 
--- Safe execution of performance optimization
-local perfSuccess = pcall(ultimatePerformance)
-if not perfSuccess then
-    warn("⚠️ [Auto Fish] Performance optimization failed, continuing...")
-end
-
--- Safe execution of environment cleanup
-local cleanupSuccess = pcall(cleanupEnvironment)
-if not cleanupSuccess then
-    warn("⚠️ [Auto Fish] Environment cleanup failed, continuing...")
-end
+-- Performance and cleanup functions are now called inside enableGPUSaver()
 
 -- ====== ANTI-AFK SYSTEM ======
 -- Prevents Roblox from disconnecting due to 20 minute idle timeout
@@ -2570,6 +2560,10 @@ end
 function enableGPUSaver()
     if gpuSaverEnabled then return end
     gpuSaverEnabled = true
+
+    -- Run cleanup and performance optimizations when GPU saver is enabled
+    pcall(ultimatePerformance)
+    pcall(cleanupEnvironment)
     
     -- Store original settings
     originalSettings.GlobalShadows = Lighting.GlobalShadows
@@ -2584,6 +2578,7 @@ function enableGPUSaver()
         Lighting.FogEnd = 1
         Lighting.Brightness = 0
         
+        -- This loop is likely redundant since ultimatePerformance() clears lighting children, but it's safe to keep.
         for _, v in pairs(Lighting:GetChildren()) do
             if v:IsA("PostEffect") or v:IsA("Atmosphere") or v:IsA("Sky") then
                 v.Enabled = false
@@ -2592,7 +2587,7 @@ function enableGPUSaver()
         
         pcall(function() setfpscap(GPU_FPS_LIMIT) end) -- Limit FPS based on GPU_FPS_LIMIT
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
-        workspace.CurrentCamera.FieldOfView = 1
+        -- workspace.CurrentCamera.FieldOfView is not set because cleanupEnvironment() destroys the camera.
     end)
 
     -- Create FPS cap monitor to ensure it stays at GPU_FPS_LIMIT
@@ -2639,15 +2634,16 @@ function disableGPUSaver()
         Lighting.FogEnd = originalSettings.FogEnd or 100000
         Lighting.Brightness = originalSettings.Brightness or 1
 
-        for _, v in pairs(Lighting:GetChildren()) do
-            if v:IsA("PostEffect") or v:IsA("Atmosphere") or v:IsA("Sky") then
-                v.Enabled = true
-            end
-        end
+        -- The lighting children were deleted, so re-enabling them is not possible.
+        -- This part of the restoration is omitted.
 
         pcall(function() setfpscap(0) end) -- Remove FPS limit
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, true)
-        workspace.CurrentCamera.FieldOfView = 70
+        
+        -- Check if camera exists before restoring FieldOfView, as it may have been destroyed.
+        if workspace.CurrentCamera then
+            workspace.CurrentCamera.FieldOfView = 70
+        end
     end)
 
     removeWhiteScreen()
