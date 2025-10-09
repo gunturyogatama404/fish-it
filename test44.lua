@@ -65,364 +65,81 @@ if not suppressSuccess then
     warn("⚠️ [Auto Fish] Error suppression setup failed")
 end
 
--- ====== AGGRESSIVE PERFORMANCE OPTIMIZATION & CLEANUP ======
+-- ====== AUTOMATIC PERFORMANCE OPTIMIZATION ======
 local function ultimatePerformance()
-    print("[Performance] ================================================")
-    print("[Performance] 🚀 Starting aggressive optimization & cleanup...")
-    print("[Performance] ================================================")
-
     local workspace = game:GetService("Workspace")
     local lighting = game:GetService("Lighting")
-    local replicatedStorage = game:GetService("ReplicatedStorage")
-    local players = game:GetService("Players")
-    local localPlayer = players.LocalPlayer
-
-    local cleanupCount = 0
-
-    -- 1. DELETE REMOTE: ObtainedNewFishNotification (Notification spam yang tidak perlu)
-    pcall(function()
-        local fishNotifRemote = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/ObtainedNewFishNotification")
-        if fishNotifRemote then
-            fishNotifRemote:Destroy()
-            cleanupCount = cleanupCount + 1
-            print("[Performance] ✅ Deleted fish notification remote (reduces network spam)")
-        end
-    end)
-
-    -- 2. DELETE: workspace.Camera (Destroy entire camera object - will respawn automatically)
-    pcall(function()
-        local camera = workspace:FindFirstChild("Camera")
-        if camera then
-            camera:ClearAllChildren()
-            print("[Performance] ✅ Cleared all Camera children")
-            cleanupCount = cleanupCount + 1
-        end
-    end)
-
-    -- 3. DELETE: workspace.Terrain.Clouds (Use ClearAllChildren)
     pcall(function()
         local terrain = workspace:FindFirstChild("Terrain")
         if terrain then
+            -- 3. delete children nya saja (from read.lua)
             local clouds = terrain:FindFirstChild("Clouds")
             if clouds then
                 clouds:ClearAllChildren()
-                -- Also try to destroy the Clouds object itself
-                pcall(function()
-                    clouds:Destroy()
-                end)
-                print("[Performance] ✅ Cleared/Destroyed Terrain.Clouds")
-                cleanupCount = cleanupCount + 1
             end
-            -- Optimize water
             terrain.WaterWaveSize = 0
             terrain.WaterWaveSpeed = 0
             terrain.WaterReflectance = 0
             terrain.WaterTransparency = 0
         end
-    end)
-
-    -- 4. DELETE: workspace["!! WAVES "] (Use ClearAllChildren + Destroy)
-    pcall(function()
-        local wavesFolder = workspace:FindFirstChild("!! WAVES ")
-        if wavesFolder then
-            wavesFolder:ClearAllChildren()
-            -- Try to destroy the folder itself
-            pcall(function()
-                wavesFolder:Destroy()
-            end)
-            print("[Performance] ✅ Cleared/Destroyed !! WAVES folder")
-            cleanupCount = cleanupCount + 1
-        end
-    end)
-
-    -- 5. DELETE: Other players (Keep only local player)
-    pcall(function()
-        local removedPlayers = 0
-        for _, otherPlayer in pairs(players:GetPlayers()) do
-            if otherPlayer ~= localPlayer then
-                pcall(function()
-                    -- Remove their character from workspace
-                    if otherPlayer.Character then
-                        otherPlayer.Character:Destroy()
-                        removedPlayers = removedPlayers + 1
-                    end
-                end)
-            end
-        end
-        if removedPlayers > 0 then
-            cleanupCount = cleanupCount + removedPlayers
-            print(string.format("[Performance] ✅ Removed %d other player characters", removedPlayers))
-        end
-    end)
-
-    -- 6. DELETE: Lighting children (All effects, sky, atmosphere)
-    pcall(function()
-        local lightingCount = 0
         lighting.GlobalShadows = false
         lighting.FogEnd = 9e9
         lighting.Brightness = 0
         lighting.Technology = Enum.Technology.Compatibility
-
-        for _, effect in pairs(lighting:GetChildren()) do
-            if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or effect:IsA("Sky") or effect:IsA("Clouds") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") then
-                pcall(function()
-                    effect:Destroy()
-                    lightingCount = lightingCount + 1
-                end)
-            end
-        end
-        if lightingCount > 0 then
-            cleanupCount = cleanupCount + lightingCount
-            print(string.format("[Performance] ✅ Deleted %d lighting effects", lightingCount))
-        end
+        -- 6. delete seluruh children nya (from read.lua)
+        lighting:ClearAllChildren()
     end)
-
-    -- Additional optimizations
-    pcall(function()
-        -- Disable workspace streaming if enabled (can cause lag)
-        if workspace:FindFirstChild("StreamingEnabled") then
-            workspace.StreamingEnabled = false
-        end
-
-        -- Set graphics quality to minimum
-        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-    end)
-
-    print("[Performance] ================================================")
-    print(string.format("[Performance] ✅ Cleanup complete! Removed %d objects", cleanupCount))
-    print("[Performance] 🚀 Performance optimization applied successfully!")
-    print("[Performance] ================================================")
 end
 
--- Safe execution of performance optimization
-print("[Performance] Executing aggressive cleanup in 2 seconds...")
-task.wait(2) -- Wait for game to fully load
+-- Function to clean up various game objects for performance
+local function cleanupEnvironment()
+    -- 1. delete remote ini
+    pcall(function()
+        local remote = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/ObtainedNewFishNotification")
+        if remote then
+            remote:Destroy()
+        end
+    end)
 
+    -- 2. delete path ini
+    pcall(function()
+        if workspace.CurrentCamera then
+             workspace.CurrentCamera:Destroy()
+        end
+    end)
+
+    -- 4. delete seluruh children nya
+    pcall(function()
+        local waves = workspace:FindFirstChild("!! WAVES ")
+        if waves then
+            waves:ClearAllChildren()
+        end
+    end)
+
+    -- 5. delete player lain (children nya) selain player utama
+    pcall(function()
+        local Players = game:GetService("Players")
+        local LocalPlayer = Players.LocalPlayer
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                player.Character:Destroy()
+            end
+        end
+    end)
+end
+
+
+-- Safe execution of performance optimization
 local perfSuccess = pcall(ultimatePerformance)
 if not perfSuccess then
     warn("⚠️ [Auto Fish] Performance optimization failed, continuing...")
 end
 
--- ====== CONTINUOUS CLEANUP MONITORING ======
--- Monitor and remove new players that join, and cleanup waves periodically
-task.spawn(function()
-    local players = game:GetService("Players")
-    local workspace = game:GetService("Workspace")
-    local localPlayer = players.LocalPlayer
-
-    -- Remove other players when they join
-    players.PlayerAdded:Connect(function(newPlayer)
-        if newPlayer ~= localPlayer then
-            print(string.format("[Performance] 🚫 Blocking player: %s", newPlayer.Name))
-            -- Wait for their character to load, then remove it
-            newPlayer.CharacterAdded:Connect(function(character)
-                task.wait(0.5)
-                pcall(function()
-                    character:Destroy()
-                    print(string.format("[Performance] ✅ Removed character of: %s", newPlayer.Name))
-                end)
-            end)
-            -- Remove current character if exists
-            if newPlayer.Character then
-                pcall(function()
-                    newPlayer.Character:Destroy()
-                end)
-            end
-        end
-    end)
-
-    -- AGGRESSIVE continuous cleanup every 3 seconds (faster to prevent respawns)
-    local cleanupCycle = 0
-    while true do
-        task.wait(3) -- Check every 3 seconds (faster = more aggressive)
-        cleanupCycle = cleanupCycle + 1
-
-        pcall(function()
-            local cleanedItems = 0
-
-            -- 1. AGGRESSIVE: Destroy !! WAVES folder completely
-            local wavesFolder = workspace:FindFirstChild("!! WAVES ")
-            if wavesFolder then
-                wavesFolder:ClearAllChildren()
-                pcall(function()
-                    wavesFolder:Destroy()
-                    cleanedItems = cleanedItems + 1
-                end)
-            end
-
-            -- 2. AGGRESSIVE: Destroy Terrain.Clouds completely
-            local terrain = workspace:FindFirstChild("Terrain")
-            if terrain then
-                local clouds = terrain:FindFirstChild("Clouds")
-                if clouds then
-                    clouds:ClearAllChildren()
-                    pcall(function()
-                        clouds:Destroy()
-                        cleanedItems = cleanedItems + 1
-                    end)
-                end
-            end
-
-            -- 3. Clear Camera children
-            local camera = workspace:FindFirstChild("Camera")
-            if camera and #camera:GetChildren() > 0 then
-                camera:ClearAllChildren()
-                cleanedItems = cleanedItems + 1
-            end
-
-            -- 4. AGGRESSIVE: Destroy other player characters
-            for _, otherPlayer in pairs(players:GetPlayers()) do
-                if otherPlayer ~= localPlayer then
-                    if otherPlayer.Character then
-                        pcall(function()
-                            otherPlayer.Character:Destroy()
-                            cleanedItems = cleanedItems + 1
-                        end)
-                    end
-                end
-            end
-
-            -- 5. Re-destroy fish notification remote if it respawns
-            local replicatedStorage = game:GetService("ReplicatedStorage")
-            pcall(function()
-                local fishNotifRemote = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/ObtainedNewFishNotification")
-                if fishNotifRemote then
-                    fishNotifRemote:Destroy()
-                    cleanedItems = cleanedItems + 1
-                end
-            end)
-
-            -- 6. Re-clear Lighting effects if they respawn
-            local lighting = game:GetService("Lighting")
-            local lightingCleaned = false
-            for _, effect in pairs(lighting:GetChildren()) do
-                if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or effect:IsA("Sky") or effect:IsA("Clouds") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") then
-                    pcall(function()
-                        effect:Destroy()
-                        if not lightingCleaned then
-                            cleanedItems = cleanedItems + 1
-                            lightingCleaned = true
-                        end
-                    end)
-                end
-            end
-
-            -- Log every 10 cycles (30 seconds) only if cleaned something
-            if cleanedItems > 0 and cleanupCycle % 10 == 0 then
-                print(string.format("[Performance] 🔄 Aggressive cleanup (Cycle %d): Removed %d paths/objects", cleanupCycle, cleanedItems))
-            end
-        end)
-    end
-end)
-
-print("[Performance] ✅ Continuous cleanup monitoring active!")
-
--- ====== INSTANT DESTRUCTION ON SPAWN (ChildAdded Events) ======
--- Most aggressive method: destroy objects the INSTANT they are created
-task.spawn(function()
-    local workspace = game:GetService("Workspace")
-    local lighting = game:GetService("Lighting")
-    local players = game:GetService("Players")
-    local localPlayer = players.LocalPlayer
-
-    print("[Performance] 🔥 Setting up instant destruction listeners...")
-
-    -- 1. Instant destroy: Waves folder children
-    pcall(function()
-        local wavesFolder = workspace:FindFirstChild("!! WAVES ")
-        if wavesFolder then
-            wavesFolder.ChildAdded:Connect(function(child)
-                task.wait(0.1) -- Small delay to ensure it's fully created
-                pcall(function()
-                    child:Destroy()
-                end)
-            end)
-            print("[Performance] ✅ Instant destroyer active for: !! WAVES")
-        end
-    end)
-
-    -- 2. Instant destroy: Terrain.Clouds children
-    pcall(function()
-        local terrain = workspace:FindFirstChild("Terrain")
-        if terrain then
-            local clouds = terrain:FindFirstChild("Clouds")
-            if clouds then
-                clouds.ChildAdded:Connect(function(child)
-                    task.wait(0.1)
-                    pcall(function()
-                        child:Destroy()
-                    end)
-                end)
-                print("[Performance] ✅ Instant destroyer active for: Terrain.Clouds")
-            end
-        end
-    end)
-
-    -- 3. Instant destroy: Camera children
-    pcall(function()
-        local camera = workspace:FindFirstChild("Camera")
-        if camera then
-            camera.ChildAdded:Connect(function(child)
-                -- Don't destroy Humanoid or important camera parts
-                if not child:IsA("Humanoid") then
-                    task.wait(0.1)
-                    pcall(function()
-                        child:Destroy()
-                    end)
-                end
-            end)
-            print("[Performance] ✅ Instant destroyer active for: Camera")
-        end
-    end)
-
-    -- 4. Instant destroy: Lighting effects
-    pcall(function()
-        lighting.ChildAdded:Connect(function(child)
-            if child:IsA("PostEffect") or child:IsA("Atmosphere") or child:IsA("Sky") or child:IsA("Clouds") or child:IsA("BloomEffect") or child:IsA("BlurEffect") or child:IsA("ColorCorrectionEffect") or child:IsA("SunRaysEffect") or child:IsA("DepthOfFieldEffect") then
-                task.wait(0.1)
-                pcall(function()
-                    child:Destroy()
-                end)
-            end
-        end)
-        print("[Performance] ✅ Instant destroyer active for: Lighting effects")
-    end)
-
-    -- 5. Monitor workspace for !! WAVES folder recreation
-    pcall(function()
-        workspace.ChildAdded:Connect(function(child)
-            if child.Name == "!! WAVES " then
-                task.wait(0.5)
-                pcall(function()
-                    child:ClearAllChildren()
-                    child:Destroy()
-                    print("[Performance] 🔥 Destroyed respawned !! WAVES folder")
-                end)
-            end
-        end)
-        print("[Performance] ✅ Monitoring workspace for folder respawns")
-    end)
-
-    -- 6. Monitor Terrain for Clouds recreation
-    pcall(function()
-        local terrain = workspace:FindFirstChild("Terrain")
-        if terrain then
-            terrain.ChildAdded:Connect(function(child)
-                if child.Name == "Clouds" then
-                    task.wait(0.5)
-                    pcall(function()
-                        child:ClearAllChildren()
-                        child:Destroy()
-                        print("[Performance] 🔥 Destroyed respawned Clouds")
-                    end)
-                end
-            end)
-            print("[Performance] ✅ Monitoring Terrain for Clouds respawn")
-        end
-    end)
-
-    print("[Performance] 🔥 All instant destruction listeners active!")
-end)
+-- Safe execution of environment cleanup
+local cleanupSuccess = pcall(cleanupEnvironment)
+if not cleanupSuccess then
+    warn("⚠️ [Auto Fish] Environment cleanup failed, continuing...")
+end
 
 -- ====== ANTI-AFK SYSTEM ======
 -- Prevents Roblox from disconnecting due to 20 minute idle timeout
