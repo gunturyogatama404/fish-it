@@ -347,6 +347,8 @@ do
             ["Giant Squid"] = true,
             ["Ghost Shark"] = true,
             ["Robot Kraken"] = true,
+            ["Bone Whale"] = true,
+            ["Elshark Gran Maja"] = true,
             ["Thin Armor Shark"] = true,
             ["Arrow Artifact"] = true,
             ["Crescent Artifact"] = true,
