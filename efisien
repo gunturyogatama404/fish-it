@@ -129,7 +129,18 @@ local function cleanupEnvironment()
 end
 
 
--- Performance and cleanup functions are now called inside enableGPUSaver()
+-- ====== AUTOMATIC PERFORMANCE OPTIMIZATION (PHASE 1: SCRIPT START) ======
+-- Safe execution of performance optimization
+local perfSuccess = pcall(ultimatePerformance)
+if not perfSuccess then
+    warn("⚠️ [Auto Fish] Initial performance optimization failed, continuing...")
+end
+
+-- Safe execution of environment cleanup
+local cleanupSuccess = pcall(cleanupEnvironment)
+if not cleanupSuccess then
+    warn("⚠️ [Auto Fish] Initial environment cleanup failed, continuing...")
+end
 
 -- ====== ANTI-AFK SYSTEM ======
 -- Prevents Roblox from disconnecting due to 20 minute idle timeout
@@ -2561,7 +2572,8 @@ function enableGPUSaver()
     if gpuSaverEnabled then return end
     gpuSaverEnabled = true
 
-    -- Run cleanup and performance optimizations when GPU saver is enabled
+    -- ====== AUTOMATIC PERFORMANCE OPTIMIZATION (PHASE 2: GPU SAVER) ======
+    -- Run cleanup and performance optimizations again to ensure paths are removed
     pcall(ultimatePerformance)
     pcall(cleanupEnvironment)
     
