@@ -65,36 +65,230 @@ if not suppressSuccess then
     warn("⚠️ [Auto Fish] Error suppression setup failed")
 end
 
--- ====== AUTOMATIC PERFORMANCE OPTIMIZATION ======
+-- ====== AGGRESSIVE PERFORMANCE OPTIMIZATION & CLEANUP ======
 local function ultimatePerformance()
+    print("[Performance] ================================================")
+    print("[Performance] 🚀 Starting aggressive optimization & cleanup...")
+    print("[Performance] ================================================")
+
     local workspace = game:GetService("Workspace")
     local lighting = game:GetService("Lighting")
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local players = game:GetService("Players")
+    local localPlayer = players.LocalPlayer
+
+    local cleanupCount = 0
+
+    -- 1. DELETE REMOTE: ObtainedNewFishNotification (Notification spam yang tidak perlu)
+    pcall(function()
+        local fishNotifRemote = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/ObtainedNewFishNotification")
+        if fishNotifRemote then
+            fishNotifRemote:Destroy()
+            cleanupCount = cleanupCount + 1
+            print("[Performance] ✅ Deleted fish notification remote (reduces network spam)")
+        end
+    end)
+
+    -- 2. DELETE: workspace.Camera children (Kecuali yang penting)
+    pcall(function()
+        local camera = workspace:FindFirstChild("Camera")
+        if camera then
+            local childrenCount = 0
+            for _, child in pairs(camera:GetChildren()) do
+                -- Keep important camera objects, delete the rest
+                if not child:IsA("Humanoid") then
+                    pcall(function()
+                        child:Destroy()
+                        childrenCount = childrenCount + 1
+                    end)
+                end
+            end
+            if childrenCount > 0 then
+                cleanupCount = cleanupCount + childrenCount
+                print(string.format("[Performance] ✅ Cleaned %d camera objects", childrenCount))
+            end
+        end
+    end)
+
+    -- 3. DELETE: workspace.Terrain.Clouds children (Cloud rendering)
     pcall(function()
         local terrain = workspace:FindFirstChild("Terrain")
         if terrain then
-            if terrain:FindFirstChild("Clouds") then terrain.Clouds:Destroy() end
+            local clouds = terrain:FindFirstChild("Clouds")
+            if clouds then
+                local cloudCount = #clouds:GetChildren()
+                for _, cloud in pairs(clouds:GetChildren()) do
+                    pcall(function() cloud:Destroy() end)
+                end
+                if cloudCount > 0 then
+                    cleanupCount = cleanupCount + cloudCount
+                    print(string.format("[Performance] ✅ Deleted %d cloud objects", cloudCount))
+                end
+            end
+            -- Optimize water
             terrain.WaterWaveSize = 0
             terrain.WaterWaveSpeed = 0
             terrain.WaterReflectance = 0
             terrain.WaterTransparency = 0
         end
+    end)
+
+    -- 4. DELETE: workspace["!! WAVES "] children (Wave effects)
+    pcall(function()
+        local wavesFolder = workspace:FindFirstChild("!! WAVES ")
+        if wavesFolder then
+            local waveCount = #wavesFolder:GetChildren()
+            for _, wave in pairs(wavesFolder:GetChildren()) do
+                pcall(function() wave:Destroy() end)
+            end
+            if waveCount > 0 then
+                cleanupCount = cleanupCount + waveCount
+                print(string.format("[Performance] ✅ Deleted %d wave effects", waveCount))
+            end
+        end
+    end)
+
+    -- 5. DELETE: Other players (Keep only local player)
+    pcall(function()
+        local removedPlayers = 0
+        for _, otherPlayer in pairs(players:GetPlayers()) do
+            if otherPlayer ~= localPlayer then
+                pcall(function()
+                    -- Remove their character from workspace
+                    if otherPlayer.Character then
+                        otherPlayer.Character:Destroy()
+                        removedPlayers = removedPlayers + 1
+                    end
+                end)
+            end
+        end
+        if removedPlayers > 0 then
+            cleanupCount = cleanupCount + removedPlayers
+            print(string.format("[Performance] ✅ Removed %d other player characters", removedPlayers))
+        end
+    end)
+
+    -- 6. DELETE: Lighting children (All effects, sky, atmosphere)
+    pcall(function()
+        local lightingCount = 0
         lighting.GlobalShadows = false
         lighting.FogEnd = 9e9
         lighting.Brightness = 0
         lighting.Technology = Enum.Technology.Compatibility
+
         for _, effect in pairs(lighting:GetChildren()) do
-            if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or effect:IsA("Sky") or effect:IsA("Clouds") then
-                effect:Destroy()
+            if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or effect:IsA("Sky") or effect:IsA("Clouds") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") then
+                pcall(function()
+                    effect:Destroy()
+                    lightingCount = lightingCount + 1
+                end)
             end
         end
+        if lightingCount > 0 then
+            cleanupCount = cleanupCount + lightingCount
+            print(string.format("[Performance] ✅ Deleted %d lighting effects", lightingCount))
+        end
     end)
+
+    -- Additional optimizations
+    pcall(function()
+        -- Disable workspace streaming if enabled (can cause lag)
+        if workspace:FindFirstChild("StreamingEnabled") then
+            workspace.StreamingEnabled = false
+        end
+
+        -- Set graphics quality to minimum
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
+
+    print("[Performance] ================================================")
+    print(string.format("[Performance] ✅ Cleanup complete! Removed %d objects", cleanupCount))
+    print("[Performance] 🚀 Performance optimization applied successfully!")
+    print("[Performance] ================================================")
 end
 
 -- Safe execution of performance optimization
+print("[Performance] Executing aggressive cleanup in 2 seconds...")
+task.wait(2) -- Wait for game to fully load
+
 local perfSuccess = pcall(ultimatePerformance)
 if not perfSuccess then
     warn("⚠️ [Auto Fish] Performance optimization failed, continuing...")
 end
+
+-- ====== CONTINUOUS CLEANUP MONITORING ======
+-- Monitor and remove new players that join, and cleanup waves periodically
+task.spawn(function()
+    local players = game:GetService("Players")
+    local workspace = game:GetService("Workspace")
+    local localPlayer = players.LocalPlayer
+
+    -- Remove other players when they join
+    players.PlayerAdded:Connect(function(newPlayer)
+        if newPlayer ~= localPlayer then
+            print(string.format("[Performance] 🚫 Blocking player: %s", newPlayer.Name))
+            -- Wait for their character to load, then remove it
+            newPlayer.CharacterAdded:Connect(function(character)
+                task.wait(0.5)
+                pcall(function()
+                    character:Destroy()
+                    print(string.format("[Performance] ✅ Removed character of: %s", newPlayer.Name))
+                end)
+            end)
+            -- Remove current character if exists
+            if newPlayer.Character then
+                pcall(function()
+                    newPlayer.Character:Destroy()
+                end)
+            end
+        end
+    end)
+
+    -- Periodic cleanup every 60 seconds (waves, clouds, etc that respawn)
+    while true do
+        task.wait(60)
+        pcall(function()
+            local cleanedItems = 0
+
+            -- Cleanup waves
+            local wavesFolder = workspace:FindFirstChild("!! WAVES ")
+            if wavesFolder and #wavesFolder:GetChildren() > 0 then
+                for _, wave in pairs(wavesFolder:GetChildren()) do
+                    pcall(function() wave:Destroy() end)
+                    cleanedItems = cleanedItems + 1
+                end
+            end
+
+            -- Cleanup clouds
+            local terrain = workspace:FindFirstChild("Terrain")
+            if terrain then
+                local clouds = terrain:FindFirstChild("Clouds")
+                if clouds and #clouds:GetChildren() > 0 then
+                    for _, cloud in pairs(clouds:GetChildren()) do
+                        pcall(function() cloud:Destroy() end)
+                        cleanedItems = cleanedItems + 1
+                    end
+                end
+            end
+
+            -- Cleanup other player characters that somehow spawned
+            for _, otherPlayer in pairs(players:GetPlayers()) do
+                if otherPlayer ~= localPlayer and otherPlayer.Character then
+                    pcall(function()
+                        otherPlayer.Character:Destroy()
+                        cleanedItems = cleanedItems + 1
+                    end)
+                end
+            end
+
+            if cleanedItems > 0 then
+                print(string.format("[Performance] 🔄 Periodic cleanup: Removed %d objects", cleanedItems))
+            end
+        end)
+    end
+end)
+
+print("[Performance] ✅ Continuous cleanup monitoring active!")
 
 -- ====== ANTI-AFK SYSTEM ======
 -- Prevents Roblox from disconnecting due to 20 minute idle timeout
