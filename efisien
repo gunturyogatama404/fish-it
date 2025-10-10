@@ -1419,26 +1419,17 @@ local sessionStats = {
 -- ====== STUCK DETECTION DISABLED ======
 -- Removed to reduce complexity and register usage
 
--- ====== FPS TRACKING VARIABLES ====== 
+-- ====================================================================
+-- FPS TRACKING REMOVED
+-- Reason: Reduce CPU usage (was called EVERY FRAME = millions of calls/day)
+-- Impact: FPS display on white screen will show 0 (if GPU Saver is used)
+-- Benefit: Significant CPU reduction, especially at higher framerates
+-- ====================================================================
+
 local RunService = game:GetService("RunService")
-local frameCount = 0
-local lastFPSUpdate = tick()
-local currentFPS = 0
-
--- FPS Counter function
-local function updateFPS()
-    frameCount = frameCount + 1
-    local currentTime = tick()
-
-    if currentTime - lastFPSUpdate >= 1 then
-        currentFPS = frameCount
-        frameCount = 0
-        lastFPSUpdate = currentTime
-    end
-end
-
--- Connect FPS counter to heartbeat
-RunService.Heartbeat:Connect(updateFPS)
+-- Removed variables: frameCount, lastFPSUpdate, currentFPS
+-- Removed function: updateFPS()
+-- Removed: RunService.Heartbeat:Connect(updateFPS)
 
 -- Database ikan lengkap
 local fishDatabase = {
@@ -2294,14 +2285,14 @@ local function createWhiteScreen()
     sessionLabel.TextXAlignment = Enum.TextXAlignment.Center
     sessionLabel.Parent = frame
 
-    -- FPS Counter (centered)
+    -- FPS Counter (centered) - DISABLED to save CPU
     local fpsLabel = Instance.new("TextLabel")
     fpsLabel.Name = "FPSLabel"
     fpsLabel.Size = UDim2.new(0, 400, 0, 40)
     fpsLabel.Position = UDim2.new(0.5, -200, 0, 200)
     fpsLabel.BackgroundTransparency = 1
-    fpsLabel.Text = "📊 FPS: " .. currentFPS
-    fpsLabel.TextColor3 = Color3.new(1, 1, 1)
+    fpsLabel.Text = "📊 FPS Tracking: Disabled"  -- Changed from currentFPS
+    fpsLabel.TextColor3 = Color3.new(0.7, 0.7, 0.7)  -- Gray color to indicate disabled
     fpsLabel.TextSize = 22
     fpsLabel.Font = Enum.Font.SourceSansBold
     fpsLabel.TextXAlignment = Enum.TextXAlignment.Center
@@ -3477,15 +3468,17 @@ local WEBHOOK_DELAY = 2  -- seconds between webhook sends
 local lastWebhookSent = 0
 
 -- ====== MESSAGE EDITING SYSTEM ======
--- Sistem untuk edit message alih-alih kirim pesan baru
-MESSAGE_ID_STORAGE = {}  -- Store message IDs per account (global)
-ONLINE_STATUS_UPDATE_INTERVAL = 8  -- Update setiap 8 detik
-lastOnlineStatusUpdate = 0
-isOnlineStatusActive = false
-onlineStatusMessageId = nil
+-- Online Status System - REMOVED to save memory
+-- Old variables removed:
+-- - MESSAGE_ID_STORAGE
+-- - ONLINE_STATUS_UPDATE_INTERVAL
+-- - lastOnlineStatusUpdate
+-- - isOnlineStatusActive
+-- - onlineStatusMessageId
 
 -- Compact message storage functions
 function saveMessageId(accountId, messageId)
+    MESSAGE_ID_STORAGE = MESSAGE_ID_STORAGE or {}
     MESSAGE_ID_STORAGE[accountId] = MESSAGE_ID_STORAGE[accountId] or {}
     MESSAGE_ID_STORAGE[accountId].statusMessageId = messageId
     if writefile and ensureConfigFolder() then
@@ -4005,41 +3998,17 @@ local function setupDisconnectNotifier()
         end
     end)
 
-    -- Monitor network ping for connection issues (HIGH PING WEBHOOK DISABLED)
-    task.spawn(function()
-        local consecutiveFailures = 0
-        local maxConsecutiveFailures = 3  -- Fail 3 times before disconnect
+    -- ====================================================================
+    -- PING MONITOR REMOVED
+    -- Reason: Reduce CPU/RAM usage (was checking every 10 seconds = 8,640/day)
+    -- Replaced by: Other disconnect detection methods still active:
+    --   - RunService.Stepped freeze detection
+    --   - Heartbeat monitoring (below)
+    --   - PlayerRemoving event
+    --   - ScriptContext.Error event
+    -- ====================================================================
 
-        while true do
-            local success, ping = pcall(function()
-                return LocalPlayer:GetNetworkPing() * 1000 -- Convert to milliseconds
-            end)
-
-            if not success then
-                consecutiveFailures = consecutiveFailures + 1
-                print("[Disconnect Monitor] Ping check failed (" .. consecutiveFailures .. "/" .. maxConsecutiveFailures .. ")")
-
-                if consecutiveFailures >= maxConsecutiveFailures then
-                    task.spawn(function()
-                        sendDisconnectWebhook(username, "Connection Lost - Multiple ping failures detected")
-                    end)
-                    break -- Stop monitoring after sending notification
-                end
-            else
-                -- Reset failure counter on successful ping
-                if consecutiveFailures > 0 then
-                    consecutiveFailures = 0
-                end
-
-                -- HIGH PING DETECTION DISABLED - No webhook sent for high ping
-                -- Just log it to console
-                if ping > PING_THRESHOLD then
-                end
-            end
-
-            task.wait(10) -- Check every 10 seconds (reduced frequency for better performance)
-        end
-    end)
+    print("[Disconnect Monitor] Ping monitor disabled (using other detection methods)")
 
     -- Monitor for game freezes using Stepped delta
     RunService.Stepped:Connect(function(_, deltaTime)
@@ -4151,56 +4120,22 @@ end
 
 -- ====== ONLINE STATUS TIMER SYSTEM ======
 -- Timer untuk update status online setiap 8 detik
-local function startOnlineStatusTimer()
-    isOnlineStatusActive = true
+-- ====================================================================
+-- ONLINE STATUS SYSTEM REMOVED
+-- Reason: Reduce webhook spam and memory usage
+-- Replaced by: Connect/Disconnect/Reconnect notifications only
+-- ====================================================================
 
-    -- Initial status message
-    task.spawn(function()
-        task.wait(3) -- Wait for everything to load
-        updateOnlineStatus()
-    end)
-
-    -- Regular updates every 8 seconds
-    task.spawn(function()
-        while isOnlineStatusActive do
-            task.wait(ONLINE_STATUS_UPDATE_INTERVAL)
-
-            if isOnlineStatusActive then
-                local currentTime = tick()
-                if currentTime - lastOnlineStatusUpdate >= ONLINE_STATUS_UPDATE_INTERVAL then
-                    local success = updateOnlineStatus()
-                    if success then
-                        lastOnlineStatusUpdate = currentTime
-                    end
-                end
-            end
-        end
-    end)
-end
-
--- Function untuk stop online status updates (saat disconnect)
--- DISABLED: Online status system is turned off to reduce webhook spam
-local function stopOnlineStatusTimer()
-    isOnlineStatusActive = false
-    -- No message editing needed since online status is disabled
-end
-
--- DISABLED: Online status timer to reduce webhook spam
--- Only connect/disconnect/reconnect notifications will be sent
--- startOnlineStatusTimer()
+-- Old online status functions have been removed to save memory:
+-- - startOnlineStatusTimer() [REMOVED]
+-- - stopOnlineStatusTimer() [REMOVED]
+-- - updateOnlineStatus() loop [REMOVED]
+-- - testOnlineStatusUpdate() [REMOVED]
 
 -- ====== TEST FUNCTIONS & ERROR HANDLING ======
--- TEST FUNCTIONS untuk testing sistem online status baru
-local function testOnlineStatusUpdate()
-    local success = updateOnlineStatus()
-    if success then
-    else
-        print("[TEST] ❌ Online status update test FAILED")
-    end
-end
-
+-- Online status test functions removed (no longer needed)
 local function testOfflineStatusUpdate()
-    stopOnlineStatusTimer()
+    -- Function kept for compatibility but does nothing
 end
 
 -- TEST FUNCTIONS untuk testing notification dengan tags
