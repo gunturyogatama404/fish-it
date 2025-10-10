@@ -1888,38 +1888,55 @@ end
 
 -- Function to detect totem UUID from PlayerData inventory (category "Totems")
 local function detectTotemUUID(totemName)
-    if not PlayerData then return nil end
+    if not PlayerData then
+        warn("[Totem Detect] ❌ PlayerData not available")
+        return nil, nil
+    end
 
-    local success, result = pcall(function()
+    local success, uuid, foundName = pcall(function()
         local inventory = PlayerData:Get("Inventory")
-        if not inventory then return nil end
+        if not inventory then
+            warn("[Totem Detect] ❌ Inventory not found")
+            return nil, nil
+        end
 
         local totems = inventory["Totems"]
-        if not totems or type(totems) ~= "table" then return nil end
+        if not totems or type(totems) ~= "table" then
+            warn("[Totem Detect] ❌ Totems category not found in inventory")
+            return nil, nil
+        end
 
-        for _, totemItem in ipairs(totems) do
+        print(string.format("[Totem Detect] 🔍 Scanning %d totems in inventory...", #totems))
+
+        for i, totemItem in ipairs(totems) do
             local totemData = ItemUtility.GetItemDataFromItemType("Totems", totemItem.Id)
             if totemData and totemData.Data then
                 local itemName = totemData.Data.Name
+                print(string.format("[Totem Detect] 📦 Found totem %d/%d: '%s' (UUID: %s)", i, #totems, itemName, totemItem.UUID))
+
                 -- Match totem by name (exact or partial)
                 if totemName and string.find(itemName:lower(), totemName:lower()) then
-                    print(string.format("[Totem Detect] ✅ Found totem: '%s' (UUID: %s)", itemName, totemItem.UUID))
+                    print(string.format("[Totem Detect] ✅ MATCH! Selected totem: '%s' (UUID: %s)", itemName, totemItem.UUID))
                     return totemItem.UUID, itemName
                 elseif not totemName then
                     -- Return first totem if no specific name requested
-                    print(string.format("[Totem Detect] ✅ Found totem: '%s' (UUID: %s)", itemName, totemItem.UUID))
+                    print(string.format("[Totem Detect] ✅ No filter specified, using first totem: '%s' (UUID: %s)", itemName, totemItem.UUID))
                     return totemItem.UUID, itemName
                 end
+            else
+                warn(string.format("[Totem Detect] ⚠️ Could not get data for totem ID: %s", tostring(totemItem.Id)))
             end
         end
 
-        return nil
+        warn("[Totem Detect] ❌ No matching totem found")
+        return nil, nil
     end)
 
-    if success and result then
-        return result
+    if success then
+        return uuid, foundName
     else
-        return nil
+        warn("[Totem Detect] ❌ Error during detection: " .. tostring(uuid))
+        return nil, nil
     end
 end
 
@@ -2148,7 +2165,7 @@ local function buyTotem()
             return
         end
 
-        print(string.format("[Buy Totem] ✅ Detected totem: '%s' (UUID: %s)", totemName, totemUUID))
+        print(string.format("[Buy Totem] ✅ Detected totem: '%s' (UUID: %s)", totemName or "Unknown", totemUUID or "nil"))
 
         -- Step 6: Equip totem to hotbar and get slot number
         print("[Buy Totem] [6/7] Equipping totem to hotbar...")
