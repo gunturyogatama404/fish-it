@@ -1884,6 +1884,139 @@ function FormatCoins(coins)
     end
 end
 
+-- ====== TOTEM DETECTION & EQUIP FUNCTIONS ======
+
+-- Function to detect totem UUID from PlayerData inventory (category "Totems")
+local function detectTotemUUID(totemName)
+    if not PlayerData then return nil end
+
+    local success, result = pcall(function()
+        local inventory = PlayerData:Get("Inventory")
+        if not inventory then return nil end
+
+        local totems = inventory["Totems"]
+        if not totems or type(totems) ~= "table" then return nil end
+
+        for _, totemItem in ipairs(totems) do
+            local totemData = ItemUtility.GetItemDataFromItemType("Totems", totemItem.Id)
+            if totemData and totemData.Data then
+                local itemName = totemData.Data.Name
+                -- Match totem by name (exact or partial)
+                if totemName and string.find(itemName:lower(), totemName:lower()) then
+                    print(string.format("[Totem Detect] ✅ Found totem: '%s' (UUID: %s)", itemName, totemItem.UUID))
+                    return totemItem.UUID, itemName
+                elseif not totemName then
+                    -- Return first totem if no specific name requested
+                    print(string.format("[Totem Detect] ✅ Found totem: '%s' (UUID: %s)", itemName, totemItem.UUID))
+                    return totemItem.UUID, itemName
+                end
+            end
+        end
+
+        return nil
+    end)
+
+    if success and result then
+        return result
+    else
+        return nil
+    end
+end
+
+-- Function to find totem's hotbar slot by UUID
+local function findTotemHotbarSlot(targetUUID)
+    if not targetUUID or not PlayerData then return nil end
+
+    local success, result = pcall(function()
+        local equippedItems = PlayerData:GetExpect("EquippedItems")
+        if not equippedItems or type(equippedItems) ~= "table" then return nil end
+
+        -- Search through hotbar slots (1-based index)
+        for slotIndex, equippedUUID in ipairs(equippedItems) do
+            if equippedUUID == targetUUID then
+                print(string.format("[Totem Detect] ✅ Totem found in hotbar slot %d", slotIndex))
+                return slotIndex
+            end
+        end
+
+        return nil
+    end)
+
+    return success and result or nil
+end
+
+-- Function to equip totem to hotbar (if not already equipped)
+local function equipTotemToHotbar(totemUUID, totemName)
+    if not totemUUID or not PlayerData then
+        warn("[Totem Equip] ❌ Invalid totem UUID or PlayerData missing")
+        return false
+    end
+
+    -- Check if already in hotbar
+    local currentSlot = findTotemHotbarSlot(totemUUID)
+    if currentSlot then
+        print(string.format("[Totem Equip] ⏭️ Totem '%s' already in hotbar slot %d", totemName or "Unknown", currentSlot))
+        return true, currentSlot
+    end
+
+    -- Equip to hotbar
+    print(string.format("[Totem Equip] 🔧 Equipping totem '%s' to hotbar...", totemName or "Unknown"))
+
+    local equipSuccess = pcall(function()
+        local EquipItemEvent = replicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:WaitForChild("RE/EquipItem")
+        EquipItemEvent:FireServer(totemUUID, "Totems")
+    end)
+
+    if not equipSuccess then
+        warn("[Totem Equip] ❌ Failed to equip totem to hotbar")
+        return false
+    end
+
+    task.wait(2) -- Wait for equip to register
+
+    -- Verify equip and get slot
+    local verifiedSlot = findTotemHotbarSlot(totemUUID)
+    if verifiedSlot then
+        print(string.format("[Totem Equip] ✅ Totem equipped to hotbar slot %d", verifiedSlot))
+        return true, verifiedSlot
+    else
+        warn("[Totem Equip] ⚠️ Equip verification failed")
+        return false
+    end
+end
+
+-- Function to spawn totem at player's location
+local function spawnTotem(totemUUID, totemName)
+    if not totemUUID then
+        warn("[Totem Spawn] ❌ Invalid totem UUID")
+        return false
+    end
+
+    print(string.format("[Totem Spawn] 🗿 Spawning totem '%s' (UUID: %s)...", totemName or "Unknown", totemUUID))
+
+    local spawnSuccess = pcall(function()
+        local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
+        local spawnTotemEvent = net:FindFirstChild("RE/SpawnTotem")
+
+        if spawnTotemEvent then
+            spawnTotemEvent:FireServer(totemUUID)
+            print("[Totem Spawn] ✅ Spawn request sent!")
+        else
+            warn("[Totem Spawn] ⚠️ SpawnTotem event not found")
+            return false
+        end
+    end)
+
+    if spawnSuccess then
+        task.wait(1.5) -- Wait for spawn animation
+        print("[Totem Spawn] ✅ Totem spawned successfully!")
+        return true
+    else
+        warn("[Totem Spawn] ❌ Failed to spawn totem")
+        return false
+    end
+end
+
 -- ====== TOTEM PURCHASE FUNCTIONS ======
 
 local function buyTotem()
@@ -1994,66 +2127,65 @@ local function buyTotem()
         print("[Buy Totem] ✅ Totem purchased successfully!")
         task.wait(2) -- Wait for inventory to update
 
-        -- Step 5: Get totem UUID from hotbar slot 2 and place it
-        print("[Buy Totem] [5/7] Getting totem UUID from hotbar slot 2...")
-        local totemPlaced = false
-        local totemUUID = nil
+        -- Step 5: Detect totem UUID from inventory (category "Totems")
+        print("[Buy Totem] [5/7] Detecting totem from inventory...")
+        local totemUUID, totemName = detectTotemUUID("Luck Totem") -- Try to find Luck Totem specifically
 
-        -- Get UUID directly from EquippedItems (hotbar slot 2)
-        pcall(function()
-            local equippedItems = PlayerData:GetExpect("EquippedItems")
+        if not totemUUID then
+            -- If Luck Totem not found, try to find any totem
+            print("[Buy Totem] Luck Totem not found, trying to detect any totem...")
+            totemUUID, totemName = detectTotemUUID(nil)
+        end
 
-            if equippedItems and type(equippedItems) == "table" then
-                -- Slot 2 = Index 2 in EquippedItems array
-                totemUUID = equippedItems[2]
-
-                if totemUUID and totemUUID ~= "" then
-                    print("[Buy Totem] ✅ Found totem UUID in hotbar slot 2: " .. totemUUID)
-                else
-                    warn("[Buy Totem] ⚠️ Hotbar slot 2 is empty!")
-                end
-            else
-                warn("[Buy Totem] ⚠️ Could not access EquippedItems!")
+        if not totemUUID then
+            warn("[Buy Totem] ❌ Failed to detect totem in inventory!")
+            -- Wait 3 seconds cooldown before restoring
+            task.wait(3)
+            if wasAutoFarmOn then
+                isAutoFarmOn = true
+                print("[Buy Totem] Auto farm restored after failure")
             end
-        end)
-
-        -- If UUID found, spawn the totem
-        if totemUUID and totemUUID ~= "" then
-            print("[Buy Totem] [5/7] Spawning totem with UUID: " .. totemUUID)
-
-            pcall(function()
-                local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
-                local spawnTotemEvent = net:FindFirstChild("RE/SpawnTotem")
-
-                if spawnTotemEvent then
-                    -- Fire spawn totem event
-                    spawnTotemEvent:FireServer(totemUUID)
-                    print("[Buy Totem] ✅ Totem spawn request sent!")
-                    totemPlaced = true
-                    task.wait(1.5)
-                else
-                    warn("[Buy Totem] ⚠️ SpawnTotem event not found")
-                end
-            end)
-        else
-            warn("[Buy Totem] ⚠️ Could not get totem UUID from hotbar slot 2!")
+            return
         end
 
-        if totemPlaced then
-            print("[Buy Totem] ✅ Totem placed successfully!")
-        else
-            warn("[Buy Totem] ⚠️ Totem placement failed (but purchase succeeded)")
+        print(string.format("[Buy Totem] ✅ Detected totem: '%s' (UUID: %s)", totemName, totemUUID))
+
+        -- Step 6: Equip totem to hotbar and get slot number
+        print("[Buy Totem] [6/7] Equipping totem to hotbar...")
+        local equipSuccess, hotbarSlot = equipTotemToHotbar(totemUUID, totemName)
+
+        if not equipSuccess or not hotbarSlot then
+            warn("[Buy Totem] ❌ Failed to equip totem to hotbar!")
+            -- Wait 3 seconds cooldown before restoring
+            task.wait(3)
+            if wasAutoFarmOn then
+                isAutoFarmOn = true
+                print("[Buy Totem] Auto farm restored after failure")
+            end
+            return
         end
 
-        -- Step 6: Equip hotbar slot 2 (fishing rod or whatever is there)
-        print("[Buy Totem] [6/7] Equipping hotbar slot 2...")
+        print(string.format("[Buy Totem] ✅ Totem equipped to hotbar slot %d", hotbarSlot))
+
+        -- Step 7: Spawn the totem
+        print("[Buy Totem] [7/7] Spawning totem...")
+        local spawnSuccess = spawnTotem(totemUUID, totemName)
+
+        if spawnSuccess then
+            print("[Buy Totem] ✅ Totem spawned successfully!")
+        else
+            warn("[Buy Totem] ⚠️ Totem spawn failed (but purchase and equip succeeded)")
+        end
+
+        -- Step 8: Re-equip fishing rod (hotbar slot 2)
+        print("[Buy Totem] [8/8] Re-equipping fishing rod...")
         pcall(function()
             local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
             local equipHotbarEvent = net["RE/EquipToolFromHotbar"]
 
             if equipHotbarEvent then
-                equipHotbarEvent:FireServer(2)
-                print("[Buy Totem] ✅ Hotbar slot 2 equipped")
+                equipHotbarEvent:FireServer(2) -- Assume rod is in slot 2
+                print("[Buy Totem] ✅ Fishing rod re-equipped")
             else
                 warn("[Buy Totem] ⚠️ EquipToolFromHotbar event not found")
             end
@@ -2061,8 +2193,8 @@ local function buyTotem()
 
         task.wait(1)
 
-        -- Step 7: Wait cooldown then restore auto farm
-        print("[Buy Totem] [7/7] Waiting 3 second cooldown before resuming...")
+        -- Step 9: Wait cooldown then restore auto farm
+        print("[Buy Totem] Waiting 3 second cooldown before resuming...")
         task.wait(3) -- 3 second cooldown
 
         if wasAutoFarmOn then
