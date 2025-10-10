@@ -347,8 +347,6 @@ do
             ["Giant Squid"] = true,
             ["Ghost Shark"] = true,
             ["Robot Kraken"] = true,
-            ["Bone Whale"] = true,
-            ["Elshark Gran Maja"] = true,
             ["Thin Armor Shark"] = true,
             ["Arrow Artifact"] = true,
             ["Crescent Artifact"] = true,
@@ -870,14 +868,21 @@ do
             print("[Auto Artifact] 🔍 Artifact Checker Loop Started!")
             print("[Auto Artifact] ================================================")
 
+            local lastCheckLog = 0 -- Throttle check logs to reduce memory usage
+            local LOG_INTERVAL = 60 -- Log only every 60 seconds instead of every 5s
+
             while isAutoArtifactOn and artifactCurrentTemple <= 4 do
                 -- Get current temple config
                 local currentConfig = ARTIFACT_CONFIG[artifactCurrentTemple]
 
-                print(string.format("[Auto Artifact] 🔍 Checking for %s at %s (Temple %d/4)",
-                    currentConfig.targetArtifact,
-                    currentConfig.templeName,
-                    artifactCurrentTemple))
+                -- Only log check status every 60 seconds to prevent log spam
+                if tick() - lastCheckLog >= LOG_INTERVAL then
+                    print(string.format("[Auto Artifact] 🔍 Checking for %s at %s (Temple %d/4)",
+                        currentConfig.targetArtifact,
+                        currentConfig.templeName,
+                        artifactCurrentTemple))
+                    lastCheckLog = tick()
+                end
 
                 if not artifactCollected[artifactCurrentTemple] then
                     -- Check if target artifact is in inventory
@@ -954,9 +959,8 @@ do
                             print("[Auto Artifact] ✅ System completed successfully!")
                             break
                         end
-                    else
-                        print(string.format("[Auto Artifact] ⏳ Waiting for %s... (checking again in 5s)", currentConfig.targetArtifact))
                     end
+                    -- Removed "waiting for artifact" log to prevent spam
                 end
 
                 task.wait(5) -- Check every 5 seconds
@@ -1011,14 +1015,22 @@ end
 
 -- Function to sync AUTO_ARTIFACT global variable with local state
 local function syncAutoArtifactState()
+    -- DON'T START if Auto Artifact is disabled
+    if not isAutoArtifactOn or not AUTO_ARTIFACT then
+        print("[Auto Artifact] Sync disabled - AUTO_ARTIFACT is false")
+        return
+    end
+
     if not AutoArtifact then
         warn("[Auto Artifact] AutoArtifact module not found - sync disabled")
         return
     end
 
     task.spawn(function()
-        while true do
-            task.wait(1) -- Check every second
+        -- Only loop while system is enabled
+        while isAutoArtifactOn and AUTO_ARTIFACT do
+            task.wait(5) -- Check every 5 seconds (reduced from 1s)
+
             if AUTO_ARTIFACT ~= isAutoArtifactOn then
                 isAutoArtifactOn = AUTO_ARTIFACT
                 if isAutoArtifactOn then
@@ -1031,9 +1043,11 @@ local function syncAutoArtifactState()
                     end)
                 else
                     print("[Auto Artifact] ❌ System disabled via AUTO_ARTIFACT")
+                    break -- Exit loop when disabled
                 end
             end
         end
+        print("[Auto Artifact] Sync loop stopped")
     end)
 end
 
@@ -1052,28 +1066,34 @@ if not invSuccess then
     warn("⚠️ [Auto Fish] Inventory system failed to load")
 end
 
--- Initialize Auto Artifact System (if enabled)
-task.spawn(function()
-    task.wait(3) -- Wait for inventory to fully load
+-- Initialize Auto Artifact System (ONLY if enabled)
+if AUTO_ARTIFACT then
+    task.spawn(function()
+        task.wait(3) -- Wait for inventory to fully load
 
-    if AutoArtifact and AutoArtifact.initialize then
-        local artifactSuccess, errorMsg = pcall(function()
-            AutoArtifact.initialize()
-        end)
+        print("[Auto Artifact] AUTO_ARTIFACT = true, starting initialization...")
 
-        if not artifactSuccess then
-            warn("⚠️ [Auto Artifact] Failed to initialize: " .. tostring(errorMsg))
+        if AutoArtifact and AutoArtifact.initialize then
+            local artifactSuccess, errorMsg = pcall(function()
+                AutoArtifact.initialize()
+            end)
+
+            if not artifactSuccess then
+                warn("⚠️ [Auto Artifact] Failed to initialize: " .. tostring(errorMsg))
+            end
+        else
+            warn("⚠️ [Auto Artifact] Module not found or incomplete")
         end
-    else
-        warn("⚠️ [Auto Artifact] Module not found or incomplete")
-    end
 
-    -- Start the sync function AFTER initialization
-    task.wait(1)
-    if syncAutoArtifactState then
-        pcall(syncAutoArtifactState)
-    end
-end)
+        -- Start the sync function AFTER initialization (only if enabled)
+        task.wait(1)
+        if syncAutoArtifactState and isAutoArtifactOn then
+            pcall(syncAutoArtifactState)
+        end
+    end)
+else
+    print("[Auto Artifact] AUTO_ARTIFACT = false, system will NOT initialize")
+end
 
 -- Sisa script zfish v6.2.lua...
 local player = game.Players.LocalPlayer
