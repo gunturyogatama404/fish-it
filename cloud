@@ -1,0 +1,53 @@
+-- ====================================================================
+--                    Artifact Auto Farm Script
+--                      by Daryl Loudi
+-- ====================================================================
+
+-- ====== MANUAL CONFIGURATION ======
+
+setfpscap(8) -- Set the FPS cap of the game (lower for better performance)
+-- Set individual features ON/OFF
+AUTO_FARM = true
+AUTO_SELL = true
+AUTO_CATCH = true
+AUTO_WEATHER = false
+AUTO_MEGALODON = false
+AUTO_ARTIFACT = false
+GPU_SAVER = true
+
+-- ====== TELEPORT LOCATION ======
+-- Options: "Crater Island",
+--"Sisyphus Statue",
+--"Kohana",
+--"Kohana Volcano",
+--"Coral Reefs",
+--"Esoteric Depths",
+--"Spawn",
+--"Lost Isle",
+--"Weather Machine",
+--"Tropical Grove",
+--"Treasure Room",
+--"Underground Cellar",
+--"Sacred Temple"
+TELEPORT_LOCATION = "Kohana Volcano"
+
+-- ====== AUTO UPGRADE ======
+AUTO_UPGRADE_ROD = false
+AUTO_UPGRADE_BAIT = false
+
+-- ====== DELAY SETTINGS (seconds) ======
+CHARGE_ROD_DELAY = 0.1
+AUTO_FISH_DELAY = 0.2
+AUTO_SELL_DELAY = 22
+AUTO_CATCH_DELAY = 0.2
+WEATHER_ID_DELAY = 10
+WEATHER_CYCLE_DELAY = 30
+GPU_FPS_LIMIT = 8
+
+-- ====== WEBHOOK CONFIGURATION ======
+discordid = "701247227959574567"
+webhook2 = "https://discord.com/api/webhooks/1378767185643831326/b0mB-z4r5YTQGeQnX7EwyvXoo1yiO7UcZzeOKeS9JKcKn-6AWVnicplzs6duT6Jt80kK"
+webhook3 = "https://discord.com/api/webhooks/1379111816915062894/1p5qQ0CyGcJQJ-MFud48oJXZ4095K8Yvu4DGZYVdmPg1O7uFVcvU3aG5-YiWI4sT983e"
+
+-- ====== LOAD SCRIPT ======
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarylLoudi/fish-it/refs/heads/main/efisien"))()
