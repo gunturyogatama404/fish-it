@@ -4886,29 +4886,31 @@ task.spawn(function()
                     end
                 end
 
-                -- ====== SMART FISHING CYCLE (LISTENER-BASED) ======
-                -- Execute based on server response for optimal synchronization
+                -- ====== OPTIMIZED FISHING CYCLE (SEQUENTIAL) ======
+                -- Fast sequential execution with minimal delays
 
                 -- Step 1: Charge fishing rod
                 if chargeEvent then
                     chargeEvent:InvokeServer(1755848498.4834)
                 end
+                task.wait(0.01)
 
-                -- Step 2: Request fishing minigame and listen for response
+                -- Step 2: Request fishing minigame
                 if requestMinigameEvent then
                     local Result = requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
-
-                    -- Step 3: If result is true, proceed with fishing completion
-                    if Result == true then
-                        -- Complete fishing
-                        if fishingEvent then
-                            fishingEvent:FireServer()
-                        end
-
-                        -- Cancel fishing inputs (cleanup)
-                        cancelFishingInputs()
-                    end
                 end
+                task.wait(0.01)
+
+                -- Step 3: Wait for server to process (critical delay)
+                task.wait(0.1)
+
+                -- Step 4: Complete fishing
+                if fishingEvent then
+                    fishingEvent:FireServer()
+                end
+
+                -- Step 5: Cancel fishing inputs (cleanup)
+                cancelFishingInputs()
             end)
 
             if not success then
