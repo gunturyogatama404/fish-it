@@ -4886,27 +4886,37 @@ task.spawn(function()
                     end
                 end
 
-                -- ====== SMART FISHING CYCLE (LISTENER-BASED) ======
-                -- Execute based on server response for optimal synchronization
+                -- ====== SMART FISHING CYCLE (DATA-DRIVEN) ======
+                -- Execute based on server fish data response
 
                 -- Step 1: Charge fishing rod
                 if chargeEvent then
                     chargeEvent:InvokeServer(1755848498.4834)
                 end
 
-                -- Step 2: Request fishing minigame and listen for response
+                -- Step 2: Request fishing minigame and listen for fish data
                 if requestMinigameEvent then
-                    local Result = requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
+                    local success_req, fishData = pcall(function()
+                        return requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
+                    end)
 
-                    -- Step 3: If result is true, proceed with fishing completion
-                    if Result == true then
-                        -- Complete fishing
-                        if fishingEvent then
-                            fishingEvent:FireServer()
+                    -- Step 3: Check if server returned fish data
+                    -- fishData structure: {true, {FishingRodTier, CaughtFish, RandomSeed, ...}}
+                    if success_req and fishData then
+                        -- fishData[1] = true/false (success flag)
+                        -- fishData[2] = table with fish data (CaughtFish, UUID, etc)
+                        local hasData = type(fishData) == "table" and fishData[2] and type(fishData[2]) == "table"
+
+                        -- If fish data exists, proceed with completion
+                        if hasData then
+                            -- Complete fishing
+                            if fishingEvent then
+                                fishingEvent:FireServer()
+                            end
+
+                            -- Cancel fishing inputs (cleanup)
+                            cancelFishingInputs()
                         end
-
-                        -- Cancel fishing inputs (cleanup)
-                        cancelFishingInputs()
                     end
                 end
             end)
