@@ -4821,6 +4821,16 @@ local function stopFishing()
     end)
 end
 
+-- Function to cancel fishing inputs (additional cleanup)
+local function cancelFishingInputs()
+    pcall(function()
+        local cancelEvent = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RF/CancelFishingInputs")
+        if cancelEvent then
+            cancelEvent:InvokeServer()
+        end
+    end)
+end
+
 -- Enhanced Auto Farm Loop (ULTRA SPAM MODE - Maximum Speed Fishing)
 task.spawn(function()
     print("=" .. string.rep("=", 70))
@@ -4881,21 +4891,25 @@ task.spawn(function()
                     chargeEvent:InvokeServer(1755848498.4834)
                 end
 
-                -- 2. Request fishing minigame (small delay for server processing)
-                task.wait(0.05)
+                -- 2. Request fishing minigame (delay for server processing)
+                task.wait(0.1)
                 if requestMinigameEvent then
                     requestMinigameEvent:InvokeServer(1.2854545116425, 1)
                 end
 
-                -- 3. Complete fishing (small delay for server processing)
-                task.wait(0.05)
+                -- 3. Complete fishing (delay for server processing)
+                task.wait(0.1)
                 if fishingEvent then
                     fishingEvent:FireServer()
                 end
 
-                -- 4. Stop fishing event (reset state for next cycle)
-                task.wait(0.05)
+                -- 4. Stop fishing event (reset state)
+                task.wait(0.1)
                 stopFishing()
+
+                -- 5. Cancel fishing inputs (additional cleanup to prevent stuck)
+                task.wait(0.1)
+                cancelFishingInputs()
             end)
 
             if not success then
