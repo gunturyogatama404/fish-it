@@ -266,13 +266,17 @@ end
 local function cleanupEnvironment()
     print("[VRAM Optimizer] 🧹 Cleaning up environment...")
 
-    -- 1. delete remote ini
+    -- 1. delete remote ini (DISABLED FOR DEBUGGING)
+    --[[
     pcall(function()
         local remote = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/ObtainedNewFishNotification")
         if remote then
             remote:Destroy()
+            print("[Debug] ObtainedNewFishNotification remote destroyed")
         end
     end)
+    --]]
+    print("[Debug] ObtainedNewFishNotification cleanup DISABLED for debugging")
 
     -- 2. delete path ini
     pcall(function()
