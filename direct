@@ -1,33 +1,4 @@
---[[
-    ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║                     V3.3 MAXIMUM VRAM OPTIMIZATION                        ║
-    ║                  Auto Fish Script with Extreme VRAM Saving                ║
-    ╠═══════════════════════════════════════════════════════════════════════════╣
-    ║  Version: 3.3 VRAM                                                        ║
-    ║  Based on: v3.2 efisien.lua                                               ║
-    ║  Date: 2025-10-13                                                         ║
-    ╠═══════════════════════════════════════════════════════════════════════════╣
-    ║  NEW FEATURES IN V3.3:                                                    ║
-    ║  ✅ RunService:Set3dRenderingEnabled(false) - Disable 3D rendering       ║
-    ║  ✅ Destroy all non-essential 3D objects in workspace                    ║
-    ║  ✅ Force all materials to Plastic (lightest material)                   ║
-    ║  ✅ Remove all textures, decals, and SurfaceAppearances                  ║
-    ║  ✅ Destroy all particles and special effects                            ║
-    ║  ✅ Optimize all mesh textures (remove texture IDs)                      ║
-    ║  ✅ Master VRAM optimization function (applyMaximumVRAMOptimization)     ║
-    ║  ✅ Smart whitelist for essential fishing objects                        ║
-    ║                                                                            ║
-    ║  EXPECTED VRAM REDUCTION: 50-70%                                          ║
-    ║  TRADE-OFF: Game will look extremely minimal/blank                        ║
-    ╠═══════════════════════════════════════════════════════════════════════════╣
-    ║  INHERITED FROM V3.2:                                                     ║
-    ║  ✅ Auto Artifact farming system with UUID detection                     ║
-    ║  ✅ Totem detection & equip via "Totems" category                        ║
-    ║  ✅ Memory leak fixes (removed FPS counter, ping monitor, etc)           ║
-    ║  ✅ Exact match detection for artifacts                                  ║
-    ║  ✅ Conditional Auto Artifact execution                                  ║
-    ╚═══════════════════════════════════════════════════════════════════════════╝
-]]
+
 
 -- ====== SCRIPT INITIALIZATION SAFETY CHECK ======
 
