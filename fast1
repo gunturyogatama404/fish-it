@@ -3378,7 +3378,7 @@ local function chargeFishingRod()
             task.wait(chargeFishingDelay)
         end
         if requestMinigameEvent then
-            local Result = requestMinigameEvent:InvokeServer(1.2854545116425, 1)
+            local Result = requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
             local ExpectedResult = table.unpack({true})
         end
     end)
@@ -4897,7 +4897,7 @@ task.spawn(function()
 
                 -- Step 2: Request fishing minigame
                 if requestMinigameEvent then
-                    requestMinigameEvent:InvokeServer(1.2854545116425, 1)
+                    requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
                 end
                 task.wait(0.01)
 
