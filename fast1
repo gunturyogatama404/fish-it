@@ -4895,13 +4895,11 @@ task.spawn(function()
                 end
                 task.wait(0.01)
 
-                -- Step 2: Request fishing minigame (Spam for more fish)
+                -- Step 2: Request fishing minigame
                 if requestMinigameEvent then
-                    for i = 1, 3 do -- Request 3 times
-                        requestMinigameEvent:InvokeServer(1.2854545116425, 1)
-                        task.wait(0.01) -- Delay between requests
-                    end
+                    requestMinigameEvent:InvokeServer(1.2854545116425, 1)
                 end
+                task.wait(0.01)
 
                 -- Step 3: Wait for server to process (critical delay)
                 task.wait(0.1)
