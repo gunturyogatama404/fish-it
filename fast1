@@ -3378,7 +3378,8 @@ local function chargeFishingRod()
             task.wait(chargeFishingDelay)
         end
         if requestMinigameEvent then
-            requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
+            local Result = requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
+            local ExpectedResult = table.unpack({true})
         end
     end)
 end
@@ -4885,26 +4886,32 @@ task.spawn(function()
                     end
                 end
 
-                -- ====== ULTRA FAST FISHING CYCLE (SIMULTANEOUS) ======
-                -- Execute all fishing steps simultaneously for maximum speed
+                -- ====== ULTRA FAST FISHING CYCLE (PARALLEL EXECUTION) ======
+                -- Execute all fishing steps in parallel for perfectly balanced remote calls
 
-                -- 1. Charge fishing rod
-                if chargeEvent then
-                    chargeEvent:InvokeServer(1755848498.4834)
-                end
+                -- Spawn all remotes simultaneously (parallel execution)
+                task.spawn(function()
+                    if chargeEvent then
+                        chargeEvent:InvokeServer(1755848498.4834)
+                    end
+                end)
 
-                -- 2. Request fishing minigame (INSTANT)
-                if requestMinigameEvent then
-                    requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
-                end
+                task.spawn(function()
+                    if requestMinigameEvent then
+                        local Result = requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
+                        local ExpectedResult = table.unpack({true})
+                    end
+                end)
 
-                -- 3. Complete fishing (INSTANT)
-                if fishingEvent then
-                    fishingEvent:FireServer()
-                end
+                task.spawn(function()
+                    if fishingEvent then
+                        fishingEvent:FireServer()
+                    end
+                end)
 
-                -- 4. Cancel fishing inputs (INSTANT - cleanup to prevent stuck)
-                cancelFishingInputs()
+                task.spawn(function()
+                    cancelFishingInputs()
+                end)
             end)
 
             if not success then
