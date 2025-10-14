@@ -3378,7 +3378,7 @@ local function chargeFishingRod()
             task.wait(chargeFishingDelay)
         end
         if requestMinigameEvent then
-            requestMinigameEvent:InvokeServer(1.2854545116425, 1)
+            requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
         end
     end)
 end
@@ -4885,26 +4885,25 @@ task.spawn(function()
                     end
                 end
 
-                -- ====== HIGH SPEED FISHING CYCLE ======
+                -- ====== ULTRA FAST FISHING CYCLE (SIMULTANEOUS) ======
+                -- Execute all fishing steps simultaneously for maximum speed
+
                 -- 1. Charge fishing rod
                 if chargeEvent then
                     chargeEvent:InvokeServer(1755848498.4834)
                 end
 
-                -- 2. Request fishing minigame (delay for server processing)
-                task.wait(0.1)
+                -- 2. Request fishing minigame (INSTANT)
                 if requestMinigameEvent then
-                    requestMinigameEvent:InvokeServer(1.2854545116425, 1)
+                    requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
                 end
 
-                -- 3. Complete fishing (delay for server processing)
-                task.wait(0.1)
+                -- 3. Complete fishing (INSTANT)
                 if fishingEvent then
                     fishingEvent:FireServer()
                 end
 
-                -- 4. Cancel fishing inputs (cleanup to prevent stuck)
-                task.wait(0.1)
+                -- 4. Cancel fishing inputs (INSTANT - cleanup to prevent stuck)
                 cancelFishingInputs()
             end)
 
