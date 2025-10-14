@@ -4825,39 +4825,76 @@ end
 task.spawn(function()
     print("=" .. string.rep("=", 70))
     print("[Auto Farm] 🚀 ULTRA SPAM FISHING LOOP STARTED!")
-    print("[Auto Farm] ⚡ NO DELAYS - Maximum fishing speed mode")
+    print("[Auto Farm] ⚡ HIGH SPEED - Optimized fishing mode")
     print("=" .. string.rep("=", 70))
+
+    -- Wait for character and events to load properly
+    task.wait(2)
+
+    -- Initial rod equip to ensure we start correctly
+    local initialEquipSuccess = false
+    for attempt = 1, 3 do
+        pcall(function()
+            local character = player.Character
+            if character then
+                local tool = character:FindFirstChildOfClass("Tool")
+                if not tool then
+                    print("[Auto Farm] Initial rod equip attempt " .. attempt .. "/3")
+                    equipRod()
+                    task.wait(1)
+                    -- Verify equip
+                    if character:FindFirstChildOfClass("Tool") then
+                        initialEquipSuccess = true
+                        print("[Auto Farm] ✅ Rod equipped successfully!")
+                    end
+                else
+                    initialEquipSuccess = true
+                    print("[Auto Farm] ✅ Rod already equipped!")
+                end
+            end
+        end)
+
+        if initialEquipSuccess then break end
+        task.wait(0.5)
+    end
+
+    if not initialEquipSuccess then
+        warn("[Auto Farm] ⚠️ Failed to equip rod initially, continuing anyway...")
+    end
 
     while true do
         if isAutoFarmOn then
             local success, err = pcall(function()
-                -- Check if rod is equipped
+                -- Check if rod is equipped (lightweight check)
                 local character = player.Character
                 if character then
                     local tool = character:FindFirstChildOfClass("Tool")
                     if not tool then
                         equipRod()
-                        task.wait(0.3) -- Minimal wait for equip
+                        task.wait(0.5) -- Wait for equip to register
                     end
                 end
 
-                -- ====== ULTRA SPAM FISHING CYCLE (NO DELAYS) ======
-                -- 1. Charge fishing rod (INSTANT)
+                -- ====== HIGH SPEED FISHING CYCLE ======
+                -- 1. Charge fishing rod
                 if chargeEvent then
                     chargeEvent:InvokeServer(1755848498.4834)
                 end
 
-                -- 2. Request fishing minigame (INSTANT)
+                -- 2. Request fishing minigame (small delay for server processing)
+                task.wait(0.05)
                 if requestMinigameEvent then
                     requestMinigameEvent:InvokeServer(1.2854545116425, 1)
                 end
 
-                -- 3. Complete fishing (INSTANT)
+                -- 3. Complete fishing (small delay for server processing)
+                task.wait(0.05)
                 if fishingEvent then
                     fishingEvent:FireServer()
                 end
 
-                -- 4. Stop fishing event (INSTANT - reset state for next cycle)
+                -- 4. Stop fishing event (reset state for next cycle)
+                task.wait(0.05)
                 stopFishing()
             end)
 
@@ -4869,8 +4906,8 @@ task.spawn(function()
             end
         end
 
-        -- NO DELAY - Maximum spam speed (as fast as possible)
-        task.wait()
+        -- Small delay between cycles to prevent server overload
+        task.wait(0.1)
     end
 end)
 
