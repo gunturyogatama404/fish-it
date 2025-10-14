@@ -1,5 +1,18 @@
 
 
+-- ====================================================================
+--                    SCRIPT VERSION & TIMESTAMP
+-- ====================================================================
+-- Script: v4.0 Direct3D 10 Edition
+-- Last Modified: 2025-10-15 (ObtainedNewFishNotification DEBUG MODE)
+-- Changes: Fish notification remote is NOT destroyed (for debugging)
+-- ====================================================================
+
+print("=" .. string.rep("=", 70))
+print("  🎣 AUTO FISH SCRIPT v4.0 - Direct3D 10 Edition")
+print("  📅 Version: 2025-10-15 (DEBUG MODE - Fish Notifications Enabled)")
+print("=" .. string.rep("=", 70))
+
 -- ====== SCRIPT INITIALIZATION SAFETY CHECK ======
 
 -- Critical dependency validation
@@ -266,7 +279,19 @@ end
 local function cleanupEnvironment()
     print("[VRAM Optimizer] 🧹 Cleaning up environment...")
 
-    -- 1. delete remote ini (DISABLED FOR DEBUGGING)
+    -- ====================================================================
+    -- ObtainedNewFishNotification Remote Cleanup - DISABLED FOR DEBUGGING
+    -- ====================================================================
+    -- This remote is intentionally NOT deleted to allow fish notifications
+    -- for debugging purposes. You should see fish notifications in-game.
+    -- ====================================================================
+
+    print("=" .. string.rep("=", 60))
+    print("[DEBUG MODE] ObtainedNewFishNotification cleanup is DISABLED")
+    print("[DEBUG MODE] Fish notifications will appear normally")
+    print("=" .. string.rep("=", 60))
+
+    -- Original code (COMMENTED OUT):
     --[[
     pcall(function()
         local remote = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/ObtainedNewFishNotification")
@@ -276,7 +301,16 @@ local function cleanupEnvironment()
         end
     end)
     --]]
-    print("[Debug] ObtainedNewFishNotification cleanup DISABLED for debugging")
+
+    -- Verify remote still exists
+    pcall(function()
+        local remote = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/ObtainedNewFishNotification")
+        if remote then
+            print("[DEBUG] ✅ ObtainedNewFishNotification remote EXISTS (not destroyed)")
+        else
+            warn("[DEBUG] ⚠️ ObtainedNewFishNotification remote NOT FOUND (may have been destroyed elsewhere)")
+        end
+    end)
 
     -- 2. delete path ini
     pcall(function()
