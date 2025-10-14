@@ -555,6 +555,7 @@ do
             ["Giant Squid"] = true,
             ["Ghost Shark"] = true,
             ["Robot Kraken"] = true,
+            ["Mosasaur Shark"] = true,
             ["Thin Armor Shark"] = true,
             ["Arrow Artifact"] = true,
             ["Crescent Artifact"] = true,
