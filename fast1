@@ -3378,7 +3378,7 @@ local function chargeFishingRod()
             task.wait(chargeFishingDelay)
         end
         if requestMinigameEvent then
-            local Result = requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
+            local Result = requestMinigameEvent:InvokeServer(1.2854545116425, 1)
             local ExpectedResult = table.unpack({true})
         end
     end)
@@ -4895,11 +4895,13 @@ task.spawn(function()
                 end
                 task.wait(0.01)
 
-                -- Step 2: Request fishing minigame
+                -- Step 2: Request fishing minigame (Spam for more fish)
                 if requestMinigameEvent then
-                    requestMinigameEvent:InvokeServer(-1.2331849336624, 1)
+                    for i = 1, 3 do -- Request 3 times
+                        requestMinigameEvent:InvokeServer(1.2854545116425, 1)
+                        task.wait(0.01) -- Delay between requests
+                    end
                 end
-                task.wait(0.01)
 
                 -- Step 3: Wait for server to process (critical delay)
                 task.wait(0.1)
