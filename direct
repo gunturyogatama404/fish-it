@@ -2784,13 +2784,39 @@ local function createWhiteScreen()
     closeButton.AnchorPoint = Vector2.new(0, 1)
     closeButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
     closeButton.BorderSizePixel = 0
-    closeButton.Text = "❌ Disable GPU"
-    closeButton.TextColor3 = Color3.new(1, 0, 0)
+    closeButton.Text = "⚠️ Restore 3D"
+    closeButton.TextColor3 = Color3.new(1, 0.8, 0)
     closeButton.TextSize = 14
     closeButton.Font = Enum.Font.SourceSansBold
     closeButton.Parent = frame
 
+    -- V3.3: Add tooltip warning
+    local tooltip = Instance.new("TextLabel")
+    tooltip.Name = "Tooltip"
+    tooltip.Size = UDim2.new(0, 300, 0, 50)
+    tooltip.Position = UDim2.new(0.5, -150, 1, -120)
+    tooltip.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+    tooltip.BackgroundTransparency = 0.2
+    tooltip.BorderSizePixel = 1
+    tooltip.BorderColor3 = Color3.new(1, 0.8, 0)
+    tooltip.Text = "⚠️ WARNING: Disabling GPU Saver\nwill INCREASE VRAM usage!"
+    tooltip.TextColor3 = Color3.new(1, 1, 0)
+    tooltip.TextSize = 12
+    tooltip.Font = Enum.Font.SourceSansBold
+    tooltip.TextWrapped = true
+    tooltip.Visible = false
+    tooltip.Parent = frame
+
+    closeButton.MouseEnter:Connect(function()
+        tooltip.Visible = true
+    end)
+
+    closeButton.MouseLeave:Connect(function()
+        tooltip.Visible = false
+    end)
+
     closeButton.MouseButton1Click:Connect(function()
+        tooltip.Visible = false
         disableGPUSaver()
     end)
 
@@ -2942,31 +2968,44 @@ function enableGPUSaver()
     if gpuSaverEnabled then return end
     gpuSaverEnabled = true
 
-    -- ====== AUTOMATIC PERFORMANCE OPTIMIZATION (PHASE 2: GPU SAVER) ======
+    print("[VRAM Optimizer] 🔄 Enabling GPU Saver with VRAM optimizations...")
+
+    -- ====== V3.3: RE-APPLY ALL VRAM OPTIMIZATIONS ======
     -- Run cleanup and performance optimizations again to ensure paths are removed
     pcall(ultimatePerformance)
     pcall(cleanupEnvironment)
-    
+
+    -- V3.3: Re-apply material & texture optimizations
+    print("[VRAM Optimizer] 🔁 Re-applying VRAM optimizations...")
+    pcall(optimizeMaterials)
+    pcall(removeTextures)
+    pcall(optimizeMeshes)
+    pcall(destroyParticlesAndEffects)
+
+    -- V3.3: Re-disable 3D rendering
+    task.wait(0.5)
+    pcall(disable3DRendering)
+
     -- Store original settings
     originalSettings.GlobalShadows = Lighting.GlobalShadows
     originalSettings.FogEnd = Lighting.FogEnd
     originalSettings.Brightness = Lighting.Brightness
     originalSettings.QualityLevel = settings().Rendering.QualityLevel
-    
+
     -- Apply GPU saving settings
     pcall(function()
         settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 1
         Lighting.Brightness = 0
-        
+
         -- This loop is likely redundant since ultimatePerformance() clears lighting children, but it's safe to keep.
         for _, v in pairs(Lighting:GetChildren()) do
             if v:IsA("PostEffect") or v:IsA("Atmosphere") or v:IsA("Sky") then
                 v.Enabled = false
             end
         end
-        
+
         pcall(function() setfpscap(GPU_FPS_LIMIT) end) -- Limit FPS based on GPU_FPS_LIMIT
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         -- workspace.CurrentCamera.FieldOfView is not set because cleanupEnvironment() destroys the camera.
@@ -2994,6 +3033,8 @@ function enableGPUSaver()
     if gpuSaverToggle and not isApplyingConfig then
         gpuSaverToggle:UpdateToggle(nil, true)
     end
+
+    print("[VRAM Optimizer] ✅ GPU Saver enabled with all VRAM optimizations active")
 end
 
 function disableGPUSaver()
