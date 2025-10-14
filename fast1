@@ -4903,11 +4903,7 @@ task.spawn(function()
                     fishingEvent:FireServer()
                 end
 
-                -- 4. Stop fishing event (reset state)
-                task.wait(0.1)
-                stopFishing()
-
-                -- 5. Cancel fishing inputs (additional cleanup to prevent stuck)
+                -- 4. Cancel fishing inputs (cleanup to prevent stuck)
                 task.wait(0.1)
                 cancelFishingInputs()
             end)
