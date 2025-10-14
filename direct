@@ -1,3 +1,34 @@
+--[[
+    ╔═══════════════════════════════════════════════════════════════════════════╗
+    ║                     V3.3 MAXIMUM VRAM OPTIMIZATION                        ║
+    ║                  Auto Fish Script with Extreme VRAM Saving                ║
+    ╠═══════════════════════════════════════════════════════════════════════════╣
+    ║  Version: 3.3 VRAM                                                        ║
+    ║  Based on: v3.2 efisien.lua                                               ║
+    ║  Date: 2025-10-13                                                         ║
+    ╠═══════════════════════════════════════════════════════════════════════════╣
+    ║  NEW FEATURES IN V3.3:                                                    ║
+    ║  ✅ RunService:Set3dRenderingEnabled(false) - Disable 3D rendering       ║
+    ║  ✅ Destroy all non-essential 3D objects in workspace                    ║
+    ║  ✅ Force all materials to Plastic (lightest material)                   ║
+    ║  ✅ Remove all textures, decals, and SurfaceAppearances                  ║
+    ║  ✅ Destroy all particles and special effects                            ║
+    ║  ✅ Optimize all mesh textures (remove texture IDs)                      ║
+    ║  ✅ Master VRAM optimization function (applyMaximumVRAMOptimization)     ║
+    ║  ✅ Smart whitelist for essential fishing objects                        ║
+    ║                                                                            ║
+    ║  EXPECTED VRAM REDUCTION: 50-70%                                          ║
+    ║  TRADE-OFF: Game will look extremely minimal/blank                        ║
+    ╠═══════════════════════════════════════════════════════════════════════════╣
+    ║  INHERITED FROM V3.2:                                                     ║
+    ║  ✅ Auto Artifact farming system with UUID detection                     ║
+    ║  ✅ Totem detection & equip via "Totems" category                        ║
+    ║  ✅ Memory leak fixes (removed FPS counter, ping monitor, etc)           ║
+    ║  ✅ Exact match detection for artifacts                                  ║
+    ║  ✅ Conditional Auto Artifact execution                                  ║
+    ╚═══════════════════════════════════════════════════════════════════════════╝
+]]
+
 -- ====== SCRIPT INITIALIZATION SAFETY CHECK ======
 
 -- Critical dependency validation
@@ -30,94 +61,6 @@ end)
 if not success then
     error("❌ [Auto Fish] Critical dependency check failed: " .. tostring(errorMsg))
     return
-end
-
--- ====================================================================
---                  RENDERING OPTIMIZATION - DIRECT3D 10
--- ====================================================================
--- Script Version: v4.0 Direct3D 10 Edition
--- Force Direct3D 10 for better performance on older hardware
--- This reduces CPU/GPU overhead compared to D3D11 (Roblox default)
---
--- Benefits:
--- ✅ Lower CPU usage
--- ✅ Lower GPU usage
--- ✅ Better performance on older/potato PCs
--- ✅ Reduced memory usage
---
--- Trade-offs:
--- ⚠️ Slightly lower visual quality
--- ⚠️ Some modern rendering features disabled
--- ====================================================================
-
-print("=" .. string.rep("=", 60))
-print("[v4.0 D3D10] Initializing Direct3D 10 rendering mode...")
-print("=" .. string.rep("=", 60))
-
-local function applyRenderingFFlags()
-    local fflagsApplied = 0
-    local fflagsFailed = 0
-
-    -- Check if setfflag function exists
-    if not setfflag then
-        warn("⚠️ [D3D10] setfflag() not available in this executor")
-        warn("⚠️ [D3D10] Script will run with default Roblox rendering (D3D11)")
-        return false
-    end
-
-    print("[D3D10] Executor supports setfflag() - applying FFlags...")
-
-    local renderingFlags = {
-        -- Core Direct3D 10 flags
-        {name = "FFlagDebugGraphicsDisableDirect3D11", value = "false", desc = "Disable D3D11"},
-        {name = "FFlagDebugGraphicsPreferD3D11", value = "false", desc = "Don't prefer D3D11"},
-        {name = "FFlagDebugGraphicsPreferD3D11FL10", value = "true", desc = "Enable D3D10 mode"},
-        {name = "FFlagGraphicsEnableD3D10Compute", value = "true", desc = "Enable D3D10 compute"},
-
-        -- Additional optimizations
-        {name = "FFlagDebugGraphicsDisableVulkan", value = "true", desc = "Disable Vulkan fallback"},
-    }
-
-    print("[D3D10] Applying " .. #renderingFlags .. " rendering flags...")
-    print("")
-
-    for i, flag in ipairs(renderingFlags) do
-        local success = pcall(function()
-            setfflag(flag.name, flag.value)
-        end)
-
-        if success then
-            fflagsApplied = fflagsApplied + 1
-            print(string.format("  [%d/%d] ✅ %s", i, #renderingFlags, flag.desc))
-            print(string.format("       └─ %s = %s", flag.name, flag.value))
-        else
-            fflagsFailed = fflagsFailed + 1
-            warn(string.format("  [%d/%d] ❌ Failed: %s", i, #renderingFlags, flag.desc))
-            warn(string.format("       └─ %s", flag.name))
-        end
-    end
-
-    print("")
-    print(string.format("[D3D10] Results: %d/%d flags applied (Failed: %d)",
-        fflagsApplied, #renderingFlags, fflagsFailed))
-
-    return fflagsApplied > 0
-end
-
--- Apply rendering flags
-local renderingSuccess, renderingError = pcall(applyRenderingFFlags)
-
-if not renderingSuccess then
-    warn("⚠️ [D3D10] Failed to apply Direct3D 10 flags: " .. tostring(renderingError))
-    warn("⚠️ [D3D10] Continuing with default Roblox rendering settings...")
-    print("")
-elseif renderingSuccess then
-    print("")
-    print("=" .. string.rep("=", 60))
-    print("[D3D10] ✅ Direct3D 10 mode configured successfully!")
-    print("[D3D10] Monitor your FPS/CPU/RAM to verify performance gains")
-    print("=" .. string.rep("=", 60))
-    print("")
 end
 
 -- ====== ERROR HANDLING SETUP ======
@@ -153,10 +96,18 @@ if not suppressSuccess then
     warn("⚠️ [Auto Fish] Error suppression setup failed")
 end
 
+-- ====== V3.3 MAXIMUM VRAM OPTIMIZATION ======
+-- This version includes aggressive 3D rendering optimization to minimize VRAM usage
+
+local RunService = game:GetService("RunService")
+
 -- ====== AUTOMATIC PERFORMANCE OPTIMIZATION ======
 local function ultimatePerformance()
     local workspace = game:GetService("Workspace")
     local lighting = game:GetService("Lighting")
+
+    print("[VRAM Optimizer] 🚀 Starting ultimate performance mode...")
+
     pcall(function()
         local terrain = workspace:FindFirstChild("Terrain")
         if terrain then
@@ -169,18 +120,181 @@ local function ultimatePerformance()
             terrain.WaterWaveSpeed = 0
             terrain.WaterReflectance = 0
             terrain.WaterTransparency = 0
+            print("[VRAM Optimizer] ✅ Terrain optimized")
         end
+
         lighting.GlobalShadows = false
         lighting.FogEnd = 9e9
         lighting.Brightness = 0
         lighting.Technology = Enum.Technology.Compatibility
         -- 6. delete seluruh children nya (from read.lua)
         lighting:ClearAllChildren()
+        print("[VRAM Optimizer] ✅ Lighting optimized")
+    end)
+end
+
+-- ====== NEW: MAXIMUM VRAM OPTIMIZATION FUNCTIONS ======
+
+-- Function to disable 3D rendering completely (MASSIVE VRAM SAVE)
+local function disable3DRendering()
+    pcall(function()
+        RunService:Set3dRenderingEnabled(false)
+        print("[VRAM Optimizer] ✅ 3D Rendering DISABLED - Maximum VRAM saving active!")
+    end)
+end
+
+-- Function to enable 3D rendering (for restore)
+local function enable3DRendering()
+    pcall(function()
+        RunService:Set3dRenderingEnabled(true)
+        print("[VRAM Optimizer] 🔄 3D Rendering ENABLED")
+    end)
+end
+
+-- Function to destroy all 3D objects in workspace (except essential fishing objects)
+local function destroyWorkspace3DObjects()
+    print("[VRAM Optimizer] 🗑️ Destroying non-essential 3D objects...")
+
+    pcall(function()
+        local workspace = game:GetService("Workspace")
+        local objectsDestroyed = 0
+
+        -- Whitelist of objects to keep (essential for fishing mechanics)
+        local keepObjects = {
+            ["Locations"] = true,
+            ["NPCs"] = true,
+            ["Teleports"] = true,
+            ["!! ZONES"] = true,
+            ["!!! MENU RINGS"] = true,
+            ["Terrain"] = true,
+        }
+
+        -- Destroy all non-essential children
+        for _, child in ipairs(workspace:GetChildren()) do
+            local shouldKeep = keepObjects[child.Name]
+
+            -- Keep LocalPlayer's character
+            if child:IsA("Model") and game.Players.LocalPlayer.Character == child then
+                shouldKeep = true
+            end
+
+            if not shouldKeep then
+                pcall(function()
+                    child:Destroy()
+                    objectsDestroyed = objectsDestroyed + 1
+                end)
+            end
+        end
+
+        print(string.format("[VRAM Optimizer] ✅ Destroyed %d non-essential objects", objectsDestroyed))
+    end)
+end
+
+-- Function to optimize all materials to Plastic (lightest material)
+local function optimizeMaterials()
+    print("[VRAM Optimizer] 🎨 Optimizing materials to Plastic...")
+
+    pcall(function()
+        local workspace = game:GetService("Workspace")
+        local materialsOptimized = 0
+
+        local function optimizePart(part)
+            if part:IsA("BasePart") then
+                part.Material = Enum.Material.Plastic
+                part.Reflectance = 0
+                part.Transparency = part.Transparency > 0.5 and 1 or part.Transparency -- Keep transparency logic
+                materialsOptimized = materialsOptimized + 1
+            end
+        end
+
+        -- Optimize all descendants in workspace
+        for _, descendant in ipairs(workspace:GetDescendants()) do
+            pcall(function()
+                optimizePart(descendant)
+            end)
+        end
+
+        print(string.format("[VRAM Optimizer] ✅ Optimized %d materials", materialsOptimized))
+    end)
+end
+
+-- Function to remove all textures, decals, and surfaceAppearances
+local function removeTextures()
+    print("[VRAM Optimizer] 🖼️ Removing textures and decals...")
+
+    pcall(function()
+        local workspace = game:GetService("Workspace")
+        local texturesRemoved = 0
+
+        for _, descendant in ipairs(workspace:GetDescendants()) do
+            pcall(function()
+                if descendant:IsA("Decal") or descendant:IsA("Texture") or descendant:IsA("SurfaceAppearance") then
+                    descendant:Destroy()
+                    texturesRemoved = texturesRemoved + 1
+                end
+            end)
+        end
+
+        print(string.format("[VRAM Optimizer] ✅ Removed %d textures/decals", texturesRemoved))
+    end)
+end
+
+-- Function to destroy all particle emitters and special effects
+local function destroyParticlesAndEffects()
+    print("[VRAM Optimizer] ✨ Destroying particles and effects...")
+
+    pcall(function()
+        local workspace = game:GetService("Workspace")
+        local effectsDestroyed = 0
+
+        for _, descendant in ipairs(workspace:GetDescendants()) do
+            pcall(function()
+                if descendant:IsA("ParticleEmitter") or
+                   descendant:IsA("Fire") or
+                   descendant:IsA("Smoke") or
+                   descendant:IsA("Sparkles") or
+                   descendant:IsA("Trail") or
+                   descendant:IsA("Beam") then
+                    descendant:Destroy()
+                    effectsDestroyed = effectsDestroyed + 1
+                end
+            end)
+        end
+
+        print(string.format("[VRAM Optimizer] ✅ Destroyed %d effects", effectsDestroyed))
+    end)
+end
+
+-- Function to destroy all meshes (aggressive VRAM saving)
+local function optimizeMeshes()
+    print("[VRAM Optimizer] 📦 Optimizing meshes...")
+
+    pcall(function()
+        local workspace = game:GetService("Workspace")
+        local meshesOptimized = 0
+
+        for _, descendant in ipairs(workspace:GetDescendants()) do
+            pcall(function()
+                if descendant:IsA("SpecialMesh") or descendant:IsA("MeshPart") then
+                    -- Don't destroy, just minimize texture/detail
+                    if descendant:IsA("SpecialMesh") then
+                        descendant.TextureId = ""
+                    elseif descendant:IsA("MeshPart") then
+                        descendant.TextureID = ""
+                    end
+                    meshesOptimized = meshesOptimized + 1
+                end
+            end)
+        end
+
+        print(string.format("[VRAM Optimizer] ✅ Optimized %d meshes", meshesOptimized))
     end)
 end
 
 -- Function to clean up various game objects for performance
 local function cleanupEnvironment()
+    print("[VRAM Optimizer] 🧹 Cleaning up environment...")
+
     -- 1. delete remote ini
     pcall(function()
         local remote = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/ObtainedNewFishNotification")
@@ -214,21 +328,54 @@ local function cleanupEnvironment()
             end
         end
     end)
+
+    print("[VRAM Optimizer] ✅ Environment cleanup completed")
+end
+
+-- ====== MASTER VRAM OPTIMIZATION FUNCTION ======
+local function applyMaximumVRAMOptimization()
+    print("[VRAM Optimizer] ================================================")
+    print("[VRAM Optimizer] 🚀 V3.3 MAXIMUM VRAM OPTIMIZATION STARTING...")
+    print("[VRAM Optimizer] ================================================")
+
+    -- Phase 1: Basic optimizations
+    ultimatePerformance()
+    cleanupEnvironment()
+
+    -- Phase 2: Material & Texture optimization
+    optimizeMaterials()
+    removeTextures()
+    optimizeMeshes()
+
+    -- Phase 3: Effects cleanup
+    destroyParticlesAndEffects()
+
+    -- Phase 4: Workspace cleanup
+    destroyWorkspace3DObjects()
+
+    -- Phase 5: DISABLE 3D RENDERING (Nuclear option - maximum VRAM save)
+    task.wait(2) -- Wait for cleanup to complete
+    disable3DRendering()
+
+    print("[VRAM Optimizer] ================================================")
+    print("[VRAM Optimizer] ✅ MAXIMUM VRAM OPTIMIZATION COMPLETED!")
+    print("[VRAM Optimizer] 💾 VRAM usage should be reduced by 50-70%")
+    print("[VRAM Optimizer] ================================================")
 end
 
 
--- ====== AUTOMATIC PERFORMANCE OPTIMIZATION (PHASE 1: SCRIPT START) ======
--- Safe execution of performance optimization
-local perfSuccess = pcall(ultimatePerformance)
-if not perfSuccess then
-    warn("⚠️ [Auto Fish] Initial performance optimization failed, continuing...")
-end
-
--- Safe execution of environment cleanup
-local cleanupSuccess = pcall(cleanupEnvironment)
-if not cleanupSuccess then
-    warn("⚠️ [Auto Fish] Initial environment cleanup failed, continuing...")
-end
+-- ====== V3.3 AUTOMATIC MAXIMUM VRAM OPTIMIZATION (PHASE 1: SCRIPT START) ======
+-- Apply maximum VRAM optimization on script start
+task.spawn(function()
+    task.wait(3) -- Wait for game to fully load
+    local vramOptSuccess = pcall(applyMaximumVRAMOptimization)
+    if not vramOptSuccess then
+        warn("⚠️ [VRAM Optimizer] Maximum VRAM optimization failed, falling back to basic optimization...")
+        -- Fallback to basic optimization
+        pcall(ultimatePerformance)
+        pcall(cleanupEnvironment)
+    end
+end)
 
 -- ====== ANTI-AFK SYSTEM ======
 -- Prevents Roblox from disconnecting due to 20 minute idle timeout
@@ -2880,11 +3027,16 @@ function disableGPUSaver()
     if not gpuSaverEnabled then return end
     gpuSaverEnabled = false
 
+    print("[VRAM Optimizer] 🔄 Disabling GPU Saver and restoring 3D rendering...")
+
     -- Disconnect FPS cap monitor
     if fpsCapConnection then
         fpsCapConnection:Disconnect()
         fpsCapConnection = nil
     end
+
+    -- V3.3: Re-enable 3D rendering first
+    enable3DRendering()
 
     -- Restore settings
     pcall(function()
@@ -2901,7 +3053,7 @@ function disableGPUSaver()
 
         pcall(function() setfpscap(0) end) -- Remove FPS limit
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, true)
-        
+
         -- Check if camera exists before restoring FieldOfView, as it may have been destroyed.
         if workspace.CurrentCamera then
             workspace.CurrentCamera.FieldOfView = 70
@@ -2914,6 +3066,8 @@ function disableGPUSaver()
     if gpuSaverToggle and not isApplyingConfig then
         gpuSaverToggle:UpdateToggle(nil, false)
     end
+
+    print("[VRAM Optimizer] ✅ GPU Saver disabled, 3D rendering restored")
 end
 
 -- ====== FISH CAUGHT EVENT HANDLER ======
