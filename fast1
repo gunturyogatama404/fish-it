@@ -3015,7 +3015,8 @@ function enableGPUSaver()
 
         pcall(function() setfpscap(GPU_FPS_LIMIT) end) -- Limit FPS based on GPU_FPS_LIMIT
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
-        -- workspace.CurrentCamera.FieldOfView is not set because cleanupEnvironment() destroys the camera.
+        -- NOTE: Camera cleanup is DISABLED for debugging (camera will NOT be destroyed)
+        -- workspace.CurrentCamera.FieldOfView can be set if needed
     end)
 
     -- Create FPS cap monitor to ensure it stays at GPU_FPS_LIMIT
