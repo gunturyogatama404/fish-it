@@ -1,35 +1,4 @@
---[[
-    ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║                     V3.3 MAXIMUM VRAM OPTIMIZATION                        ║
-    ║                  Auto Fish Script with Extreme VRAM Saving                ║
-    ╠═══════════════════════════════════════════════════════════════════════════╣
-    ║  Version: 3.3 VRAM                                                        ║
-    ║  Based on: v3.2 efisien.lua                                               ║
-    ║  Date: 2025-10-15                                                         ║
-    ╠═══════════════════════════════════════════════════════════════════════════╣
-    ║  NEW FEATURES IN V3.3:                                                    ║
-    ║  ✅ RunService:Set3dRenderingEnabled(false) - Disable 3D rendering       ║
-    ║  ✅ Force all materials to Plastic (lightest material)                   ║
-    ║  ✅ Remove all textures, decals, and SurfaceAppearances                  ║
-    ║  ✅ Destroy all particles and special effects                            ║
-    ║  ✅ Optimize all mesh textures (remove texture IDs)                      ║
-    ║  ✅ Master VRAM optimization function (applyMaximumVRAMOptimization)     ║
-    ║  ✅ Persistent VRAM optimization through GPU Saver toggle                ║
-    ║  ✅ ObtainedNewFishNotification kept for debugging                       ║
-    ║                                                                            ║
-    ║  EXPECTED VRAM REDUCTION: 30-50%                                          ║
-    ║  TRADE-OFF: Game will look extremely minimal/blank                        ║
-    ║  NOTE: All v3.2 functionality preserved (teleport, loops, etc)           ║
-    ╠═══════════════════════════════════════════════════════════════════════════╣
-    ║  INHERITED FROM V3.2:                                                     ║
-    ║  ✅ Auto Artifact farming system with UUID detection                     ║
-    ║  ✅ Totem detection & equip via "Totems" category                        ║
-    ║  ✅ Memory leak fixes (removed FPS counter, ping monitor, etc)           ║
-    ║  ✅ Exact match detection for artifacts                                  ║
-    ║  ✅ Conditional Auto Artifact execution                                  ║
-    ║  ✅ TELEPORT_LOCATION functionality preserved                            ║
-    ╚═══════════════════════════════════════════════════════════════════════════╝
-]]
+
 
 -- ====== SCRIPT INITIALIZATION SAFETY CHECK ======
 
@@ -98,7 +67,9 @@ if not suppressSuccess then
     warn("⚠️ [Auto Fish] Error suppression setup failed")
 end
 
--- ====== V3.3 VRAM OPTIMIZATION SYSTEM ======
+-- ====== V3.3 MAXIMUM VRAM OPTIMIZATION ======
+-- This version includes aggressive 3D rendering optimization to minimize VRAM usage
+
 local RunService = game:GetService("RunService")
 
 -- ====== AUTOMATIC PERFORMANCE OPTIMIZATION ======
@@ -122,6 +93,7 @@ local function ultimatePerformance()
             terrain.WaterTransparency = 0
             print("[VRAM Optimizer] ✅ Terrain optimized")
         end
+
         lighting.GlobalShadows = false
         lighting.FogEnd = 9e9
         lighting.Brightness = 0
@@ -132,7 +104,9 @@ local function ultimatePerformance()
     end)
 end
 
--- V3.3: Disable 3D rendering (MASSIVE VRAM SAVE)
+-- ====== NEW: MAXIMUM VRAM OPTIMIZATION FUNCTIONS ======
+
+-- Function to disable 3D rendering completely (MASSIVE VRAM SAVE)
 local function disable3DRendering()
     pcall(function()
         RunService:Set3dRenderingEnabled(false)
@@ -140,7 +114,7 @@ local function disable3DRendering()
     end)
 end
 
--- V3.3: Enable 3D rendering (for restore)
+-- Function to enable 3D rendering (for restore)
 local function enable3DRendering()
     pcall(function()
         RunService:Set3dRenderingEnabled(true)
@@ -148,7 +122,46 @@ local function enable3DRendering()
     end)
 end
 
--- V3.3: Optimize all materials to Plastic
+-- Function to destroy all 3D objects in workspace (except essential fishing objects)
+local function destroyWorkspace3DObjects()
+    print("[VRAM Optimizer] 🗑️ Destroying non-essential 3D objects...")
+
+    pcall(function()
+        local workspace = game:GetService("Workspace")
+        local objectsDestroyed = 0
+
+        -- Whitelist of objects to keep (essential for fishing mechanics)
+        local keepObjects = {
+            ["Locations"] = true,
+            ["NPCs"] = true,
+            ["Teleports"] = true,
+            ["!! ZONES"] = true,
+            ["!!! MENU RINGS"] = true,
+            ["Terrain"] = true,
+        }
+
+        -- Destroy all non-essential children
+        for _, child in ipairs(workspace:GetChildren()) do
+            local shouldKeep = keepObjects[child.Name]
+
+            -- Keep LocalPlayer's character
+            if child:IsA("Model") and game.Players.LocalPlayer.Character == child then
+                shouldKeep = true
+            end
+
+            if not shouldKeep then
+                pcall(function()
+                    child:Destroy()
+                    objectsDestroyed = objectsDestroyed + 1
+                end)
+            end
+        end
+
+        print(string.format("[VRAM Optimizer] ✅ Destroyed %d non-essential objects", objectsDestroyed))
+    end)
+end
+
+-- Function to optimize all materials to Plastic (lightest material)
 local function optimizeMaterials()
     print("[VRAM Optimizer] 🎨 Optimizing materials to Plastic...")
 
@@ -156,13 +169,19 @@ local function optimizeMaterials()
         local workspace = game:GetService("Workspace")
         local materialsOptimized = 0
 
+        local function optimizePart(part)
+            if part:IsA("BasePart") then
+                part.Material = Enum.Material.Plastic
+                part.Reflectance = 0
+                part.Transparency = part.Transparency > 0.5 and 1 or part.Transparency -- Keep transparency logic
+                materialsOptimized = materialsOptimized + 1
+            end
+        end
+
+        -- Optimize all descendants in workspace
         for _, descendant in ipairs(workspace:GetDescendants()) do
             pcall(function()
-                if descendant:IsA("BasePart") then
-                    descendant.Material = Enum.Material.Plastic
-                    descendant.Reflectance = 0
-                    materialsOptimized = materialsOptimized + 1
-                end
+                optimizePart(descendant)
             end)
         end
 
@@ -170,7 +189,7 @@ local function optimizeMaterials()
     end)
 end
 
--- V3.3: Remove all textures/decals
+-- Function to remove all textures, decals, and surfaceAppearances
 local function removeTextures()
     print("[VRAM Optimizer] 🖼️ Removing textures and decals...")
 
@@ -191,31 +210,7 @@ local function removeTextures()
     end)
 end
 
--- V3.3: Optimize meshes
-local function optimizeMeshes()
-    print("[VRAM Optimizer] 📦 Optimizing meshes...")
-
-    pcall(function()
-        local workspace = game:GetService("Workspace")
-        local meshesOptimized = 0
-
-        for _, descendant in ipairs(workspace:GetDescendants()) do
-            pcall(function()
-                if descendant:IsA("SpecialMesh") then
-                    descendant.TextureId = ""
-                    meshesOptimized = meshesOptimized + 1
-                elseif descendant:IsA("MeshPart") then
-                    descendant.TextureID = ""
-                    meshesOptimized = meshesOptimized + 1
-                end
-            end)
-        end
-
-        print(string.format("[VRAM Optimizer] ✅ Optimized %d meshes", meshesOptimized))
-    end)
-end
-
--- V3.3: Destroy particles/effects
+-- Function to destroy all particle emitters and special effects
 local function destroyParticlesAndEffects()
     print("[VRAM Optimizer] ✨ Destroying particles and effects...")
 
@@ -241,12 +236,43 @@ local function destroyParticlesAndEffects()
     end)
 end
 
+-- Function to destroy all meshes (aggressive VRAM saving)
+local function optimizeMeshes()
+    print("[VRAM Optimizer] 📦 Optimizing meshes...")
+
+    pcall(function()
+        local workspace = game:GetService("Workspace")
+        local meshesOptimized = 0
+
+        for _, descendant in ipairs(workspace:GetDescendants()) do
+            pcall(function()
+                if descendant:IsA("SpecialMesh") or descendant:IsA("MeshPart") then
+                    -- Don't destroy, just minimize texture/detail
+                    if descendant:IsA("SpecialMesh") then
+                        descendant.TextureId = ""
+                    elseif descendant:IsA("MeshPart") then
+                        descendant.TextureID = ""
+                    end
+                    meshesOptimized = meshesOptimized + 1
+                end
+            end)
+        end
+
+        print(string.format("[VRAM Optimizer] ✅ Optimized %d meshes", meshesOptimized))
+    end)
+end
+
 -- Function to clean up various game objects for performance
 local function cleanupEnvironment()
     print("[VRAM Optimizer] 🧹 Cleaning up environment...")
 
-    -- 1. V3.3: KEEP ObtainedNewFishNotification for debugging
-    print("[VRAM Optimizer] ⏭️ Keeping ObtainedNewFishNotification for debugging")
+    -- 1. delete remote ini
+    pcall(function()
+        local remote = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/ObtainedNewFishNotification")
+        if remote then
+            remote:Destroy()
+        end
+    end)
 
     -- 2. delete path ini
     pcall(function()
@@ -277,7 +303,7 @@ local function cleanupEnvironment()
     print("[VRAM Optimizer] ✅ Environment cleanup completed")
 end
 
--- V3.3: Master VRAM optimization function
+-- ====== MASTER VRAM OPTIMIZATION FUNCTION ======
 local function applyMaximumVRAMOptimization()
     print("[VRAM Optimizer] ================================================")
     print("[VRAM Optimizer] 🚀 V3.3 MAXIMUM VRAM OPTIMIZATION STARTING...")
@@ -295,13 +321,18 @@ local function applyMaximumVRAMOptimization()
     -- Phase 3: Effects cleanup
     destroyParticlesAndEffects()
 
-    -- Phase 4: DISABLE 3D RENDERING
-    task.wait(2)
+    -- Phase 4: Workspace cleanup - DISABLED (too extreme, prevents game from loading)
+    print("[VRAM Optimizer] ⏭️  Skipping workspace 3D object cleanup (too extreme)")
+    -- destroyWorkspace3DObjects() -- COMMENTED OUT
+
+    -- Phase 5: DISABLE 3D RENDERING (Nuclear option - maximum VRAM save)
+    task.wait(2) -- Wait for cleanup to complete
     disable3DRendering()
 
     print("[VRAM Optimizer] ================================================")
     print("[VRAM Optimizer] ✅ MAXIMUM VRAM OPTIMIZATION COMPLETED!")
     print("[VRAM Optimizer] 💾 VRAM usage should be reduced by 30-50%")
+    print("[VRAM Optimizer] ⚠️  Workspace 3D cleanup disabled to allow game loading")
     print("[VRAM Optimizer] ================================================")
 end
 
@@ -524,6 +555,10 @@ do
             ["Giant Squid"] = true,
             ["Ghost Shark"] = true,
             ["Robot Kraken"] = true,
+            ["Bone Whale"] = true,
+            ["Elshark Gran Maja"] = true,
+            ["Worm Fish"] = true,
+            ["Mosasaur Shark"] = true,
             ["Thin Armor Shark"] = true,
             ["Arrow Artifact"] = true,
             ["Crescent Artifact"] = true,
@@ -2753,13 +2788,39 @@ local function createWhiteScreen()
     closeButton.AnchorPoint = Vector2.new(0, 1)
     closeButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
     closeButton.BorderSizePixel = 0
-    closeButton.Text = "❌ Disable GPU"
-    closeButton.TextColor3 = Color3.new(1, 0, 0)
+    closeButton.Text = "⚠️ Restore 3D"
+    closeButton.TextColor3 = Color3.new(1, 0.8, 0)
     closeButton.TextSize = 14
     closeButton.Font = Enum.Font.SourceSansBold
     closeButton.Parent = frame
 
+    -- V3.3: Add tooltip warning
+    local tooltip = Instance.new("TextLabel")
+    tooltip.Name = "Tooltip"
+    tooltip.Size = UDim2.new(0, 300, 0, 50)
+    tooltip.Position = UDim2.new(0.5, -150, 1, -120)
+    tooltip.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+    tooltip.BackgroundTransparency = 0.2
+    tooltip.BorderSizePixel = 1
+    tooltip.BorderColor3 = Color3.new(1, 0.8, 0)
+    tooltip.Text = "⚠️ WARNING: Disabling GPU Saver\nwill INCREASE VRAM usage!"
+    tooltip.TextColor3 = Color3.new(1, 1, 0)
+    tooltip.TextSize = 12
+    tooltip.Font = Enum.Font.SourceSansBold
+    tooltip.TextWrapped = true
+    tooltip.Visible = false
+    tooltip.Parent = frame
+
+    closeButton.MouseEnter:Connect(function()
+        tooltip.Visible = true
+    end)
+
+    closeButton.MouseLeave:Connect(function()
+        tooltip.Visible = false
+    end)
+
     closeButton.MouseButton1Click:Connect(function()
+        tooltip.Visible = false
         disableGPUSaver()
     end)
 
@@ -2914,6 +2975,7 @@ function enableGPUSaver()
     print("[VRAM Optimizer] 🔄 Enabling GPU Saver with VRAM optimizations...")
 
     -- ====== V3.3: RE-APPLY ALL VRAM OPTIMIZATIONS ======
+    -- Run cleanup and performance optimizations again to ensure paths are removed
     pcall(ultimatePerformance)
     pcall(cleanupEnvironment)
 
@@ -3064,6 +3126,7 @@ local teleportLocations = {
     { Name = "Treasure Room",  CFrame = CFrame.new(-3606.34985, -266.57373, -1580.97339, 0.998743415, 1.12141152e-13, -0.0501160324, -1.56847693e-13, 1, -8.88127842e-13, 0.0501160324, 8.94872392e-13, 0.998743415) },
     { Name = "Kohana",  CFrame = CFrame.new(-663.904236, 3.04580712, 718.796875, -0.100799225, -2.14183729e-08, -0.994906783, -1.12300391e-08, 1, -2.03902459e-08, 0.994906783, 9.11752096e-09, -0.100799225) },
     { Name = "Underground Cellar", CFrame = CFrame.new(2108.71606, -94.1875076, -709.647827, 0.508109629, 1.18704779e-08, -0.861292422, -1.60964764e-09, 1, 1.28325759e-08, 0.861292422, -5.13397813e-09, 0.508109629) },
+    { Name = "Ancient Jungle", CFrame = CFrame.new(1831.71362, 6.62499952, -299.279175, 0.213522509, 1.25553285e-07, -0.976938128, -4.32026184e-08, 1, 1.19074642e-07, 0.976938128, 1.67811702e-08, 0.213522509) },
     { Name = "Sacred Temple", CFrame = CFrame.new(1466.92151, -21.8750591, -622.835693, -0.764787138, 8.14444334e-09, 0.644283056, 2.31097452e-08, 1, 1.4791004e-08, -0.644283056, 2.6201187e-08, -0.764787138) }
 }
 
@@ -3320,6 +3383,16 @@ local function cancelFishing()
     pcall(function()
         if cancelFishingEvent then
             cancelFishingEvent:InvokeServer()
+        end
+    end)
+end
+
+-- Stop fishing event (for fast spam cycle)
+local function stopFishing()
+    pcall(function()
+        local stopEvent = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/FishingStopped")
+        if stopEvent then
+            firesignal(stopEvent.OnClientEvent)
         end
     end)
 end
@@ -4744,28 +4817,54 @@ end
 --                    AUTO LOOPS (CORE FISHING LOGIC)
 -- ====================================================================
 
--- Enhanced Auto Farm Loop (combines equip + fishing)
+-- Enhanced Auto Farm Loop (SPAM OPTIMIZED - Fast Fishing Cycle)
 task.spawn(function()
+    print("[Auto Farm] Enhanced spam fishing loop started!")
+
     while true do
         if isAutoFarmOn then
             local success, err = pcall(function()
-                -- Check if rod is equipped
+                -- Check if rod is equipped (only check once per cycle)
                 local character = player.Character
                 if character then
                     local tool = character:FindFirstChildOfClass("Tool")
                     if not tool then
                         equipRod()
-                        task.wait(1)
+                        task.wait(0.5) -- Reduced from 1s to 0.5s
                     end
                 end
 
-                -- Perform fishing sequence
-                chargeFishingRod()
-                task.wait(autoFishMainDelay)
+                -- ====== SPAM FISHING CYCLE ======
+                -- 1. Charge fishing rod + request minigame
+                if chargeEvent then
+                    chargeEvent:InvokeServer(1755848498.4834)
+                end
 
+                -- Minimal delay for charge
+                task.wait(0.05)
+
+                -- 2. Request fishing minigame
+                if requestMinigameEvent then
+                    requestMinigameEvent:InvokeServer(1.2854545116425, 1)
+                end
+
+                -- Minimal delay for request
+                task.wait(0.05)
+
+                -- 3. Complete fishing immediately
                 if fishingEvent then
                     fishingEvent:FireServer()
                 end
+
+                -- Minimal delay for completion
+                task.wait(0.05)
+
+                -- 4. Stop fishing event (reset state for next cycle)
+                stopFishing()
+
+                -- Very short delay before next cycle (SPAM MODE)
+                task.wait(0.05)
+                -- ====== END SPAM CYCLE ======
             end)
 
             if not success then
@@ -4775,7 +4874,9 @@ task.spawn(function()
                 end
             end
         end
-        task.wait(0.1)
+
+        -- Minimal loop delay (0.05s = 20 cycles per second)
+        task.wait(0.05)
     end
 end)
 
