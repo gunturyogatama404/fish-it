@@ -4855,54 +4855,46 @@ end
 --                    AUTO LOOPS (CORE FISHING LOGIC)
 -- ====================================================================
 
--- Enhanced Auto Farm Loop (SPAM OPTIMIZED - Fast Fishing Cycle)
+-- Enhanced Auto Farm Loop (ULTRA SPAM MODE - Maximum Speed Fishing)
 task.spawn(function()
-    print("[Auto Farm] Enhanced spam fishing loop started!")
+    print("=" .. string.rep("=", 70))
+    print("[Auto Farm] 🚀 ULTRA SPAM FISHING LOOP STARTED!")
+    print("[Auto Farm] ⚡ NO DELAYS - Maximum fishing speed mode")
+    print("=" .. string.rep("=", 70))
 
     while true do
         if isAutoFarmOn then
             local success, err = pcall(function()
-                -- Check if rod is equipped (only check once per cycle)
+                -- Check if rod is equipped (only when needed)
                 local character = player.Character
                 if character then
                     local tool = character:FindFirstChildOfClass("Tool")
                     if not tool then
                         equipRod()
-                        task.wait(0.5) -- Reduced from 1s to 0.5s
+                        task.wait(0.3) -- Minimal wait for equip
                     end
                 end
 
-                -- ====== SPAM FISHING CYCLE ======
-                -- 1. Charge fishing rod + request minigame
+                -- ====== ULTRA SPAM FISHING CYCLE (NO DELAYS) ======
+                -- 1. Charge fishing rod
                 if chargeEvent then
                     chargeEvent:InvokeServer(1755848498.4834)
                 end
 
-                -- Minimal delay for charge
-                task.wait(0.05)
-
-                -- 2. Request fishing minigame
+                -- 2. Request fishing minigame (INSTANT)
                 if requestMinigameEvent then
                     requestMinigameEvent:InvokeServer(1.2854545116425, 1)
                 end
 
-                -- Minimal delay for request
-                task.wait(0.05)
-
-                -- 3. Complete fishing immediately
+                -- 3. Complete fishing (INSTANT)
                 if fishingEvent then
                     fishingEvent:FireServer()
                 end
 
-                -- Minimal delay for completion
-                task.wait(0.05)
-
-                -- 4. Stop fishing event (reset state for next cycle)
+                -- 4. Stop fishing event (INSTANT - reset state for next cycle)
                 stopFishing()
 
-                -- Very short delay before next cycle (SPAM MODE)
-                task.wait(0.05)
-                -- ====== END SPAM CYCLE ======
+                -- ====== END ULTRA SPAM CYCLE ======
             end)
 
             if not success then
@@ -4913,8 +4905,8 @@ task.spawn(function()
             end
         end
 
-        -- Minimal loop delay (0.05s = 20 cycles per second)
-        task.wait(0.05)
+        -- NO DELAY - Maximum spam speed (as fast as possible)
+        task.wait()
     end
 end)
 
