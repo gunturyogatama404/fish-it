@@ -274,12 +274,15 @@ local function cleanupEnvironment()
         end
     end)
 
-    -- 2. delete path ini
+    -- 2. delete path ini - DISABLED FOR DEBUGGING
+    --[[
     pcall(function()
         if workspace.CurrentCamera then
              workspace.CurrentCamera:Destroy()
         end
     end)
+    --]]
+    print("[VRAM Optimizer] ⏭️ Camera cleanup DISABLED for debugging")
 
     -- 4. delete seluruh children nya
     pcall(function()
