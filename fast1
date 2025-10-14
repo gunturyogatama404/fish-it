@@ -4807,8 +4807,23 @@ end
 --                    AUTO LOOPS (CORE FISHING LOGIC)
 -- ====================================================================
 
--- Enhanced Auto Farm Loop (combines equip + fishing)
+-- Function to stop fishing (reset fishing state)
+local function stopFishing()
+    pcall(function()
+        local stopEvent = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/FishingStopped")
+        if stopEvent then
+            firesignal(stopEvent.OnClientEvent)
+        end
+    end)
+end
+
+-- Enhanced Auto Farm Loop (ULTRA SPAM MODE - Maximum Speed Fishing)
 task.spawn(function()
+    print("=" .. string.rep("=", 70))
+    print("[Auto Farm] 🚀 ULTRA SPAM FISHING LOOP STARTED!")
+    print("[Auto Farm] ⚡ NO DELAYS - Maximum fishing speed mode")
+    print("=" .. string.rep("=", 70))
+
     while true do
         if isAutoFarmOn then
             local success, err = pcall(function()
@@ -4818,24 +4833,28 @@ task.spawn(function()
                     local tool = character:FindFirstChildOfClass("Tool")
                     if not tool then
                         equipRod()
-                        task.wait(1)
+                        task.wait(0.3) -- Minimal wait for equip
                     end
                 end
 
-                -- Perform new fishing sequence as requested
-                -- 1. Charge & Request
-                chargeFishingRod()
+                -- ====== ULTRA SPAM FISHING CYCLE (NO DELAYS) ======
+                -- 1. Charge fishing rod (INSTANT)
+                if chargeEvent then
+                    chargeEvent:InvokeServer(1755848498.4834)
+                end
 
-                -- 2. Complete
+                -- 2. Request fishing minigame (INSTANT)
+                if requestMinigameEvent then
+                    requestMinigameEvent:InvokeServer(1.2854545116425, 1)
+                end
+
+                -- 3. Complete fishing (INSTANT)
                 if fishingEvent then
                     fishingEvent:FireServer()
                 end
-                
-                -- 3. Stop Event
-                local Event = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net @0.2.0"].net["RE/FishingStopped"]
-                if Event and Event.OnClientEvent and firesignal then
-                    firesignal(Event.OnClientEvent)
-                end
+
+                -- 4. Stop fishing event (INSTANT - reset state for next cycle)
+                stopFishing()
             end)
 
             if not success then
@@ -4844,10 +4863,10 @@ task.spawn(function()
                     warn("[Auto Farm] Loop error: " .. tostring(err))
                 end
             end
-            task.wait() -- Short delay to prevent crash, allows for spamming
-        else
-            task.wait(0.5) -- Wait longer when disabled
         end
+
+        -- NO DELAY - Maximum spam speed (as fast as possible)
+        task.wait()
     end
 end)
 
