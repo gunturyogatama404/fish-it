@@ -4807,25 +4807,42 @@ end
 --                    AUTO LOOPS (CORE FISHING LOGIC)
 -- ====================================================================
 
--- Enhanced Auto Farm Loop (combines equip + fishing)
+-- Enhanced Auto Farm Loop (Concurrent Flow)
 task.spawn(function()
     while true do
         if isAutoFarmOn then
             local success, err = pcall(function()
-                -- Check if rod is equipped
-                local character = player.Character
-                if character then
-                    local tool = character:FindFirstChildOfClass("Tool")
-                    if not tool then
-                        equipRod()
-                        task.wait(1)
+                -- Concurrently equip, charge, and request minigame as requested
+                
+                -- 1. Equip Tool
+                task.spawn(function()
+                    if equipEvent then
+                        equipEvent:FireServer(1) -- Using 1 as in the original equipRod()
                     end
-                end
+                end)
+                
+                task.wait(0.01)
 
-                -- Perform fishing sequence
-                chargeFishingRod()
+                -- 2. Charge Rod
+                task.spawn(function()
+                    if chargeEvent then
+                        chargeEvent:InvokeServer(1755848498.4834)
+                    end
+                end)
+
+                task.wait(0.01)
+
+                -- 3. Request Minigame
+                task.spawn(function()
+                    if requestMinigameEvent then
+                        requestMinigameEvent:InvokeServer(1.2854545116425, 1)
+                    end
+                end)
+
+                -- Wait for server to process all concurrent requests
                 task.wait(autoFishMainDelay)
 
+                -- 4. Complete Fishing
                 if fishingEvent then
                     fishingEvent:FireServer()
                 end
