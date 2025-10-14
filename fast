@@ -15,12 +15,9 @@
     ║  ✅ Optimize all mesh textures (remove texture IDs)                      ║
     ║  ✅ Master VRAM optimization function (applyMaximumVRAMOptimization)     ║
     ║  ✅ Persistent VRAM optimization through GPU Saver toggle                ║
-    ║  ✅ SPAM FISHING LOOP: charge → request → completed → stop → repeat     ║
-    ║  ✅ FishingStopped event integration for faster cycle reset              ║
     ║  ✅ Workspace 3D cleanup disabled (game loading stability)               ║
     ║                                                                            ║
     ║  EXPECTED VRAM REDUCTION: 30-50%                                          ║
-    ║  EXPECTED CATCH RATE: 50-100% faster with spam loop                      ║
     ║  TRADE-OFF: Game will look extremely minimal/blank                        ║
     ╠═══════════════════════════════════════════════════════════════════════════╣
     ║  INHERITED FROM V3.2:                                                     ║
@@ -3414,16 +3411,6 @@ local function cancelFishing()
     end)
 end
 
--- V3.3: New stop fishing function using FishingStopped event
-local function stopFishing()
-    pcall(function()
-        local FishingStoppedEvent = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net["RE/FishingStopped"]
-        if FishingStoppedEvent and FishingStoppedEvent.OnClientEvent then
-            firesignal(FishingStoppedEvent.OnClientEvent)
-        end
-    end)
-end
-
 local function performAutoCatch()
     pcall(function()
         if fishingEvent then
@@ -4844,10 +4831,8 @@ end
 --                    AUTO LOOPS (CORE FISHING LOGIC)
 -- ====================================================================
 
--- V3.3: Enhanced Auto Farm Loop with SPAM CYCLE (charge → request → completed → stop → repeat)
+-- Enhanced Auto Farm Loop (combines equip + fishing)
 task.spawn(function()
-    print("[Auto Farm] 🚀 V3.3 SPAM LOOP initialized")
-
     while true do
         if isAutoFarmOn then
             local success, err = pcall(function()
@@ -4857,37 +4842,17 @@ task.spawn(function()
                     local tool = character:FindFirstChildOfClass("Tool")
                     if not tool then
                         equipRod()
-                        task.wait(0.5) -- Reduced from 1s
+                        task.wait(1)
                     end
                 end
 
-                -- ===== V3.3 SPAM CYCLE START =====
+                -- Perform fishing sequence
+                chargeFishingRod()
+                task.wait(autoFishMainDelay)
 
-                -- Step 1: Charge Fishing Rod
-                if chargeEvent then
-                    chargeEvent:InvokeServer(1755848498.4834)
-                    task.wait(chargeFishingDelay) -- ~0.01s
-                end
-
-                -- Step 2: Request Fishing Minigame
-                if requestMinigameEvent then
-                    requestMinigameEvent:InvokeServer(1.2854545116425, 1)
-                    task.wait(0.01) -- Minimal wait
-                end
-
-                -- Step 3: Fishing Completed (instant catch)
                 if fishingEvent then
                     fishingEvent:FireServer()
-                    task.wait(0.01) -- Minimal wait
                 end
-
-                -- Step 4: Stop Fishing Event (reset state)
-                stopFishing()
-
-                -- ===== V3.3 SPAM CYCLE END =====
-
-                -- Wait before next cycle (based on autoFishMainDelay)
-                task.wait(autoFishMainDelay)
             end)
 
             if not success then
@@ -4897,7 +4862,7 @@ task.spawn(function()
                 end
             end
         end
-        task.wait(0.05) -- Reduced from 0.1s for faster loop
+        task.wait(0.1)
     end
 end)
 
