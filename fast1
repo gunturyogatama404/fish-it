@@ -4812,34 +4812,31 @@ task.spawn(function()
     while true do
         if isAutoFarmOn then
             local success, err = pcall(function()
-                -- Concurrently equip, charge, and request minigame as requested
+                -- Concurrently equip and charge, then sequentially request minigame
                 
-                -- 1. Equip Tool
+                -- 1. Equip Tool (Concurrent)
                 task.spawn(function()
                     if equipEvent then
-                        equipEvent:FireServer(1) -- Using 1 as in the original equipRod()
+                        equipEvent:FireServer(1)
                     end
                 end)
                 
-                task.wait(0.01)
-
-                -- 2. Charge Rod
+                -- 2. Charge Rod (Concurrent)
                 task.spawn(function()
                     if chargeEvent then
                         chargeEvent:InvokeServer(1755848498.4834)
                     end
                 end)
 
-                task.wait(0.01)
+                -- Wait for concurrent tasks to fire off
+                task.wait(0.02) 
 
-                -- 3. Request Minigame
-                task.spawn(function()
-                    if requestMinigameEvent then
-                        requestMinigameEvent:InvokeServer(1.2854545116425, 1)
-                    end
-                end)
+                -- 3. Request Minigame (Sequential)
+                if requestMinigameEvent then
+                    requestMinigameEvent:InvokeServer(1.2854545116425, 1)
+                end
 
-                -- Wait for server to process all concurrent requests
+                -- Wait for server to process all requests
                 task.wait(autoFishMainDelay)
 
                 -- 4. Complete Fishing
