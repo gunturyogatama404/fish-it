@@ -266,15 +266,11 @@ end
 local function cleanupEnvironment()
     print("[VRAM Optimizer] 🧹 Cleaning up environment...")
 
-    -- 1. delete remote ini
-    pcall(function()
-        local remote = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/ObtainedNewFishNotification")
-        if remote then
-            remote:Destroy()
-        end
-    end)
+    -- IMPORTANT: DO NOT delete ObtainedNewFishNotification remote!
+    -- This remote is CRITICAL for v9.1 event-driven farm system
+    -- Removing it will break the auto farm functionality completely
 
-    -- 2. delete path ini
+    -- 1. delete path ini
     pcall(function()
         if workspace.CurrentCamera then
              workspace.CurrentCamera:Destroy()
