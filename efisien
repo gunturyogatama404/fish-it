@@ -4762,19 +4762,22 @@ local function startManualConfig()
     task.wait(3)  -- Wait for everything to load
 
     -- Teleport first
+    print("[Startup] Teleporting to " .. tostring(useTeleportLoc))
     teleportToNamedLocation(useTeleportLoc)
-    task.wait(2)
+    task.wait(3)  -- Increased wait time after teleport for character to stabilize
 
     -- Enable GPU Saver if configured
     if useGPUSaver then
+        print("[Startup] Enabling GPU Saver")
         enableGPUSaver()
         task.wait(0.5)
     end
 
     -- Enable Auto Farm if configured
     if useAutoFarm then
+        print("[Startup] Starting Auto Farm (event-driven system)")
         setAutoFarm(true)
-        task.wait(0.5)
+        task.wait(1)  -- Give farm system time to initialize
     end
 
     -- Enable Auto Sell if configured
@@ -4837,7 +4840,12 @@ end
 
 -- Main Farm Cycle (runs once per fish)
 farmCycle = function()
-    if not isAutoFarmOn then return end -- Safety check
+    if not isAutoFarmOn then
+        print("[v9.1 Farm Cycle] Skipped - farm is not active")
+        return
+    end
+
+    print("[v9.1 Farm Cycle] Starting new cycle...")
 
     -- Stop previous spammer for cleanliness
     if spamCompletedThread then
@@ -4846,30 +4854,48 @@ farmCycle = function()
     end
 
     -- 1. Initial Signals (sent once per cycle)
-    pcall(function()
+    local signalSuccess = pcall(function()
         -- Check if rod is equipped
         local character = player.Character
         if character then
             local tool = character:FindFirstChildOfClass("Tool")
             if not tool then
+                print("[v9.1 Farm Cycle] No rod equipped - equipping...")
                 equipRod()
                 task.wait(0.5)
+            else
+                print("[v9.1 Farm Cycle] Rod already equipped: " .. tool.Name)
             end
         end
 
         -- Send fishing signals concurrently
+        print("[v9.1 Farm Cycle] Sending equip signal...")
         task.spawn(function() if equipEvent then equipEvent:FireServer(1) end end)
         task.wait(0.01)
+
+        print("[v9.1 Farm Cycle] Sending charge signal...")
         task.spawn(function() if chargeEvent then chargeEvent:InvokeServer(1755848498.4834) end end)
         task.wait(0.01)
+
+        print("[v9.1 Farm Cycle] Sending request minigame signal...")
         task.spawn(function() if requestMinigameEvent then requestMinigameEvent:InvokeServer(1.2854545116425, 1) end end)
     end)
 
+    if not signalSuccess then
+        warn("[v9.1 Farm Cycle] Failed to send initial signals")
+    end
+
     -- 2. Start spam thread for FishingCompleted
+    print("[v9.1 Farm Cycle] Starting FishingCompleted spam thread...")
     spamCompletedThread = task.spawn(function()
+        local spamCount = 0
         while isAutoFarmOn do
             if fishingEvent then
                 fishingEvent:FireServer()
+                spamCount = spamCount + 1
+                if spamCount % 5 == 0 then  -- Log every 5 spams
+                    print("[v9.1 Farm Cycle] FishingCompleted sent (" .. spamCount .. " times)")
+                end
             end
             task.wait(0.4) -- Spam interval
         end
@@ -4915,13 +4941,16 @@ end
 -- Monitor isAutoFarmOn state and control event-driven farm
 task.spawn(function()
     local wasAutoFarmOn = isAutoFarmOn
+    print("[v9.1 Auto Farm] Monitor loop started. Initial state: " .. tostring(isAutoFarmOn))
 
     while true do
         if isAutoFarmOn and not wasAutoFarmOn then
             -- Farm was just enabled
+            print("[v9.1 Auto Farm] State changed to ON - starting event-driven farm")
             startEventDrivenFarm()
         elseif not isAutoFarmOn and wasAutoFarmOn then
             -- Farm was just disabled
+            print("[v9.1 Auto Farm] State changed to OFF - stopping event-driven farm")
             stopEventDrivenFarm()
         end
 
@@ -4930,11 +4959,8 @@ task.spawn(function()
     end
 end)
 
--- Initialize farm if AUTO_FARM is enabled on startup
-if isAutoFarmOn then
-    task.wait(2) -- Wait for game to fully load
-    startEventDrivenFarm()
-end
+-- NOTE: Farm initialization is handled by startManualConfig() after teleport
+-- This ensures the farm starts at the correct location
 
 -- Auto Sell Loop
 task.spawn(function()
