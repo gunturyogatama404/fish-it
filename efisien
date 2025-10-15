@@ -2545,9 +2545,44 @@ HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool (global)
 
 local function getNetworkEvents()
     local success, result = pcall(function()
-        local packages = replicatedStorage:WaitForChild("Packages", 10)
-        local net = packages:WaitForChild("_Index", 10):WaitForChild("sleitnick_net@0.2.0", 10):WaitForChild("net", 10)
-        
+        local packages = replicatedStorage:WaitForChild("Packages", 15)
+        local net = packages:WaitForChild("_Index", 15):WaitForChild("sleitnick_net@0.2.0", 15):WaitForChild("net", 15)
+
+        -- Get ObtainedNewFishNotification with extended timeout and retry logic
+        local newFishNotificationEvent = nil
+        local attempts = 0
+        local maxAttempts = 30  -- Try for up to 30 seconds
+
+        while not newFishNotificationEvent and attempts < maxAttempts do
+            newFishNotificationEvent = net:FindFirstChild("RE/ObtainedNewFishNotification")
+            if not newFishNotificationEvent then
+                -- Debug: List all available events on first attempt
+                if attempts == 0 then
+                    print("[Network Events] 🔍 Debugging: Listing all children in net folder...")
+                    for _, child in ipairs(net:GetChildren()) do
+                        print("[Network Events]   - " .. child.Name)
+                    end
+                end
+
+                print("[Network Events] Waiting for ObtainedNewFishNotification event... (attempt " .. (attempts + 1) .. "/" .. maxAttempts .. ")")
+                task.wait(1)
+                attempts = attempts + 1
+            end
+        end
+
+        if not newFishNotificationEvent then
+            warn("[Network Events] ⚠️ ObtainedNewFishNotification event not found after " .. maxAttempts .. " seconds!")
+            warn("[Network Events] Event-driven farm will NOT work. Please check if the event exists in the game.")
+
+            -- Final debug: List all events again
+            print("[Network Events] 🔍 Final check - all children in net folder:")
+            for _, child in ipairs(net:GetChildren()) do
+                print("[Network Events]   - " .. child.Name)
+            end
+        else
+            print("[Network Events] ✅ ObtainedNewFishNotification event found successfully!")
+        end
+
         return {
             fishingEvent = net:WaitForChild("RE/FishingCompleted", 10),
             sellEvent = net:WaitForChild("RF/SellAllItems", 10),
@@ -2566,10 +2601,10 @@ local function getNetworkEvents()
             -- For Totem Purchase Only (placement is manual)
             purchaseMarketItemEvent = net:WaitForChild("RF/PurchaseMarketItem", 10),
             -- For Event-Driven Farm System (v9.1)
-            newFishNotificationEvent = net:WaitForChild("RE/ObtainedNewFishNotification", 10)
+            newFishNotificationEvent = newFishNotificationEvent  -- Use the event we found (or nil if not found)
         }
     end)
-    
+
     if success then
         return result
     else
@@ -4900,16 +4935,25 @@ end
 
 -- Event-Driven Farm Control
 local function startEventDrivenFarm()
-    if newFishConnection then return end -- Already running
+    if newFishConnection then
+        print("[v9.1 Auto Farm] Already running, skipping restart")
+        return
+    end
 
     print("[v9.1 Auto Farm] Starting event-driven farm system...")
 
     -- Connect to ObtainedNewFishNotification event
-    if networkEvents.newFishNotificationEvent then
+    if networkEvents and networkEvents.newFishNotificationEvent then
         newFishConnection = networkEvents.newFishNotificationEvent.OnClientEvent:Connect(onNewFish)
-        print("[v9.1 Auto Farm] Event listener connected successfully")
+        print("[v9.1 Auto Farm] ✅ Event listener connected successfully to ObtainedNewFishNotification")
     else
-        warn("[v9.1 Auto Farm] Failed to connect: ObtainedNewFishNotification event not found")
+        warn("[v9.1 Auto Farm] ❌ CRITICAL: ObtainedNewFishNotification event not found!")
+        warn("[v9.1 Auto Farm] The event-driven system cannot work without this event.")
+        warn("[v9.1 Auto Farm] Possible causes:")
+        warn("[v9.1 Auto Farm]   1. Event was destroyed by cleanup function")
+        warn("[v9.1 Auto Farm]   2. Event doesn't exist in this game version")
+        warn("[v9.1 Auto Farm]   3. Event takes too long to spawn (increase timeout)")
+        warn("[v9.1 Auto Farm] Farm will NOT auto-restart after each fish!")
         return
     end
 
