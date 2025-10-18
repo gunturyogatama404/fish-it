@@ -5,7 +5,7 @@
 
 -- ====== MANUAL CONFIGURATION ======
 
-setfpscap(8) -- Set the FPS cap of the game (lower for better performance)
+setfpscap(5) -- Set the FPS cap of the game (lower for better performance)
 -- Set individual features ON/OFF
 AUTO_FARM = true
 AUTO_SELL = true
@@ -36,13 +36,13 @@ AUTO_UPGRADE_ROD = false
 AUTO_UPGRADE_BAIT = false
 
 -- ====== DELAY SETTINGS (seconds) ======
-CHARGE_ROD_DELAY = 0.1
-AUTO_FISH_DELAY = 0.2
-AUTO_SELL_DELAY = 22
-AUTO_CATCH_DELAY = 0.2
-WEATHER_ID_DELAY = 10
-WEATHER_CYCLE_DELAY = 30
-GPU_FPS_LIMIT = 8
+-- NOTE: v9.1 event-driven farm system no longer uses CHARGE_ROD_DELAY and AUTO_FISH_DELAY
+-- The new system uses fixed timing based on ObtainedNewFishNotification events
+
+AUTO_SELL_DELAY = 33       -- Used for auto sell loop
+WEATHER_ID_DELAY = 10       -- Used for weather cycling
+WEATHER_CYCLE_DELAY = 30    -- Used for weather cycling
+GPU_FPS_LIMIT = 5           -- Used for GPU saver mode
 
 -- ====== WEBHOOK CONFIGURATION ======
 discordid = "701247227959574567"
