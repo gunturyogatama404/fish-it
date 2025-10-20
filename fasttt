@@ -4797,16 +4797,9 @@ local function startManualConfig()
     teleportToNamedLocation(useTeleportLoc)
     task.wait(3)  -- Increased wait time after teleport for character to stabilize
 
-    -- Enable GPU Saver if configured
-    if useGPUSaver then
-        print("[Startup] Enabling GPU Saver")
-        enableGPUSaver()
-        task.wait(0.5)
-    end
-
     -- Enable Auto Farm if configured
     if useAutoFarm then
-        print("[Startup] Starting Auto Farm (event-driven system)")
+        print("[Startup] Starting Auto Farm (burst-cycle system)")
         setAutoFarm(true)
         task.wait(1)  -- Give farm system time to initialize
     end
@@ -4832,6 +4825,14 @@ local function startManualConfig()
     -- Enable Auto Megalodon if configured
     if useAutoMegalodon then
         setAutoMegalodon(true)
+        task.wait(0.5)
+    end
+
+    -- Enable GPU Saver if configured, AFTER other modules have started
+    if useGPUSaver then
+        print("[Startup] Enabling GPU Saver after a delay...")
+        task.wait(2) -- Add a small delay to ensure farm loops are running
+        enableGPUSaver()
         task.wait(0.5)
     end
 
