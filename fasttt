@@ -4917,7 +4917,7 @@ local function startFarm()
             farmCycle()
             
             -- Tunggu waktu yang cukup untuk siklus selesai sebelum memulai lagi.
-            task.wait(9) 
+            task.wait(6) 
         end
     end)
 
