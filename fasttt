@@ -3021,7 +3021,7 @@ function enableGPUSaver()
 
     -- V3.3: Re-disable 3D rendering
     task.wait(0.5)
-    pcall(disable3DRendering)
+    -- pcall(disable3DRendering) -- DISABLED to ensure auto-farm loop compatibility
 
     -- Store original settings
     originalSettings.GlobalShadows = Lighting.GlobalShadows
