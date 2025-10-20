@@ -4845,124 +4845,161 @@ end
 --                    AUTO LOOPS (CORE FISHING LOGIC)
 -- ====================================================================
 
--- ====== NEW AUTO FARM SYSTEM (v9.1 button farm v1) ======
+-- ====== EVENT-DRIVEN AUTO FARM SYSTEM (v9.1) ======
+-- Replaces delay-based loop with event-driven approach for better efficiency
 
---[[ Status & Kontrol Farm ]]--
+local newFishConnection = nil
 local spamCompletedThread = nil
-local burstCycleIndex = 1 -- Mulai dari siklus pertama
-local burstSequence = {3, 4, 3, 2, 4, 4} -- Urutan jumlah burst: 4x, 3x, 2x, 4x, 3x, 3x
-local chargeValues = {1760970756.8282, 1760970750.3557, 1760970843.6642, 1760970854.0988}
 
---[[ Fungsi Utama ]]--
-local function farmCycle() end -- Forward declaration
+-- Forward declaration
+local farmCycle = nil
 
---[[ Logika Siklus Farm (Satu Kali Jalan) ]]--
-farmCycle = function()
-    if not isAutoFarmOn then return end -- Pemeriksaan keamanan
+-- Event Handler: Triggered when new fish is caught
+local function onNewFish()
+    -- Stop previous spam thread to prevent overlap
+    if spamCompletedThread then
+        task.cancel(spamCompletedThread)
+        spamCompletedThread = nil
+    end
 
-    local numAttempts = burstSequence[burstCycleIndex]
-    print(string.format("[v9.1 Farm] Siklus Burst: %d attempt(s).", numAttempts))
+    -- Brief delay before starting next cycle
+    task.wait(0.1)
 
-    -- 1. Sinyal Awal (Burst)
-    pcall(function()
-        if not isAutoFarmOn then return end
-
-        -- Equip tool sekali saja di awal siklus
-        task.spawn(function() if equipEvent then equipEvent:FireServer(1) end end)
-        task.wait(0.05) -- Beri jeda sedikit setelah equip
-
-        -- Fungsi kecil untuk melakukan satu attempt
-        local function executeAttempt(attemptIndex, isFinal)
-            if not isAutoFarmOn then return end
-            -- Setiap attempt berjalan di thread-nya sendiri untuk menghindari block
-            task.spawn(function()
-                -- Pilih charge value berdasarkan index attempt, loop kembali jika perlu
-                local chargeValue = chargeValues[((attemptIndex - 1) % #chargeValues) + 1]
-                
-                task.spawn(function() if chargeEvent then chargeEvent:InvokeServer(chargeValue) end end)
-                task.wait(0.01)
-                task.spawn(function() if requestMinigameEvent then requestMinigameEvent:InvokeServer(1.2854545116425, 1) end end)
-                if not isFinal then
-                    task.wait(0.01)
-                    task.spawn(function() if cancelFishingEvent then cancelFishingEvent:InvokeServer() end end)
-                end
-            end)
-        end
-
-        -- Menjalankan burst attempts sesuai jumlah untuk siklus ini
-        if numAttempts > 0 then
-            for i = 1, numAttempts do
-                executeAttempt(i, i == numAttempts)
-                task.wait(0.03) -- Jeda singkat antar-spawn attempt
-            end
-        end
-    end)
-
-    -- Pindah ke siklus burst berikutnya untuk pemanggilan farmCycle selanjutnya
-    burstCycleIndex = burstCycleIndex + 1
-    if burstCycleIndex > #burstSequence then
-        burstCycleIndex = 1 -- Kembali ke awal (loop)
+    -- Start next cycle if farm is still active
+    if isAutoFarmOn then
+        farmCycle()
     end
 end
 
---[[ Fungsi untuk Memulai dan Menghentikan Farm ]]--
-local function startFarm()
-    if not isAutoFarmOn then return end -- Check against the global state
-    print("[v9.1 Farm] Manual loop farm dimulai.")
-    burstCycleIndex = 1 -- Reset siklus burst setiap kali farm dimulai
+-- Main Farm Cycle (runs once per fish)
+farmCycle = function()
+    if not isAutoFarmOn then
+        print("[v9.1 Farm Cycle] Skipped - farm is not active")
+        return
+    end
 
-    -- Loop untuk siklus burst
-    task.spawn(function()
-        while isAutoFarmOn do
-            farmCycle()
-            
-            -- Tunggu waktu yang cukup untuk siklus selesai sebelum memulai lagi.
-            task.wait(3.3) 
+    print("[v9.1 Farm Cycle] Starting new cycle...")
+
+    -- Stop previous spammer for cleanliness
+    if spamCompletedThread then
+        task.cancel(spamCompletedThread)
+        spamCompletedThread = nil
+    end
+
+    -- 1. Initial Signals (sent once per cycle)
+    local signalSuccess = pcall(function()
+        -- Check if rod is equipped
+        local character = player.Character
+        if character then
+            local tool = character:FindFirstChildOfClass("Tool")
+            if not tool then
+                print("[v9.1 Farm Cycle] No rod equipped - equipping...")
+                equipRod()
+                task.wait(0.5)
+            else
+                print("[v9.1 Farm Cycle] Rod already equipped: " .. tool.Name)
+            end
         end
+
+        -- Send fishing signals concurrently
+        print("[v9.1 Farm Cycle] Sending equip signal...")
+        task.spawn(function() if equipEvent then equipEvent:FireServer(1) end end)
+        task.wait(0.01)
+
+        print("[v9.1 Farm Cycle] Sending charge signal...")
+        task.spawn(function() if chargeEvent then chargeEvent:InvokeServer(1755848498.4834) end end)
+        task.wait(0.01)
+
+        print("[v9.1 Farm Cycle] Sending request minigame signal...")
+        task.spawn(function() if requestMinigameEvent then requestMinigameEvent:InvokeServer(1.2854545116425, 1) end end)
     end)
 
-    -- Loop non-stop untuk fishingCompleted
+    if not signalSuccess then
+        warn("[v9.1 Farm Cycle] Failed to send initial signals")
+    end
+
+    -- 2. Start spam thread for FishingCompleted
+    print("[v9.1 Farm Cycle] Starting FishingCompleted spam thread...")
     spamCompletedThread = task.spawn(function()
+        local spamCount = 0
         while isAutoFarmOn do
             if fishingEvent then
                 fishingEvent:FireServer()
+                spamCount = spamCount + 1
+                if spamCount % 5 == 0 then  -- Log every 5 spams
+                    print("[v9.1 Farm Cycle] FishingCompleted sent (" .. spamCount .. " times)")
+                end
             end
-            task.wait(0.1) -- Delay 0.1 detik
+            task.wait(0.4) -- Spam interval
         end
     end)
 end
 
-local function stopFarm()
-    print("[v9.1 Farm] Farm dihentikan.")
-    -- The main loop will stop by itself because isAutoFarmOn is false.
-    -- We just need to stop the spam thread.
+-- Event-Driven Farm Control
+local function startEventDrivenFarm()
+    if newFishConnection then
+        print("[v9.1 Auto Farm] Already running, skipping restart")
+        return
+    end
+
+    print("[v9.1 Auto Farm] Starting event-driven farm system...")
+
+    -- Connect to ObtainedNewFishNotification event
+    if networkEvents and networkEvents.newFishNotificationEvent then
+        newFishConnection = networkEvents.newFishNotificationEvent.OnClientEvent:Connect(onNewFish)
+        print("[v9.1 Auto Farm] ✅ Event listener connected successfully to ObtainedNewFishNotification")
+    else
+        warn("[v9.1 Auto Farm] ❌ CRITICAL: ObtainedNewFishNotification event not found!")
+        warn("[v9.1 Auto Farm] The event-driven system cannot work without this event.")
+        warn("[v9.1 Auto Farm] Possible causes:")
+        warn("[v9.1 Auto Farm]   1. Event was destroyed by cleanup function")
+        warn("[v9.1 Auto Farm]   2. Event doesn't exist in this game version")
+        warn("[v9.1 Auto Farm]   3. Event takes too long to spawn (increase timeout)")
+        warn("[v9.1 Auto Farm] Farm will NOT auto-restart after each fish!")
+        return
+    end
+
+    -- Start first cycle
+    print("[v9.1 Auto Farm] Starting first cycle...")
+    farmCycle()
+end
+
+local function stopEventDrivenFarm()
+    print("[v9.1 Auto Farm] Stopping event-driven farm system...")
+
+    -- Disconnect event listener
+    if newFishConnection then
+        newFishConnection:Disconnect()
+        newFishConnection = nil
+    end
+
+    -- Stop spam thread
     if spamCompletedThread then
         task.cancel(spamCompletedThread)
         spamCompletedThread = nil
     end
 end
 
--- Monitor isAutoFarmOn state and control the farm
+-- Monitor isAutoFarmOn state and control event-driven farm
 task.spawn(function()
     local wasAutoFarmOn = isAutoFarmOn
-    print("[v9.1 Farm] Monitor loop started. Initial state: " .. tostring(isAutoFarmOn))
+    print("[v9.1 Auto Farm] Monitor loop started. Initial state: " .. tostring(isAutoFarmOn))
 
     while true do
         if isAutoFarmOn and not wasAutoFarmOn then
             -- Farm was just enabled
-            print("[v9.1 Farm] State changed to ON - starting farm")
-            startFarm()
+            print("[v9.1 Auto Farm] State changed to ON - starting event-driven farm")
+            startEventDrivenFarm()
         elseif not isAutoFarmOn and wasAutoFarmOn then
             -- Farm was just disabled
-            print("[v9.1 Farm] State changed to OFF - stopping farm")
-            stopFarm()
+            print("[v9.1 Auto Farm] State changed to OFF - stopping event-driven farm")
+            stopEventDrivenFarm()
         end
 
         wasAutoFarmOn = isAutoFarmOn
         task.wait(0.1)
     end
 end)
-
 -- NOTE: Farm initialization is handled by startManualConfig() after teleport
 -- This ensures the farm starts at the correct location
 
