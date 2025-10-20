@@ -1260,122 +1260,6 @@ local function syncAutoArtifactState()
 end
 
 -- ====================================================================
---     NEW v9.1 AUTO FARM SYSTEM - FUNCTIONS
--- ====================================================================
-local function initializeNetworkEvents()
-    if networkEvents then return true end
-
-    local success, err = pcall(function()
-        local packages = replicatedStorage:WaitForChild("Packages", 15)
-        local net = packages:WaitForChild("_Index", 15):WaitForChild("sleitnick_net@0.2.0", 15):WaitForChild("net", 15)
-        networkEvents = {
-            fishingEvent = net:WaitForChild("RE/FishingCompleted", 10),
-            chargeEvent = net:WaitForChild("RF/ChargeFishingRod", 10),
-            requestMinigameEvent = net:WaitForChild("RF/RequestFishingMinigameStarted", 10),
-            equipEvent = net:WaitForChild("RE/EquipToolFromHotbar", 10),
-            cancelEvent = net:WaitForChild("RF/CancelFishingInputs", 10)
-        }
-    end)
-
-    if not success or not networkEvents then
-        warn("[v9.1 Farm] Gagal mendapatkan network events. Error: " .. tostring(err))
-        return false
-    end
-
-    print("[v9.1 Farm] Network events berhasil didapatkan.")
-    return true
-end
-
-local function farmCycle()
-    if not isAutoFarmOn then return end
-
-    local numAttempts = burstSequence[burstCycleIndex]
-    -- print(string.format("[v9.1 Farm] Siklus Burst: %d attempt(s).", numAttempts)) -- Optional: uncomment for debug
-
-    pcall(function()
-        if not isAutoFarmOn then return end
-
-        task.spawn(function() if networkEvents.equipEvent then networkEvents.equipEvent:FireServer(1) end end)
-        task.wait(0.05)
-
-        local function executeAttempt(attemptIndex, isFinal)
-            if not isAutoFarmOn then return end
-            task.spawn(function()
-                local chargeValue = chargeValues[((attemptIndex - 1) % #chargeValues) + 1]
-                
-                task.spawn(function() if networkEvents.chargeEvent then networkEvents.chargeEvent:InvokeServer(chargeValue) end end)
-                task.wait(0.01)
-                task.spawn(function() if networkEvents.requestMinigameEvent then networkEvents.requestMinigameEvent:InvokeServer(1.2854545116425, 1) end end)
-                if not isFinal then
-                    task.wait(0.01)
-                    task.spawn(function() if networkEvents.cancelEvent then networkEvents.cancelEvent:InvokeServer() end end)
-                end
-            end)
-        end
-
-        if numAttempts > 0 then
-            for i = 1, numAttempts do
-                executeAttempt(i, i == numAttempts)
-                task.wait(0.03)
-            end
-        end
-    end)
-
-    burstCycleIndex = burstCycleIndex + 1
-    if burstCycleIndex > #burstSequence then
-        burstCycleIndex = 1
-    end
-end
-
-local function startFarm()
-    if farmLoopThread or spamCompletedThread then
-        -- Jika sudah berjalan, hentikan dulu untuk memastikan state bersih
-        stopFarm()
-        task.wait(0.5)
-    end
-
-    if not initializeNetworkEvents() then
-        warn("[v9.1 Farm] Auto farm tidak dapat dimulai karena network events gagal.")
-        isAutoFarmOn = false -- Matikan kembali state jika gagal
-        -- Di sini Anda bisa memperbarui UI juga jika perlu
-        return
-    end
-    
-    print("[v9.1 Farm] Manual loop farm dimulai.")
-    burstCycleIndex = 1
-
-    farmLoopThread = task.spawn(function()
-        while isAutoFarmOn do
-            farmCycle()
-            task.wait(1.2) 
-        end
-    end)
-
-    spamCompletedThread = task.spawn(function()
-        while isAutoFarmOn do
-            if networkEvents and networkEvents.fishingEvent then
-                networkEvents.fishingEvent:FireServer()
-            end
-            task.wait(0.1)
-        end
-    end)
-end
-
-local function stopFarm()
-    print("[v9.1 Farm] Farm dihentikan.")
-    
-    if farmLoopThread then
-        task.cancel(farmLoopThread)
-        farmLoopThread = nil
-    end
-    if spamCompletedThread then
-        task.cancel(spamCompletedThread)
-        spamCompletedThread = nil
-    end
-end
--- ====================================================================
-
--- ====================================================================
 --                        INISIALISASI & SISA SCRIPT
 -- ====================================================================
 
@@ -1781,17 +1665,6 @@ local megalodonMissingAlertSent = false
 local megalodonEventStartedAt = 0
 local megalodonEventEndAlertSent = false
 local megalodonPreEventFarmState = nil
-
--- ====================================================================
---     NEW v9.1 AUTO FARM SYSTEM - GPU SAVER COMPATIBLE
--- ====================================================================
-local networkEvents = nil
-local farmLoopThread = nil
-local spamCompletedThread = nil
-local burstCycleIndex = 1
-local burstSequence = {3, 4, 3, 2, 4, 4} -- Sequence of burst attempts
-local chargeValues = {1760970756.8282, 1760970750.3557, 1760970843.6642, 1760970854.0988}
--- ====================================================================
 
 local HttpService = game:GetService("HttpService")
 
@@ -3285,7 +3158,7 @@ local teleportLocations = {
     { Name = "Tropical Grove",  CFrame = CFrame.new(-2095.34106, 197.199997, 3718.08008) },
     { Name = "Treasure Room",  CFrame = CFrame.new(-3606.34985, -266.57373, -1580.97339, 0.998743415, 1.12141152e-13, -0.0501160324, -1.56847693e-13, 1, -8.88127842e-13, 0.0501160324, 8.94872392e-13, 0.998743415) },
     { Name = "Kohana",  CFrame = CFrame.new(-663.904236, 3.04580712, 718.796875, -0.100799225, -2.14183729e-08, -0.994906783, -1.12300391e-08, 1, -2.03902459e-08, 0.994906783, 9.11752096e-09, -0.100799225) },
-    { Name = "Underground Cellar", CFrame = CFrame.new(2109.52148, -94.1875076, -708.609131, 0.418592364, 3.34794485e-08, -0.908174217, -5.24141512e-08, 1, 1.27060247e-08, 0.908174217, 4.22825366e-08, 0.418592364) },
+    { Name = "Underground Cellar", CFrame = CFrame.new(2108.71606, -94.1875076, -709.647827, 0.508109629, 1.18704779e-08, -0.861292422, -1.60964764e-09, 1, 1.28325759e-08, 0.861292422, -5.13397813e-09, 0.508109629) },
     { Name = "Ancient Jungle", CFrame = CFrame.new(1831.71362, 6.62499952, -299.279175, 0.213522509, 1.25553285e-07, -0.976938128, -4.32026184e-08, 1, 1.19074642e-07, 0.976938128, 1.67811702e-08, 0.213522509) },
     { Name = "Sacred Temple", CFrame = CFrame.new(1466.92151, -21.8750591, -622.835693, -0.764787138, 8.14444334e-09, 0.644283056, 2.31097452e-08, 1, 1.4791004e-08, -0.644283056, 2.6201187e-08, -0.764787138) }
 }
@@ -4768,23 +4641,16 @@ end)
 -- Quick test untuk verify optimizations worked
 
 
--- ====== ENHANCED TOGGLE FUNCTIONS & NEW FARM LOGIC ======
-
+-- ====== ENHANCED TOGGLE FUNCTIONS ====== 
 local function setAutoFarm(state)
-    if isAutoFarmOn == state then return end -- Hindari toggle berulang
-
     isAutoFarmOn = state
     updateConfigField("autoFarm", state)
-
+    
     if state then
-        -- Memulai farm
-        startFarm()
-        equipRod() -- Equip pancing saat mulai
+        equipRod() -- Auto equip rod when starting
     else
-        -- Menghentikan farm
-        stopFarm()
-        cancelFishing() -- Batalkan pancing untuk memastikan berhenti total
-        unequipRod() -- Lepas pancing saat berhenti
+        cancelFishing()
+        unequipRod() -- Auto unequip when stopping
     end
 end
 
@@ -4977,7 +4843,126 @@ end
 --                    AUTO LOOPS (CORE FISHING LOGIC)
 -- ====================================================================
 
--- The old event-driven farm system was here. It has been replaced by the new logic in the setAutoFarm function.
+-- ====== NEW AUTO FARM SYSTEM (v9.1 button farm v1) ======
+
+--[[ Status & Kontrol Farm ]]--
+local spamCompletedThread = nil
+local burstCycleIndex = 1 -- Mulai dari siklus pertama
+local burstSequence = {3, 4, 3, 2, 4, 4} -- Urutan jumlah burst: 4x, 3x, 2x, 4x, 3x, 3x
+local chargeValues = {1760970756.8282, 1760970750.3557, 1760970843.6642, 1760970854.0988}
+
+--[[ Fungsi Utama ]]--
+local function farmCycle() end -- Forward declaration
+
+--[[ Logika Siklus Farm (Satu Kali Jalan) ]]--
+farmCycle = function()
+    if not isAutoFarmOn then return end -- Pemeriksaan keamanan
+
+    local numAttempts = burstSequence[burstCycleIndex]
+    print(string.format("[v9.1 Farm] Siklus Burst: %d attempt(s).", numAttempts))
+
+    -- 1. Sinyal Awal (Burst)
+    pcall(function()
+        if not isAutoFarmOn then return end
+
+        -- Equip tool sekali saja di awal siklus
+        task.spawn(function() if equipEvent then equipEvent:FireServer(1) end end)
+        task.wait(0.05) -- Beri jeda sedikit setelah equip
+
+        -- Fungsi kecil untuk melakukan satu attempt
+        local function executeAttempt(attemptIndex, isFinal)
+            if not isAutoFarmOn then return end
+            -- Setiap attempt berjalan di thread-nya sendiri untuk menghindari block
+            task.spawn(function()
+                -- Pilih charge value berdasarkan index attempt, loop kembali jika perlu
+                local chargeValue = chargeValues[((attemptIndex - 1) % #chargeValues) + 1]
+                
+                task.spawn(function() if chargeEvent then chargeEvent:InvokeServer(chargeValue) end end)
+                task.wait(0.01)
+                task.spawn(function() if requestMinigameEvent then requestMinigameEvent:InvokeServer(1.2854545116425, 1) end end)
+                if not isFinal then
+                    task.wait(0.01)
+                    task.spawn(function() if cancelFishingEvent then cancelFishingEvent:InvokeServer() end end)
+                end
+            end)
+        end
+
+        -- Menjalankan burst attempts sesuai jumlah untuk siklus ini
+        if numAttempts > 0 then
+            for i = 1, numAttempts do
+                executeAttempt(i, i == numAttempts)
+                task.wait(0.03) -- Jeda singkat antar-spawn attempt
+            end
+        end
+    end)
+
+    -- Pindah ke siklus burst berikutnya untuk pemanggilan farmCycle selanjutnya
+    burstCycleIndex = burstCycleIndex + 1
+    if burstCycleIndex > #burstSequence then
+        burstCycleIndex = 1 -- Kembali ke awal (loop)
+    end
+end
+
+--[[ Fungsi untuk Memulai dan Menghentikan Farm ]]--
+local function startFarm()
+    if not isAutoFarmOn then return end -- Check against the global state
+    print("[v9.1 Farm] Manual loop farm dimulai.")
+    burstCycleIndex = 1 -- Reset siklus burst setiap kali farm dimulai
+
+    -- Loop untuk siklus burst
+    task.spawn(function()
+        while isAutoFarmOn do
+            farmCycle()
+            
+            -- Tunggu waktu yang cukup untuk siklus selesai sebelum memulai lagi.
+            task.wait(1.2) 
+        end
+    end)
+
+    -- Loop non-stop untuk fishingCompleted
+    spamCompletedThread = task.spawn(function()
+        while isAutoFarmOn do
+            if fishingEvent then
+                fishingEvent:FireServer()
+            end
+            task.wait(0.1) -- Delay 0.1 detik
+        end
+    end)
+end
+
+local function stopFarm()
+    print("[v9.1 Farm] Farm dihentikan.")
+    -- The main loop will stop by itself because isAutoFarmOn is false.
+    -- We just need to stop the spam thread.
+    if spamCompletedThread then
+        task.cancel(spamCompletedThread)
+        spamCompletedThread = nil
+    end
+end
+
+-- Monitor isAutoFarmOn state and control the farm
+task.spawn(function()
+    local wasAutoFarmOn = isAutoFarmOn
+    print("[v9.1 Farm] Monitor loop started. Initial state: " .. tostring(isAutoFarmOn))
+
+    while true do
+        if isAutoFarmOn and not wasAutoFarmOn then
+            -- Farm was just enabled
+            print("[v9.1 Farm] State changed to ON - starting farm")
+            startFarm()
+        elseif not isAutoFarmOn and wasAutoFarmOn then
+            -- Farm was just disabled
+            print("[v9.1 Farm] State changed to OFF - stopping farm")
+            stopFarm()
+        end
+
+        wasAutoFarmOn = isAutoFarmOn
+        task.wait(0.1)
+    end
+end)
+
+-- NOTE: Farm initialization is handled by startManualConfig() after teleport
+-- This ensures the farm starts at the correct location
 
 -- Auto Sell Loop
 task.spawn(function()
