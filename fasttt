@@ -270,12 +270,12 @@ local function cleanupEnvironment()
     -- This remote is CRITICAL for v9.1 event-driven farm system
     -- Removing it will break the auto farm functionality completely
 
-    -- 1. delete path ini (DISABLED: Destroying the camera breaks auto-farm)
-    -- pcall(function()
-    --     if workspace.CurrentCamera then
-    --          workspace.CurrentCamera:Destroy()
-    --     end
-    -- end)
+    -- 1. delete path ini
+    pcall(function()
+        if workspace.CurrentCamera then
+             workspace.CurrentCamera:Destroy()
+        end
+    end)
 
     -- 4. delete seluruh children nya
     pcall(function()
@@ -323,8 +323,7 @@ local function applyMaximumVRAMOptimization()
 
     -- Phase 5: DISABLE 3D RENDERING (Nuclear option - maximum VRAM save)
     task.wait(2) -- Wait for cleanup to complete
-    -- disable3DRendering() -- DISABLED: This breaks auto-farm functionality
-    print("[VRAM Optimizer] ⚠️ 3D Rendering NOT disabled to ensure auto-farm compatibility.")
+    disable3DRendering()
 
     print("[VRAM Optimizer] ================================================")
     print("[VRAM Optimizer] ✅ MAXIMUM VRAM OPTIMIZATION COMPLETED!")
@@ -2544,28 +2543,6 @@ end
 HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool (global)
 
 
-
--- ====== DYNAMIC DELAY FUNCTION FOR FPS SCALING ======
-local function getDynamicDelay(baseDelay)
-    -- Target 60 FPS as the baseline for delays.
-    local baselineFPS = 60
-    -- Use the GPU saver's FPS limit if enabled, otherwise default to the baseline.
-    local currentTargetFPS = (gpuSaverEnabled and GPU_FPS_LIMIT) or baselineFPS
-
-    -- Prevent division by zero or negative FPS values.
-    if currentTargetFPS <= 0 then
-        currentTargetFPS = 1
-    end
-
-    -- Calculate the scaling multiplier. If FPS is lower, the multiplier is higher.
-    local multiplier = baselineFPS / currentTargetFPS
-    
-    -- Return the scaled delay, but ensure it's never shorter than the original base delay.
-    local scaledDelay = baseDelay * multiplier
-    return math.max(baseDelay, scaledDelay)
-end
-
-
 local function getNetworkEvents()
     local success, result = pcall(function()
         local packages = replicatedStorage:WaitForChild("Packages", 15)
@@ -3044,7 +3021,7 @@ function enableGPUSaver()
 
     -- V3.3: Re-disable 3D rendering
     task.wait(0.5)
-    -- pcall(disable3DRendering) -- DISABLED to ensure auto-farm loop compatibility
+    pcall(disable3DRendering)
 
     -- Store original settings
     originalSettings.GlobalShadows = Lighting.GlobalShadows
@@ -3067,7 +3044,7 @@ function enableGPUSaver()
         end
 
         pcall(function() setfpscap(GPU_FPS_LIMIT) end) -- Limit FPS based on GPU_FPS_LIMIT
-        -- StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false) -- DISABLED: This breaks auto-farm functionality.
+        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
         -- workspace.CurrentCamera.FieldOfView is not set because cleanupEnvironment() destroys the camera.
     end)
 
@@ -3181,7 +3158,7 @@ local teleportLocations = {
     { Name = "Tropical Grove",  CFrame = CFrame.new(-2095.34106, 197.199997, 3718.08008) },
     { Name = "Treasure Room",  CFrame = CFrame.new(-3606.34985, -266.57373, -1580.97339, 0.998743415, 1.12141152e-13, -0.0501160324, -1.56847693e-13, 1, -8.88127842e-13, 0.0501160324, 8.94872392e-13, 0.998743415) },
     { Name = "Kohana",  CFrame = CFrame.new(-663.904236, 3.04580712, 718.796875, -0.100799225, -2.14183729e-08, -0.994906783, -1.12300391e-08, 1, -2.03902459e-08, 0.994906783, 9.11752096e-09, -0.100799225) },
-    { Name = "Underground Cellar", CFrame = CFrame.new(2108.71606, -94.1875076, -709.647827, 0.508109629, 1.18704779e-08, -0.861292422, -1.60964764e-09, 1, 1.28325759e-08, 0.861292422, -5.13397813e-09, 0.508109629) },
+    { Name = "Underground Cellar", CFrame = CFrame.new(2109.52148, -94.1875076, -708.609131, 0.418592364, 3.34794485e-08, -0.908174217, -5.24141512e-08, 1, 1.27060247e-08, 0.908174217, 4.22825366e-08, 0.418592364) },
     { Name = "Ancient Jungle", CFrame = CFrame.new(1831.71362, 6.62499952, -299.279175, 0.213522509, 1.25553285e-07, -0.976938128, -4.32026184e-08, 1, 1.19074642e-07, 0.976938128, 1.67811702e-08, 0.213522509) },
     { Name = "Sacred Temple", CFrame = CFrame.new(1466.92151, -21.8750591, -622.835693, -0.764787138, 8.14444334e-09, 0.644283056, 2.31097452e-08, 1, 1.4791004e-08, -0.644283056, 2.6201187e-08, -0.764787138) }
 }
@@ -4820,9 +4797,16 @@ local function startManualConfig()
     teleportToNamedLocation(useTeleportLoc)
     task.wait(3)  -- Increased wait time after teleport for character to stabilize
 
+    -- Enable GPU Saver if configured
+    if useGPUSaver then
+        print("[Startup] Enabling GPU Saver")
+        enableGPUSaver()
+        task.wait(0.5)
+    end
+
     -- Enable Auto Farm if configured
     if useAutoFarm then
-        print("[Startup] Starting Auto Farm (burst-cycle system)")
+        print("[Startup] Starting Auto Farm (event-driven system)")
         setAutoFarm(true)
         task.wait(1)  -- Give farm system time to initialize
     end
@@ -4851,14 +4835,6 @@ local function startManualConfig()
         task.wait(0.5)
     end
 
-    -- Enable GPU Saver if configured, AFTER other modules have started
-    if useGPUSaver then
-        print("[Startup] Enabling GPU Saver after a delay...")
-        task.wait(2) -- Add a small delay to ensure farm loops are running
-        enableGPUSaver()
-        task.wait(0.5)
-    end
-
     -- Auto Upgrade Rod/Bait already enabled in main startup sequence
     -- (Initial equip runs BEFORE this function is called)
 end
@@ -4867,13 +4843,9 @@ end
 --                    AUTO LOOPS (CORE FISHING LOGIC)
 -- ====================================================================
 
--- ====== NEW AUTO FARM SYSTEM (v9.1 button farm v1) - DYNAMIC DELAY MODIFIED ======
+-- ====== AUTO FARM SYSTEM (v9.1 no burst) ======
 
---[[ Status & Kontrol Farm ]]--
 local spamCompletedThread = nil
-local burstCycleIndex = 1 -- Mulai dari siklus pertama
-local burstSequence = {3, 4, 3, 2, 4, 4} -- Urutan jumlah burst: 4x, 3x, 2x, 4x, 3x, 3x
-local chargeValues = {1760970756.8282, 1760970750.3557, 1760970843.6642, 1760970854.0988}
 
 --[[ Fungsi Utama ]]--
 local function farmCycle() end -- Forward declaration
@@ -4882,82 +4854,62 @@ local function farmCycle() end -- Forward declaration
 farmCycle = function()
     if not isAutoFarmOn then return end -- Pemeriksaan keamanan
 
-    local numAttempts = burstSequence[burstCycleIndex]
-    print(string.format("[v9.1 Farm] Siklus Burst: %d attempt(s).", numAttempts))
-
-    -- 1. Sinyal Awal (Burst)
-    pcall(function()
-        if not isAutoFarmOn then return end
-
-        -- Equip tool sekali saja di awal siklus
-        task.spawn(function() if equipEvent then equipEvent:FireServer(1) end end)
-        task.wait(getDynamicDelay(0.05)) -- DYNAMIC DELAY
-
-        -- Fungsi kecil untuk melakukan satu attempt
-        local function executeAttempt(attemptIndex, isFinal)
-            if not isAutoFarmOn then return end
-            -- Setiap attempt berjalan di thread-nya sendiri untuk menghindari block
-            task.spawn(function()
-                -- Pilih charge value berdasarkan index attempt, loop kembali jika perlu
-                local chargeValue = chargeValues[((attemptIndex - 1) % #chargeValues) + 1]
-                
-                task.spawn(function() if chargeEvent then chargeEvent:InvokeServer(chargeValue) end end)
-                task.wait(getDynamicDelay(0.01)) -- DYNAMIC DELAY
-                task.spawn(function() if requestMinigameEvent then requestMinigameEvent:InvokeServer(1.2854545116425, 1) end end)
-                if not isFinal then
-                    task.wait(getDynamicDelay(0.01)) -- DYNAMIC DELAY
-                    task.spawn(function() if cancelFishingEvent then cancelFishingEvent:InvokeServer() end end)
-                end
-            end)
-        end
-
-        -- Menjalankan burst attempts sesuai jumlah untuk siklus ini
-        if numAttempts > 0 then
-            for i = 1, numAttempts do
-                executeAttempt(i, i == numAttempts)
-                task.wait(getDynamicDelay(0.03)) -- DYNAMIC DELAY
-            end
-        end
-    end)
-
-    -- Pindah ke siklus burst berikutnya untuk pemanggilan farmCycle selanjutnya
-    burstCycleIndex = burstCycleIndex + 1
-    if burstCycleIndex > #burstSequence then
-        burstCycleIndex = 1 -- Kembali ke awal (loop)
+    -- Hentikan spammer sebelumnya untuk kebersihan
+    if spamCompletedThread then
+        task.cancel(spamCompletedThread)
+        spamCompletedThread = nil
     end
-end
 
---[[ Fungsi untuk Memulai dan Menghentikan Farm ]]--
-local function startFarm()
-    if not isAutoFarmOn then return end -- Check against the global state
-    print("[v9.1 Farm] Manual loop farm dimulai.")
-    burstCycleIndex = 1 -- Reset siklus burst setiap kali farm dimulai
+    -- 1. Sinyal Awal
+    pcall(function()
+        -- Equip tool sekali saja di awal untuk mencegah race condition
+        task.spawn(function() if equipEvent then equipEvent:FireServer(1) end end)
+        task.wait(0.01) -- Beri jeda sedikit setelah equip
 
-    -- Loop untuk siklus burst
-    task.spawn(function()
-        while isAutoFarmOn do
-            farmCycle()
-            
-            -- Tunggu waktu yang cukup untuk siklus selesai sebelum memulai lagi.
-            task.wait(getDynamicDelay(1.2)) -- DYNAMIC DELAY
-        end
+        -- Attempt #1
+        task.spawn(function() if chargeEvent then chargeEvent:InvokeServer(1755848498.4834) end end)
+        task.wait(0.01)
+        task.spawn(function() if requestMinigameEvent then requestMinigameEvent:InvokeServer(1.2854545116425, 1) end end)
+        task.wait(0.01)
+        task.spawn(function() if cancelFishingEvent then cancelFishingEvent:InvokeServer() end end)
+        task.wait(0.01)
+
+        -- Attempt #2 (foreground)
+        task.spawn(function() if chargeEvent then chargeEvent:InvokeServer(1755848498.4834) end end)
+        task.wait(0.01)
+        task.spawn(function() if requestMinigameEvent then requestMinigameEvent:InvokeServer(1.2854545116425, 1) end end)
     end)
 
-    -- Loop non-stop untuk fishingCompleted
+    -- 2. Mulai spam sinyal "fishingCompleted"
     spamCompletedThread = task.spawn(function()
         while isAutoFarmOn do
             if fishingEvent then
                 fishingEvent:FireServer()
             end
-            task.wait(getDynamicDelay(0.1)) -- DYNAMIC DELAY
+            task.wait(0.01)
+        end
+    end)
+end
+
+--[[ Fungsi untuk Memulai dan Menghentikan Farm ]]--
+local function startFarm()
+    if not isAutoFarmOn then return end -- Check against the global state
+    print("[v9.1 No-Burst Farm] Manual loop farm dimulai.")
+
+    -- Loop manual
+    task.spawn(function()
+        while isAutoFarmOn do
+            farmCycle()
+            
+            -- Tunggu waktu yang cukup untuk siklus selesai sebelum memulai lagi.
+            -- Nilai 1 detik adalah default dari skrip referensi.
+            task.wait(1) 
         end
     end)
 end
 
 local function stopFarm()
-    print("[v9.1 Farm] Farm dihentikan.")
-    -- The main loop will stop by itself because isAutoFarmOn is false.
-    -- We just need to stop the spam thread.
+    print("[v9.1 No-Burst Farm] Farm dihentikan.")
     if spamCompletedThread then
         task.cancel(spamCompletedThread)
         spamCompletedThread = nil
@@ -4967,16 +4919,14 @@ end
 -- Monitor isAutoFarmOn state and control the farm
 task.spawn(function()
     local wasAutoFarmOn = isAutoFarmOn
-    print("[v9.1 Farm] Monitor loop started. Initial state: " .. tostring(isAutoFarmOn))
+    print("[v9.1 No-Burst Farm] Monitor loop started. Initial state: " .. tostring(isAutoFarmOn))
 
     while true do
         if isAutoFarmOn and not wasAutoFarmOn then
-            -- Farm was just enabled
-            print("[v9.1 Farm] State changed to ON - starting farm")
+            print("[v9.1 No-Burst Farm] State changed to ON - starting farm")
             startFarm()
         elseif not isAutoFarmOn and wasAutoFarmOn then
-            -- Farm was just disabled
-            print("[v9.1 Farm] State changed to OFF - stopping farm")
+            print("[v9.1 No-Burst Farm] State changed to OFF - stopping farm")
             stopFarm()
         end
 
@@ -4984,6 +4934,7 @@ task.spawn(function()
         task.wait(0.1)
     end
 end)
+
 -- NOTE: Farm initialization is handled by startManualConfig() after teleport
 -- This ensures the farm starts at the correct location
 
