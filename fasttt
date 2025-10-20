@@ -270,12 +270,12 @@ local function cleanupEnvironment()
     -- This remote is CRITICAL for v9.1 event-driven farm system
     -- Removing it will break the auto farm functionality completely
 
-    -- 1. delete path ini
-    pcall(function()
-        if workspace.CurrentCamera then
-             workspace.CurrentCamera:Destroy()
-        end
-    end)
+    -- 1. delete path ini (DISABLED: Destroying the camera breaks auto-farm)
+    -- pcall(function()
+    --     if workspace.CurrentCamera then
+    --          workspace.CurrentCamera:Destroy()
+    --     end
+    -- end)
 
     -- 4. delete seluruh children nya
     pcall(function()
@@ -323,7 +323,8 @@ local function applyMaximumVRAMOptimization()
 
     -- Phase 5: DISABLE 3D RENDERING (Nuclear option - maximum VRAM save)
     task.wait(2) -- Wait for cleanup to complete
-    disable3DRendering()
+    -- disable3DRendering() -- DISABLED: This breaks auto-farm functionality
+    print("[VRAM Optimizer] ⚠️ 3D Rendering NOT disabled to ensure auto-farm compatibility.")
 
     print("[VRAM Optimizer] ================================================")
     print("[VRAM Optimizer] ✅ MAXIMUM VRAM OPTIMIZATION COMPLETED!")
