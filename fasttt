@@ -3045,7 +3045,7 @@ function enableGPUSaver()
         end
 
         pcall(function() setfpscap(GPU_FPS_LIMIT) end) -- Limit FPS based on GPU_FPS_LIMIT
-        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
+        -- StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false) -- DISABLED: This breaks auto-farm functionality.
         -- workspace.CurrentCamera.FieldOfView is not set because cleanupEnvironment() destroys the camera.
     end)
 
