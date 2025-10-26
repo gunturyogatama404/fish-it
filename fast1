@@ -266,15 +266,11 @@ end
 local function cleanupEnvironment()
     print("[VRAM Optimizer] 🧹 Cleaning up environment...")
 
-    -- 1. delete remote ini
-    pcall(function()
-        local remote = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/ObtainedNewFishNotification")
-        if remote then
-            remote:Destroy()
-        end
-    end)
+    -- IMPORTANT: DO NOT delete ObtainedNewFishNotification remote!
+    -- This remote is CRITICAL for v9.1 event-driven farm system
+    -- Removing it will break the auto farm functionality completely
 
-    -- 2. delete path ini
+    -- 1. delete path ini
     pcall(function()
         if workspace.CurrentCamera then
              workspace.CurrentCamera:Destroy()
@@ -555,6 +551,9 @@ do
             ["Giant Squid"] = true,
             ["Ghost Shark"] = true,
             ["Robot Kraken"] = true,
+            ["Zombie Shark"] = true,
+            ["Dead Zombie Shark"] = true,
+            ["Zombie Megalodon"] = true,
             ["Bone Whale"] = true,
             ["Elshark Gran Maja"] = true,
             ["Worm Fish"] = true,
@@ -1714,17 +1713,10 @@ local defaultConfig = {
     autoCatch = false,
     autoWeather = false,
     autoMegalodon = false,
-    activePreset = "none",
     gpuSaver = false,
     teleportLocation = "Sisyphus Statue",
     autoUpgradeRod = false,
-    autoUpgradeBait = false,
-    chargeFishingDelay = 0.01,
-    autoFishDelay = 0.9,
-    autoSellDelay = 45,
-    autoCatchDelay = 0.2,
-    weatherIdDelay = 33,
-    weatherCycleDelay = 100
+    autoUpgradeBait = false
 }
 local config = {}
 for key, value in pairs(defaultConfig) do
@@ -1902,143 +1894,19 @@ local function syncConfigFromStates()
     config.autoWeather = isAutoWeatherOn
     config.autoMegalodon = isAutoMegalodonOn
     config.gpuSaver = gpuSaverEnabled
-    config.chargeFishingDelay = chargeFishingDelay
-    config.autoFishMainDelay = autoFishMainDelay
-    config.autoSellDelay = autoSellDelay
-    config.autoCatchDelay = autoCatchDelay
-    config.weatherIdDelay = weatherIdDelay
-    config.weatherCycleDelay = weatherCycleDelay
 end
 
-local function applyDelayConfig()
-    if not config then
-        return
-    end
 
-    local previousState = isApplyingConfig
-    local updated = false
-    isApplyingConfig = true
-
-    local function applyField(field, minValue, defaultValue)
-        local value = tonumber(config[field])
-        if value == nil or value == 0 then
-            value = defaultValue or 0.1
-            updated = true
-        end
-        -- Ensure we have a valid number before math.max
-        value = tonumber(value) or defaultValue or 0.1
-        local clamped = math.max(minValue, value)
-        if clamped ~= value then
-            updated = true
-        end
-        config[field] = clamped
-        return clamped
-    end
-
-    chargeFishingDelay = applyField("chargeFishingDelay", 0.01, defaultConfig.chargeFishingDelay)
-    autoFishMainDelay = applyField("autoFishDelay", 0.1, defaultConfig.autoFishDelay)
-    autoSellDelay = applyField("autoSellDelay", 30, defaultConfig.autoSellDelay)
-    autoCatchDelay = applyField("autoCatchDelay", 0.01, defaultConfig.autoCatchDelay)
-    weatherIdDelay = applyField("weatherIdDelay", 1, defaultConfig.weatherIdDelay)
-    weatherCycleDelay = applyField("weatherCycleDelay", 10, defaultConfig.weatherCycleDelay)
-
-    if updated then
-        pcall(saveConfig)
-    end
-
-    isApplyingConfig = previousState
-end
-
-local function roundDelay(value)
-    return math.floor(value * 100 + 0.5) / 100
-end
-
-local function setChargeFishingDelay(value)
-    local numeric = tonumber(value) or chargeFishingDelay
-    local clamped = math.max(0.01, numeric)
-    clamped = roundDelay(clamped)
-    if math.abs(clamped - chargeFishingDelay) < 0.001 then
-        return
-    end
-    chargeFishingDelay = clamped
-    updateConfigField("chargeFishingDelay", clamped)
-end
-
-local function setAutoFishMainDelay(value)
-    local numeric = tonumber(value) or autoFishMainDelay
-    local clamped = math.max(0.1, numeric)
-    clamped = roundDelay(clamped)
-    if math.abs(clamped - autoFishMainDelay) < 0.001 then
-        return
-    end
-    autoFishMainDelay = clamped
-    updateConfigField("autoFishMainDelay", clamped)
-end
-
-local function setAutoSellDelay(value)
-    local numeric = tonumber(value) or autoSellDelay
-    local clamped = math.max(1, numeric)
-    clamped = roundDelay(clamped)
-    if math.abs(clamped - autoSellDelay) < 0.001 then
-        return
-    end
-    autoSellDelay = clamped
-    updateConfigField("autoSellDelay", clamped)
-end
-
-local function setAutoCatchDelay(value)
-    local numeric = tonumber(value) or autoCatchDelay
-    local clamped = math.max(0.1, numeric)
-    clamped = roundDelay(clamped)
-    if math.abs(clamped - autoCatchDelay) < 0.001 then
-        return
-    end
-    autoCatchDelay = clamped
-    updateConfigField("autoCatchDelay", clamped)
-end
-
-local function setWeatherIdDelay(value)
-    local numeric = tonumber(value) or weatherIdDelay
-    local clamped = math.max(1, numeric)
-    clamped = roundDelay(clamped)
-    if math.abs(clamped - weatherIdDelay) < 0.001 then
-        return
-    end
-    weatherIdDelay = clamped
-    updateConfigField("weatherIdDelay", clamped)
-end
-
-local function setWeatherCycleDelay(value)
-    local numeric = tonumber(value) or weatherCycleDelay
-    local clamped = math.max(10, numeric)
-    clamped = roundDelay(clamped)
-    if math.abs(clamped - weatherCycleDelay) < 0.001 then
-        return
-    end
-    weatherCycleDelay = clamped
-    updateConfigField("weatherCycleDelay", clamped)
-end
 
 -- Try to migrate old config first, then load current config
 if not migrateOldConfig() then
     loadConfig()
 end
 
-applyDelayConfig()
-
 -- Player identification info
 
 local autoMegalodonToggle
-local autoPreset1Toggle
-local autoPreset2Toggle
-local autoPreset3Toggle
 local gpuSaverToggle
-local chargeFishingSlider
-local autoFishMainSlider
-local autoSellSlider
-local autoCatchSlider
-local weatherIdSlider
-local weatherCycleSlider
 local upgradeRodToggle
 local upgradeBaitToggle
 
@@ -2549,9 +2417,44 @@ HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool (global)
 
 local function getNetworkEvents()
     local success, result = pcall(function()
-        local packages = replicatedStorage:WaitForChild("Packages", 10)
-        local net = packages:WaitForChild("_Index", 10):WaitForChild("sleitnick_net@0.2.0", 10):WaitForChild("net", 10)
-        
+        local packages = replicatedStorage:WaitForChild("Packages", 15)
+        local net = packages:WaitForChild("_Index", 15):WaitForChild("sleitnick_net@0.2.0", 15):WaitForChild("net", 15)
+
+        -- Get ObtainedNewFishNotification with extended timeout and retry logic
+        local newFishNotificationEvent = nil
+        local attempts = 0
+        local maxAttempts = 30  -- Try for up to 30 seconds
+
+        while not newFishNotificationEvent and attempts < maxAttempts do
+            newFishNotificationEvent = net:FindFirstChild("RE/ObtainedNewFishNotification")
+            if not newFishNotificationEvent then
+                -- Debug: List all available events on first attempt
+                if attempts == 0 then
+                    print("[Network Events] 🔍 Debugging: Listing all children in net folder...")
+                    for _, child in ipairs(net:GetChildren()) do
+                        print("[Network Events]   - " .. child.Name)
+                    end
+                end
+
+                print("[Network Events] Waiting for ObtainedNewFishNotification event... (attempt " .. (attempts + 1) .. "/" .. maxAttempts .. ")")
+                task.wait(1)
+                attempts = attempts + 1
+            end
+        end
+
+        if not newFishNotificationEvent then
+            warn("[Network Events] ⚠️ ObtainedNewFishNotification event not found after " .. maxAttempts .. " seconds!")
+            warn("[Network Events] Event-driven farm will NOT work. Please check if the event exists in the game.")
+
+            -- Final debug: List all events again
+            print("[Network Events] 🔍 Final check - all children in net folder:")
+            for _, child in ipairs(net:GetChildren()) do
+                print("[Network Events]   - " .. child.Name)
+            end
+        else
+            print("[Network Events] ✅ ObtainedNewFishNotification event found successfully!")
+        end
+
         return {
             fishingEvent = net:WaitForChild("RE/FishingCompleted", 10),
             sellEvent = net:WaitForChild("RF/SellAllItems", 10),
@@ -2568,10 +2471,12 @@ local function getNetworkEvents()
             equipItemEvent = net:WaitForChild("RE/EquipItem", 10),
             equipBaitEvent = net:WaitForChild("RE/EquipBait", 10),
             -- For Totem Purchase Only (placement is manual)
-            purchaseMarketItemEvent = net:WaitForChild("RF/PurchaseMarketItem", 10)
+            purchaseMarketItemEvent = net:WaitForChild("RF/PurchaseMarketItem", 10),
+            -- For Event-Driven Farm System (v9.1)
+            newFishNotificationEvent = newFishNotificationEvent  -- Use the event we found (or nil if not found)
         }
     end)
-    
+
     if success then
         return result
     else
@@ -3123,9 +3028,10 @@ local teleportLocations = {
     { Name = "Lost Isle",  CFrame = CFrame.new(-3618.15698, 240.836655, -1317.45801, 1, 0, 0, 0, 1, 0, 0, 0, 1) },
     { Name = "Weather Machine",  CFrame = CFrame.new(-1488.51196, 83.1732635, 1876.30298, 1, 0, 0, 0, 1, 0, 0, 0, 1) },
     { Name = "Tropical Grove",  CFrame = CFrame.new(-2095.34106, 197.199997, 3718.08008) },
+    { Name = "Mount Hallow",  CFrame = CFrame.new(2136.62305, 78.9163895, 3272.50439, -0.977613986, -1.77645827e-08, 0.210406482, -2.42338203e-08, 1, -2.81680421e-08, -0.210406482, -3.26364251e-08, -0.977613986) },
     { Name = "Treasure Room",  CFrame = CFrame.new(-3606.34985, -266.57373, -1580.97339, 0.998743415, 1.12141152e-13, -0.0501160324, -1.56847693e-13, 1, -8.88127842e-13, 0.0501160324, 8.94872392e-13, 0.998743415) },
     { Name = "Kohana",  CFrame = CFrame.new(-663.904236, 3.04580712, 718.796875, -0.100799225, -2.14183729e-08, -0.994906783, -1.12300391e-08, 1, -2.03902459e-08, 0.994906783, 9.11752096e-09, -0.100799225) },
-    { Name = "Underground Cellar", CFrame = CFrame.new(2108.71606, -94.1875076, -709.647827, 0.508109629, 1.18704779e-08, -0.861292422, -1.60964764e-09, 1, 1.28325759e-08, 0.861292422, -5.13397813e-09, 0.508109629) },
+    { Name = "Underground Cellar", CFrame = CFrame.new(2109.52148, -94.1875076, -708.609131, 0.418592364, 3.34794485e-08, -0.908174217, -5.24141512e-08, 1, 1.27060247e-08, 0.908174217, 4.22825366e-08, 0.418592364) },
     { Name = "Ancient Jungle", CFrame = CFrame.new(1831.71362, 6.62499952, -299.279175, 0.213522509, 1.25553285e-07, -0.976938128, -4.32026184e-08, 1, 1.19074642e-07, 0.976938128, 1.67811702e-08, 0.213522509) },
     { Name = "Sacred Temple", CFrame = CFrame.new(1466.92151, -21.8750591, -622.835693, -0.764787138, 8.14444334e-09, 0.644283056, 2.31097452e-08, 1, 1.4791004e-08, -0.644283056, 2.6201187e-08, -0.764787138) }
 }
@@ -3188,178 +3094,6 @@ local function runPresetSequence(steps)
     end
 end
 
-local function enablePreset(presetKey, locationName)
-    task.spawn(function()
-        local steps = {}
-
-        if config.activePreset and config.activePreset ~= "none" and config.activePreset ~= presetKey then
-            table.insert(steps, function() 
-                if autoMegalodonToggle then 
-                    autoMegalodonToggle:UpdateToggle(nil, false)
-                end
-            end)
-            table.insert(steps, function() 
-                if autoWeatherToggle then 
-                    autoWeatherToggle:UpdateToggle(nil, false)
-                end
-            end)
-            table.insert(steps, function() 
-                if autoCatchToggle then 
-                    autoCatchToggle:UpdateToggle(nil, false)
-                end
-            end)
-            table.insert(steps, function() 
-                if autoSellToggle then 
-                    autoSellToggle:UpdateToggle(nil, false)
-                end
-            end)
-            table.insert(steps, function() 
-                if autoFarmToggle then 
-                    autoFarmToggle:UpdateToggle(nil, false)
-                end
-            end)
-        end
-
-        table.insert(steps, function() 
-            if autoFarmToggle then 
-                autoFarmToggle:UpdateToggle(nil, true)
-            end
-        end)
-        table.insert(steps, function() 
-            if autoSellToggle then 
-                autoSellToggle:UpdateToggle(nil, true)
-            end
-        end)
-        table.insert(steps, function() 
-            if autoCatchToggle then 
-                autoCatchToggle:UpdateToggle(nil, true)
-            end
-        end)
-
-        -- Only enable weather and megalodon for auto1 and auto2, not auto3
-        if presetKey ~= "auto3" then
-            table.insert(steps, function() 
-                if autoWeatherToggle then 
-                    autoWeatherToggle:UpdateToggle(nil, true)
-                end
-            end)
-            table.insert(steps, function() 
-                if autoMegalodonToggle then 
-                    autoMegalodonToggle:UpdateToggle(nil, true)
-                end
-            end)
-        end
-
-        table.insert(steps, function()
-            enableGPUSaver()
-        end)
-
-        -- Set custom delays for each preset
-        table.insert(steps, function()
-            setDelaysForPreset(presetKey)
-        end)
-
-        runPresetSequence(steps)
-
-        if presetKey == "auto1" then
-            isAutoPreset1On = true
-            isAutoPreset2On = false
-            isAutoPreset3On = false
-        elseif presetKey == "auto2" then
-            isAutoPreset1On = false
-            isAutoPreset2On = true
-            isAutoPreset3On = false
-        elseif presetKey == "auto3" then
-            isAutoPreset1On = false
-            isAutoPreset2On = false
-            isAutoPreset3On = true
-        else
-            isAutoPreset1On = false
-            isAutoPreset2On = true
-            isAutoPreset3On = false
-        end
-
-        config.activePreset = presetKey
-        saveConfig()
-        teleportToNamedLocation(locationName)
-    end)
-end
-
-local function disablePreset(presetKey)
-    task.spawn(function()
-        if config.activePreset ~= presetKey then
-            if presetKey == "auto1" then
-                isAutoPreset1On = false
-            elseif presetKey == "auto2" then
-                isAutoPreset2On = false
-            elseif presetKey == "auto3" then
-                isAutoPreset3On = false
-            end
-            return
-        end
-
-        local steps = {
-            function() 
-                if autoMegalodonToggle then 
-                    autoMegalodonToggle:UpdateToggle(nil, false)
-                end
-            end,
-            function() 
-                if autoWeatherToggle then 
-                    autoWeatherToggle:UpdateToggle(nil, false)
-                end
-            end,
-            function() 
-                if autoCatchToggle then 
-                    autoCatchToggle:UpdateToggle(nil, false)
-                end
-            end,
-            function() 
-                if autoSellToggle then 
-                    autoSellToggle:UpdateToggle(nil, false)
-                end
-            end,
-            function() 
-                if autoFarmToggle then 
-                    autoFarmToggle:UpdateToggle(nil, false)
-                end
-            end,
-            function() 
-                disableGPUSaver()
-            end,
-        }
-
-        -- Reset delays when disabling preset
-        table.insert(steps, function()
-            -- Reset to default delays
-            if autoFishMainSlider then
-                autoFishMainSlider:Set(0.9)
-            else
-                setAutoFishMainDelay(0.9)
-            end
-            if autoCatchSlider then
-                autoCatchSlider:Set(0.2)
-            else
-                setAutoCatchDelay(0.2)
-            end
-        end)
-
-        runPresetSequence(steps)
-
-        if presetKey == "auto1" then
-            isAutoPreset1On = false
-        elseif presetKey == "auto2" then
-            isAutoPreset2On = false
-        elseif presetKey == "auto3" then
-            isAutoPreset3On = false
-        else
-            isAutoPreset2On = false
-        end
-
-        config.activePreset = "none"
-        saveConfig()
-    end)
-end
 
 
 -- ====== DAFTAR IDS ====== 
@@ -4638,41 +4372,7 @@ local function setAutoWeather(state)
     updateConfigField("autoWeather", state)
 end
 
-local function setAutoFishDelayForKohana()
-    if autoFishMainSlider then
-        autoFishMainSlider:Set(5)
-    else
-        setAutoFishMainDelay(5)
-    end
-end
 
-local function setDelaysForPreset(presetKey)
-    if presetKey == "auto1" or presetKey == "auto2" then
-        -- Auto 1 dan Auto 2: Auto Fish Delay 0.1s, Auto Catch Delay 0.1s
-        if autoFishMainSlider then
-            autoFishMainSlider:Set(0.1)
-        else
-            setAutoFishMainDelay(0.1)
-        end
-        if autoCatchSlider then
-            autoCatchSlider:Set(0.1)
-        else
-            setAutoCatchDelay(0.1)
-        end
-    elseif presetKey == "auto3" then
-        -- Auto 3: Auto Fish Delay 5s, Auto Catch Delay 0.6s
-        if autoFishMainSlider then
-            autoFishMainSlider:Set(5)
-        else
-            setAutoFishMainDelay(5)
-        end
-        if autoCatchSlider then
-            autoCatchSlider:Set(0.6)
-        else
-            setAutoCatchDelay(0.6)
-        end
-    end
-end
 
 
 -- ====================================================================
@@ -4708,8 +4408,7 @@ if configExists then
     useAutoUpgradeRod = config.autoUpgradeRod or false
     useAutoUpgradeBait = config.autoUpgradeBait or false
 
-    -- Apply delays from config (using applyDelayConfig)
-    applyDelayConfig()
+    -- Note: Delays are loaded but not used in event-driven farm system
 else
     -- No config file, use settings from main_noui.lua and save them
     useAutoFarm = AUTO_FARM or false
@@ -4760,19 +4459,22 @@ local function startManualConfig()
     task.wait(3)  -- Wait for everything to load
 
     -- Teleport first
+    print("[Startup] Teleporting to " .. tostring(useTeleportLoc))
     teleportToNamedLocation(useTeleportLoc)
-    task.wait(2)
+    task.wait(3)  -- Increased wait time after teleport for character to stabilize
 
     -- Enable GPU Saver if configured
     if useGPUSaver then
+        print("[Startup] Enabling GPU Saver")
         enableGPUSaver()
         task.wait(0.5)
     end
 
     -- Enable Auto Farm if configured
     if useAutoFarm then
+        print("[Startup] Starting Auto Farm (event-driven system)")
         setAutoFarm(true)
-        task.wait(0.5)
+        task.wait(1)  -- Give farm system time to initialize
     end
 
     -- Enable Auto Sell if configured
@@ -4807,54 +4509,100 @@ end
 --                    AUTO LOOPS (CORE FISHING LOGIC)
 -- ====================================================================
 
--- Enhanced Auto Farm Loop (Concurrent Flow)
-task.spawn(function()
-    while true do
-        if isAutoFarmOn then
-            local success, err = pcall(function()
-                -- Concurrently equip and charge, then sequentially request minigame
-                
-                -- 1. Equip Tool (Concurrent)
-                task.spawn(function()
-                    if equipEvent then
-                        equipEvent:FireServer(1)
-                    end
-                end)
-                
-                -- 2. Charge Rod (Concurrent)
-                task.spawn(function()
-                    if chargeEvent then
-                        chargeEvent:InvokeServer(1755848498.4834)
-                    end
-                end)
+-- ====== AUTO FARM SYSTEM (v9.1 no burst) ======
 
-                -- Wait for concurrent tasks to fire off
-                task.wait(0.02) 
+local spamCompletedThread = nil
 
-                -- 3. Request Minigame (Sequential)
-                if requestMinigameEvent then
-                    requestMinigameEvent:InvokeServer(1.2854545116425, 1)
-                end
+--[[ Fungsi Utama ]]--
+local function farmCycle() end -- Forward declaration
 
-                -- Wait for server to process all requests
-                task.wait(autoFishMainDelay)
+--[[ Logika Siklus Farm (Satu Kali Jalan) ]]--
+farmCycle = function()
+    if not isAutoFarmOn then return end -- Pemeriksaan keamanan
 
-                -- 4. Complete Fishing
-                if fishingEvent then
-                    fishingEvent:FireServer()
-                end
-            end)
+    -- Hentikan spammer sebelumnya untuk kebersihan
+    if spamCompletedThread then
+        task.cancel(spamCompletedThread)
+        spamCompletedThread = nil
+    end
 
-            if not success then
-                if not (string.find(tostring(err):lower(), "asset is not approved") or
-                       string.find(tostring(err):lower(), "failed to load sound")) then
-                    warn("[Auto Farm] Loop error: " .. tostring(err))
-                end
+    -- 1. Sinyal Awal
+    pcall(function()
+        -- Equip tool sekali saja di awal untuk mencegah race condition
+        task.spawn(function() if equipEvent then equipEvent:FireServer(1) end end)
+        task.wait(0.01) -- Beri jeda sedikit setelah equip
+
+        -- Attempt #1
+        task.spawn(function() if chargeEvent then chargeEvent:InvokeServer(1755848498.4834) end end)
+        task.wait(0.01)
+        task.spawn(function() if requestMinigameEvent then requestMinigameEvent:InvokeServer(1.2854545116425, 1) end end)
+        task.wait(0.01)
+        task.spawn(function() if cancelFishingEvent then cancelFishingEvent:InvokeServer() end end)
+        task.wait(0.01)
+
+        -- Attempt #2 (foreground)
+        task.spawn(function() if chargeEvent then chargeEvent:InvokeServer(1755848498.4834) end end)
+        task.wait(0.01)
+        task.spawn(function() if requestMinigameEvent then requestMinigameEvent:InvokeServer(1.2854545116425, 1) end end)
+    end)
+
+    -- 2. Mulai spam sinyal "fishingCompleted"
+    spamCompletedThread = task.spawn(function()
+        while isAutoFarmOn do
+            if fishingEvent then
+                fishingEvent:FireServer()
             end
+            task.wait(0.01)
         end
+    end)
+end
+
+--[[ Fungsi untuk Memulai dan Menghentikan Farm ]]--
+local function startFarm()
+    if not isAutoFarmOn then return end -- Check against the global state
+    print("[v9.1 No-Burst Farm] Manual loop farm dimulai.")
+
+    -- Loop manual
+    task.spawn(function()
+        while isAutoFarmOn do
+            farmCycle()
+            
+            -- Tunggu waktu yang cukup untuk siklus selesai sebelum memulai lagi.
+            -- Nilai 1 detik adalah default dari skrip referensi.
+            task.wait(1) 
+        end
+    end)
+end
+
+local function stopFarm()
+    print("[v9.1 No-Burst Farm] Farm dihentikan.")
+    if spamCompletedThread then
+        task.cancel(spamCompletedThread)
+        spamCompletedThread = nil
+    end
+end
+
+-- Monitor isAutoFarmOn state and control the farm
+task.spawn(function()
+    local wasAutoFarmOn = isAutoFarmOn
+    print("[v9.1 No-Burst Farm] Monitor loop started. Initial state: " .. tostring(isAutoFarmOn))
+
+    while true do
+        if isAutoFarmOn and not wasAutoFarmOn then
+            print("[v9.1 No-Burst Farm] State changed to ON - starting farm")
+            startFarm()
+        elseif not isAutoFarmOn and wasAutoFarmOn then
+            print("[v9.1 No-Burst Farm] State changed to OFF - stopping farm")
+            stopFarm()
+        end
+
+        wasAutoFarmOn = isAutoFarmOn
         task.wait(0.1)
     end
 end)
+
+-- NOTE: Farm initialization is handled by startManualConfig() after teleport
+-- This ensures the farm starts at the correct location
 
 -- Auto Sell Loop
 task.spawn(function()
