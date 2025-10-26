@@ -4615,17 +4615,58 @@ end)
 -- NOTE: Farm initialization is handled by startManualConfig() after teleport
 -- This ensures the farm starts at the correct location
 
--- Auto Sell Loop
+-- Auto Sell Loop (with Validation)
 task.spawn(function()
+    -- Validate sellEvent at startup
+    if not sellEvent then
+        warn("⚠️ [Auto Sell] sellEvent not initialized! Trying to re-initialize...")
+        task.wait(2)
+
+        -- Try to get sell event again using user's raw method
+        local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
+        local success, result = pcall(function()
+            -- Try method 1: Direct indexing (user's method)
+            return net["RF/SellAllItems"]
+        end)
+
+        if success and result then
+            sellEvent = result
+            print("✅ [Auto Sell] sellEvent re-initialized successfully (direct indexing)")
+        else
+            -- Try method 2: WaitForChild
+            local success2, result2 = pcall(function()
+                return net:WaitForChild("RF/SellAllItems", 10)
+            end)
+
+            if success2 and result2 then
+                sellEvent = result2
+                print("✅ [Auto Sell] sellEvent re-initialized successfully (WaitForChild)")
+            else
+                warn("❌ [Auto Sell] Failed to initialize sellEvent. Auto Sell disabled.")
+                return
+            end
+        end
+    end
+
+    print("✅ [Auto Sell] Initialized. Delay: " .. tostring(autoSellDelay) .. "s")
+
     while true do
         if isAutoSellOn then
-            pcall(function()
+            print("[Auto Sell] Attempting to sell items...")
+            local success, err = pcall(function()
                 if sellEvent then
                     sellEvent:InvokeServer()
+                    print("[Auto Sell] ✅ Sell executed successfully")
+                else
+                    warn("⚠️ [Auto Sell] sellEvent is nil, cannot sell")
                 end
             end)
+
+            if not success then
+                warn("⚠️ [Auto Sell] Sell failed: " .. tostring(err))
+            end
         end
-        task.wait(autoSellDelay)
+        task.wait(autoSellDelay)  -- ALWAYS wait (matches working fix copy.lua structure)
     end
 end)
 
@@ -4635,8 +4676,7 @@ task.spawn(function()
         if isAutoCatchOn then
             performAutoCatch()
         end
-        -- OPTIMIZED: Increased wait time to 0.5s and removed dependency on autoCatchDelay
-        task.wait(0.5)
+        task.wait(0.5)  -- OPTIMIZED: Always check at 0.5s intervals
     end
 end)
 
@@ -5028,8 +5068,8 @@ task.spawn(function()
         toggleButton.Name = "GPUToggle"
         toggleButton.Size = UDim2.new(0, 160, 0, 35)
         toggleButton.Position = UDim2.new(0, 10, 0, 7.5)
-        toggleButton.BackgroundColor3 = isGPUSaverOn and Color3.fromRGB(46, 125, 50) or Color3.fromRGB(183, 28, 28)
-        toggleButton.Text = isGPUSaverOn and "🎨 GPU Saver: ON" or "🎨 GPU Saver: OFF"
+        toggleButton.BackgroundColor3 = gpuSaverEnabled and Color3.fromRGB(46, 125, 50) or Color3.fromRGB(183, 28, 28)
+        toggleButton.Text = gpuSaverEnabled and "🎨 GPU Saver: ON" or "🎨 GPU Saver: OFF"
         toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
         toggleButton.TextSize = 14
         toggleButton.Font = Enum.Font.GothamBold
@@ -5042,7 +5082,7 @@ task.spawn(function()
         -- Toggle functionality
         toggleButton.MouseButton1Click:Connect(function()
             -- Toggle GPU Saver
-            if isGPUSaverOn then
+            if gpuSaverEnabled then
                 disableGPUSaver()
                 toggleButton.BackgroundColor3 = Color3.fromRGB(183, 28, 28)
                 toggleButton.Text = "🎨 GPU Saver: OFF"
