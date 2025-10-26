@@ -1706,19 +1706,14 @@ end
 local defaultConfig = {
     autoFarm = false,
     autoSell = false,
-    autoCatch = false,
     autoWeather = false,
     autoMegalodon = false,
-    activePreset = "none",
     gpuSaver = false,
     teleportLocation = "Sisyphus Statue",
     autoUpgradeRod = false,
     autoUpgradeBait = false,
-    chargeFishingDelay = 0.01,
-    autoFishDelay = 0.9,
+    delayFarm = 1,
     autoSellDelay = 45,
-    autoCatchDelay = 0.2,
-    weatherIdDelay = 33,
     weatherCycleDelay = 100
 }
 local config = {}
@@ -1893,15 +1888,11 @@ end
 local function syncConfigFromStates()
     config.autoFarm = isAutoFarmOn
     config.autoSell = isAutoSellOn
-    config.autoCatch = isAutoCatchOn
     config.autoWeather = isAutoWeatherOn
     config.autoMegalodon = isAutoMegalodonOn
     config.gpuSaver = gpuSaverEnabled
-    config.chargeFishingDelay = chargeFishingDelay
-    config.autoFishDelay = autoFishMainDelay
+    config.delayFarm = delayFarm
     config.autoSellDelay = autoSellDelay
-    config.autoCatchDelay = autoCatchDelay
-    config.weatherIdDelay = weatherIdDelay
     config.weatherCycleDelay = weatherCycleDelay
 end
 
@@ -1930,11 +1921,8 @@ local function applyDelayConfig()
         return clamped
     end
 
-    chargeFishingDelay = applyField("chargeFishingDelay", 0.01, defaultConfig.chargeFishingDelay)
-    autoFishMainDelay = applyField("autoFishDelay", 0.1, defaultConfig.autoFishDelay)
+    delayFarm = applyField("delayFarm", 0.1, defaultConfig.delayFarm)
     autoSellDelay = applyField("autoSellDelay", 30, defaultConfig.autoSellDelay)
-    autoCatchDelay = applyField("autoCatchDelay", 0.01, defaultConfig.autoCatchDelay)
-    weatherIdDelay = applyField("weatherIdDelay", 1, defaultConfig.weatherIdDelay)
     weatherCycleDelay = applyField("weatherCycleDelay", 10, defaultConfig.weatherCycleDelay)
 
     if updated then
@@ -1981,38 +1969,7 @@ local function setAutoSellDelay(value)
     updateConfigField("autoSellDelay", clamped)
 end
 
-local function setAutoCatchDelay(value)
-    local numeric = tonumber(value) or autoCatchDelay
-    local clamped = math.max(0.01, numeric)
-    clamped = roundDelay(clamped)
-    if math.abs(clamped - autoCatchDelay) < 0.001 then
-        return
-    end
-    autoCatchDelay = clamped
-    updateConfigField("autoCatchDelay", clamped)
-end
 
-local function setChargeFishingDelay(value)
-    local numeric = tonumber(value) or chargeFishingDelay
-    local clamped = math.max(0.01, numeric)
-    clamped = roundDelay(clamped)
-    if math.abs(clamped - chargeFishingDelay) < 0.001 then
-        return
-    end
-    chargeFishingDelay = clamped
-    updateConfigField("chargeFishingDelay", clamped)
-end
-
-local function setWeatherIdDelay(value)
-    local numeric = tonumber(value) or weatherIdDelay
-    local clamped = math.max(1, numeric)
-    clamped = roundDelay(clamped)
-    if math.abs(clamped - weatherIdDelay) < 0.001 then
-        return
-    end
-    weatherIdDelay = clamped
-    updateConfigField("weatherIdDelay", clamped)
-end
 
 local function setWeatherCycleDelay(value)
     local numeric = tonumber(value) or weatherCycleDelay
@@ -2453,11 +2410,8 @@ local whiteScreenGui = nil
 local connections = {}
 local fpsCapConnection = nil
 
-local chargeFishingDelay = 0.01
-local autoFishMainDelay = 0.9
+local delayFarm = 1
 local autoSellDelay = 45
-local autoCatchDelay = 0.2
-local weatherIdDelay = 33
 local weatherCycleDelay = 100
 
 -- ====== ROD-SPECIFIC DELAY MAPPING (from List Best.lua) ======
@@ -3203,37 +3157,37 @@ local WeatherIDs = {"Cloudy", "Storm","Wind"}
     --end)
 --end
 
-local function cancelFishing()
-    pcall(function()
-        if cancelFishingEvent then
-            cancelFishingEvent:InvokeServer()
-        end
-    end)
-end
+--local function cancelFishing()
+   --pcall(function()
+     --   if cancelFishingEvent then
+       --     cancelFishingEvent:InvokeServer()
+        --end
+    --end)
+--end
 
-local function performAutoCatch()
-    pcall(function()
-        if fishingEvent then
-            fishingEvent:FireServer()
-        end
-    end)
-end
+--local function performAutoCatch()
+    --pcall(function()
+        --if fishingEvent then
+            --fishingEvent:FireServer()
+       -- end
+    --end)
+--end
 
-local function equipRod()
-    pcall(function()
-        if equipEvent then
-            equipEvent:FireServer(1)
-        end
-    end)
-end
+--local function equipRod()
+    --pcall(function() 
+        --if equipEvent then 
+            --equipEvent:FireServer(1)
+       --end 
+    --end)
+--end
 
-local function unequipRod()
-    pcall(function()
-        if unequipEvent then
-            unequipEvent:FireServer()
-        end
-    end)
-end
+--local function unequipRod()
+    --pcall(function() 
+        --if unequipEvent then 
+            --unequipEvent:FireServer()
+        --end 
+    ----end)
+--end
 
 
 -- ====== MEGALODON HUNT FUNCTIONS (BODYVELOCITY LOCK) ======
@@ -4365,10 +4319,8 @@ local function setSell(state)
     updateConfigField("autoSell", state)
 end
 
-local function setAutoCatch(state)
-    isAutoCatchOn = state
-    updateConfigField("autoCatch", state)
-end
+
+
 
 local function setAutoWeather(state)
     isAutoWeatherOn = state
@@ -4395,7 +4347,7 @@ if isfile then
 end
 
 -- Variables to use
-local useAutoFarm, useAutoSell, useAutoCatch, useAutoWeather, useAutoMegalodon, useGPUSaver, useTeleportLoc
+local useAutoFarm, useAutoSell, useAutoWeather, useAutoMegalodon, useGPUSaver, useTeleportLoc
 local useAutoUpgradeRod, useAutoUpgradeBait
 
 if configExists then
@@ -4403,7 +4355,6 @@ if configExists then
     print("[Config] Loading settings from saved config (ignoring main.lua)")
     useAutoFarm = config.autoFarm
     useAutoSell = config.autoSell
-    useAutoCatch = config.autoCatch
     useAutoWeather = config.autoWeather
     useAutoMegalodon = config.autoMegalodon
     useGPUSaver = config.gpuSaver
@@ -4418,7 +4369,6 @@ else
     print("[Config] No saved config found. Loading settings from main.lua (first run)")
     useAutoFarm = AUTO_FARM or false
     useAutoSell = AUTO_SELL or false
-    useAutoCatch = AUTO_CATCH or false
     useAutoWeather = AUTO_WEATHER or false
     useAutoMegalodon = AUTO_MEGALODON or false
     useGPUSaver = GPU_SAVER or false
@@ -4427,28 +4377,21 @@ else
     useAutoUpgradeBait = AUTO_UPGRADE_BAIT or false
 
     -- Apply delays from main_noui.lua
-    chargeFishingDelay = CHARGE_FISHING_DELAY or 0.01
-    autoFishMainDelay = AUTO_FISH_DELAY or 0.9
-    autoSellDelay = AUTO_SELL_DELAY or 45
-    autoCatchDelay = AUTO_CATCH_DELAY or 0.2
-    weatherIdDelay = WEATHER_ID_DELAY or 33
-    weatherCycleDelay = WEATHER_CYCLE_DELAY or 100
+    delayFarm = DELAY_FARM or 1
+    autoSellDelay = AUTO_SELL_DELAY or 34
+    weatherCycleDelay = WEATHER_CYCLE_DELAY or 30
 
     -- Save to config for next time
     config.autoFarm = useAutoFarm
     config.autoSell = useAutoSell
-    config.autoCatch = useAutoCatch
     config.autoWeather = useAutoWeather
     config.autoMegalodon = useAutoMegalodon
     config.gpuSaver = useGPUSaver
     config.teleportLocation = useTeleportLoc
     config.autoUpgradeRod = useAutoUpgradeRod
     config.autoUpgradeBait = useAutoUpgradeBait
-    config.chargeFishingDelay = chargeFishingDelay
-    config.autoFishDelay = autoFishMainDelay
+    config.delayFarm = delayFarm
     config.autoSellDelay = autoSellDelay
-    config.autoCatchDelay = autoCatchDelay
-    config.weatherIdDelay = weatherIdDelay
     config.weatherCycleDelay = weatherCycleDelay
 
     saveConfig()
@@ -4555,12 +4498,6 @@ local function startManualConfig()
     -- Enable Auto Sell if configured
     if useAutoSell then
         setSell(true)
-        task.wait(0.5)
-    end
-
-    -- Enable Auto Catch if configured
-    if useAutoCatch then
-        setAutoCatch(true)
         task.wait(0.5)
     end
 
@@ -4739,7 +4676,7 @@ task.spawn(function()
         if isAutoCatchOn then
             performAutoCatch()
         end
-        task.wait(autoCatchDelay)
+        task.wait(0.5)  -- OPTIMIZED: Always check at 0.5s intervals
     end
 end)
 
