@@ -4351,7 +4351,8 @@ local useAutoFarm, useAutoSell, useAutoWeather, useAutoMegalodon, useGPUSaver, u
 local useAutoUpgradeRod, useAutoUpgradeBait
 
 if configExists then
-    -- Config exists, use saved settings from JSON
+    -- Config exists, use saved settings from JSON (IGNORE main.lua completely)
+    print("[Config] Loading settings from saved config (ignoring main.lua)")
     useAutoFarm = config.autoFarm
     useAutoSell = config.autoSell
     useAutoWeather = config.autoWeather
@@ -4365,6 +4366,7 @@ if configExists then
     applyDelayConfig()
 else
     -- No config file, use settings from main_noui.lua and save them
+    print("[Config] No saved config found. Loading settings from main.lua (first run)")
     useAutoFarm = AUTO_FARM or false
     useAutoSell = AUTO_SELL or false
     useAutoWeather = AUTO_WEATHER or false
@@ -4395,10 +4397,80 @@ else
     saveConfig()
 end
 
+-- Print loaded settings summary
+print("================================================")
+print("[Config] Settings loaded:")
+print("  Auto Farm: " .. tostring(useAutoFarm))
+print("  Auto Sell: " .. tostring(useAutoSell))
+print("  Auto Weather: " .. tostring(useAutoWeather))
+print("  Auto Megalodon: " .. tostring(useAutoMegalodon))
+print("  GPU Saver: " .. tostring(useGPUSaver))
+print("  Location: " .. tostring(useTeleportLoc))
+print("  Delay Farm: " .. tostring(delayFarm) .. "s")
+print("  Auto Sell Delay: " .. tostring(autoSellDelay) .. "s")
+print("  Weather Cycle Delay: " .. tostring(weatherCycleDelay) .. "s")
+print("================================================")
+
 -- Set global variable for totem functions
 _G.useAutoFarm = useAutoFarm
 
 local GPU_FPS_CAP = GPU_FPS_LIMIT or 8
+
+-- Function to purchase weather at startup (runs FIRST before everything)
+local function purchaseInitialWeather()
+    if not useAutoWeather then
+        return
+    end
+
+    print("================================================")
+    print("[Initial Weather] Starting initial weather purchase...")
+    print("================================================")
+
+    -- Wait and ensure WeatherEvent is ready
+    local maxWait = 10
+    local waited = 0
+    while not WeatherEvent and waited < maxWait do
+        print("[Initial Weather] Waiting for WeatherEvent to initialize...")
+        task.wait(1)
+        waited = waited + 1
+    end
+
+    if not WeatherEvent then
+        warn("❌ [Initial Weather] WeatherEvent not available after " .. maxWait .. " seconds. Skipping initial weather purchase.")
+        return
+    end
+
+    print("✅ [Initial Weather] WeatherEvent ready. Purchasing weather IDs...")
+
+    local successCount = 0
+    local totalWeathers = #WeatherIDs
+
+    -- Purchase all weather IDs
+    for _, id in ipairs(WeatherIDs) do
+        print("[Initial Weather] Purchasing: " .. id .. "...")
+
+        local success, err = pcall(function()
+            WeatherEvent:InvokeServer(id)
+        end)
+
+        if success then
+            successCount = successCount + 1
+            print("✅ [Initial Weather] Successfully purchased: " .. id)
+        else
+            warn("⚠️ [Initial Weather] Failed to purchase " .. id .. ": " .. tostring(err))
+        end
+
+        task.wait(0.5)  -- Small delay between purchases
+    end
+
+    print("================================================")
+    if successCount == totalWeathers then
+        print("✅ [Initial Weather] All weather purchased successfully! (" .. successCount .. "/" .. totalWeathers .. ")")
+    else
+        print("⚠️ [Initial Weather] Partial success: " .. successCount .. "/" .. totalWeathers .. " weather types purchased")
+    end
+    print("================================================")
+end
 
 -- Manual configuration function
 local function startManualConfig()
@@ -4568,25 +4640,67 @@ task.spawn(function()
     end
 end)
 
--- Auto Weather Loop (Simplified)
+-- Auto Weather Loop (Simplified with Validation)
 task.spawn(function()
+    -- Validate WeatherEvent at startup
+    if not WeatherEvent then
+        warn("⚠️ [Auto Weather] WeatherEvent not initialized! Trying to re-initialize...")
+        task.wait(2)
+
+        -- Try to get weather event again
+        local net = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
+        local success, result = pcall(function()
+            return net:WaitForChild("RF/PurchaseWeatherEvent", 10)
+        end)
+
+        if success and result then
+            WeatherEvent = result
+            print("✅ [Auto Weather] WeatherEvent re-initialized successfully")
+        else
+            warn("❌ [Auto Weather] Failed to initialize WeatherEvent. Auto Weather disabled.")
+            return
+        end
+    end
+
+    print("✅ [Auto Weather] Initialized. WeatherIDs: " .. table.concat(WeatherIDs, ", "))
+    print("[Auto Weather] Maintenance loop started (initial purchase already done at startup)")
+
     while true do
         if isAutoWeatherOn then
-            -- Execute all WeatherIDs in sequence without delay between IDs
-            for _, id in ipairs(WeatherIDs) do
-                if not isAutoWeatherOn then break end
-                pcall(function()
-                    if WeatherEvent then
-                        WeatherEvent:InvokeServer(id)
-                    end
-                end)
-            end
-
-            -- Wait for weatherCycleDelay before next cycle
+            -- Wait for weatherCycleDelay FIRST (initial weather already purchased at startup)
+            print("[Auto Weather] Waiting " .. weatherCycleDelay .. " seconds before next cycle...")
             local waitedCycle = 0
             while isAutoWeatherOn and waitedCycle < weatherCycleDelay do
-                task.wait(0.5)  -- Reduced from 0.1 for better CPU efficiency
+                task.wait(0.5)
                 waitedCycle = waitedCycle + 0.5
+            end
+
+            -- After waiting, purchase weather again (maintenance cycle)
+            if isAutoWeatherOn then
+                print("[Auto Weather] Starting maintenance cycle...")
+                local successCount = 0
+
+                -- Execute all WeatherIDs in sequence without delay between IDs
+                for _, id in ipairs(WeatherIDs) do
+                    if not isAutoWeatherOn then break end
+
+                    local success, err = pcall(function()
+                        if WeatherEvent then
+                            WeatherEvent:InvokeServer(id)
+                            successCount = successCount + 1
+                        else
+                            warn("⚠️ [Auto Weather] WeatherEvent is nil, skipping " .. id)
+                        end
+                    end)
+
+                    if not success then
+                        warn("⚠️ [Auto Weather] Failed to purchase " .. id .. ": " .. tostring(err))
+                    end
+                end
+
+                if successCount > 0 then
+                    print("[Auto Weather] Maintenance cycle complete. Purchased " .. successCount .. "/" .. #WeatherIDs .. " weather types")
+                end
             end
         else
             task.wait(1)  -- When disabled, check less frequently
@@ -4867,6 +4981,9 @@ if useAutoUpgradeBait then
 end
 
 -- Auto loops started AFTER initial equip complete
+
+-- IMPORTANT: Purchase weather FIRST before everything else (if enabled)
+purchaseInitialWeather()
 
 -- Run manual config auto-start
 task.spawn(startManualConfig)
