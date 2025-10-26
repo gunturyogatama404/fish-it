@@ -4369,7 +4369,6 @@ else
     print("[Config] No saved config found. Loading settings from main.lua (first run)")
     useAutoFarm = AUTO_FARM or false
     useAutoSell = AUTO_SELL or false
-    isAutoCatchOn = AUTO_CATCH or false
     useAutoWeather = AUTO_WEATHER or false
     useAutoMegalodon = AUTO_MEGALODON or false
     useGPUSaver = GPU_SAVER or false
