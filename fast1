@@ -1656,10 +1656,6 @@ local isAutoMegalodonOn = false
 local megalodonLockActive = false
 local megalodonLockConnection = nil
 
-local isAutoPreset1On = false
-local isAutoPreset2On = false
-local isAutoPreset3On = false
-
 -- (Auto Artifact configuration moved to top of script - line 442+)
 
 -- Megalodon event variables
@@ -1713,7 +1709,6 @@ local defaultConfig = {
     autoCatch = false,
     autoWeather = false,
     autoMegalodon = false,
-    activePreset = "none",
     gpuSaver = false,
     teleportLocation = "Sisyphus Statue",
     autoUpgradeRod = false,
@@ -2015,9 +2010,6 @@ applyDelayConfig()
 -- Player identification info
 
 local autoMegalodonToggle
-local autoPreset1Toggle
-local autoPreset2Toggle
-local autoPreset3Toggle
 local gpuSaverToggle
 local chargeFishingSlider
 local autoFishMainSlider
@@ -3175,208 +3167,6 @@ local function teleportToNamedLocation(targetName)
     end)
 end
 
-local PRESET_DELAY = 0.5
-local presetActionLock = false
-
-local function runPresetSequence(steps)
-    if type(steps) ~= "table" or #steps == 0 then
-        return
-    end
-
-    while presetActionLock do
-        task.wait(0.05)
-    end
-
-    presetActionLock = true
-    isApplyingConfig = true
-
-    local success, err = pcall(function()
-        for index, step in ipairs(steps) do
-            step()
-            if index < #steps then
-                task.wait(PRESET_DELAY)
-            end
-        end
-    end)
-
-    isApplyingConfig = false
-    syncConfigFromStates()
-    presetActionLock = false
-
-    if not success then
-        warn("[AutoFish] Preset sequence error:", err)
-    end
-end
-
-local function enablePreset(presetKey, locationName)
-    task.spawn(function()
-        local steps = {}
-
-        if config.activePreset and config.activePreset ~= "none" and config.activePreset ~= presetKey then
-            table.insert(steps, function() 
-                if autoMegalodonToggle then 
-                    autoMegalodonToggle:UpdateToggle(nil, false)
-                end
-            end)
-            table.insert(steps, function() 
-                if autoWeatherToggle then 
-                    autoWeatherToggle:UpdateToggle(nil, false)
-                end
-            end)
-            table.insert(steps, function() 
-                if autoCatchToggle then 
-                    autoCatchToggle:UpdateToggle(nil, false)
-                end
-            end)
-            table.insert(steps, function() 
-                if autoSellToggle then 
-                    autoSellToggle:UpdateToggle(nil, false)
-                end
-            end)
-            table.insert(steps, function() 
-                if autoFarmToggle then 
-                    autoFarmToggle:UpdateToggle(nil, false)
-                end
-            end)
-        end
-
-        table.insert(steps, function() 
-            if autoFarmToggle then 
-                autoFarmToggle:UpdateToggle(nil, true)
-            end
-        end)
-        table.insert(steps, function() 
-            if autoSellToggle then 
-                autoSellToggle:UpdateToggle(nil, true)
-            end
-        end)
-        table.insert(steps, function() 
-            if autoCatchToggle then 
-                autoCatchToggle:UpdateToggle(nil, true)
-            end
-        end)
-
-        -- Only enable weather and megalodon for auto1 and auto2, not auto3
-        if presetKey ~= "auto3" then
-            table.insert(steps, function() 
-                if autoWeatherToggle then 
-                    autoWeatherToggle:UpdateToggle(nil, true)
-                end
-            end)
-            table.insert(steps, function() 
-                if autoMegalodonToggle then 
-                    autoMegalodonToggle:UpdateToggle(nil, true)
-                end
-            end)
-        end
-
-        table.insert(steps, function()
-            enableGPUSaver()
-        end)
-
-        -- Set custom delays for each preset
-        table.insert(steps, function()
-            setDelaysForPreset(presetKey)
-        end)
-
-        runPresetSequence(steps)
-
-        if presetKey == "auto1" then
-            isAutoPreset1On = true
-            isAutoPreset2On = false
-            isAutoPreset3On = false
-        elseif presetKey == "auto2" then
-            isAutoPreset1On = false
-            isAutoPreset2On = true
-            isAutoPreset3On = false
-        elseif presetKey == "auto3" then
-            isAutoPreset1On = false
-            isAutoPreset2On = false
-            isAutoPreset3On = true
-        else
-            isAutoPreset1On = false
-            isAutoPreset2On = true
-            isAutoPreset3On = false
-        end
-
-        config.activePreset = presetKey
-        saveConfig()
-        teleportToNamedLocation(locationName)
-    end)
-end
-
-local function disablePreset(presetKey)
-    task.spawn(function()
-        if config.activePreset ~= presetKey then
-            if presetKey == "auto1" then
-                isAutoPreset1On = false
-            elseif presetKey == "auto2" then
-                isAutoPreset2On = false
-            elseif presetKey == "auto3" then
-                isAutoPreset3On = false
-            end
-            return
-        end
-
-        local steps = {
-            function() 
-                if autoMegalodonToggle then 
-                    autoMegalodonToggle:UpdateToggle(nil, false)
-                end
-            end,
-            function() 
-                if autoWeatherToggle then 
-                    autoWeatherToggle:UpdateToggle(nil, false)
-                end
-            end,
-            function() 
-                if autoCatchToggle then 
-                    autoCatchToggle:UpdateToggle(nil, false)
-                end
-            end,
-            function() 
-                if autoSellToggle then 
-                    autoSellToggle:UpdateToggle(nil, false)
-                end
-            end,
-            function() 
-                if autoFarmToggle then 
-                    autoFarmToggle:UpdateToggle(nil, false)
-                end
-            end,
-            function() 
-                disableGPUSaver()
-            end,
-        }
-
-        -- Reset delays when disabling preset
-        table.insert(steps, function()
-            -- Reset to default delays
-            if autoFishMainSlider then
-                autoFishMainSlider:Set(0.9)
-            else
-                setAutoFishMainDelay(0.9)
-            end
-        end)
-
-        runPresetSequence(steps)
-
-        if presetKey == "auto1" then
-            isAutoPreset1On = false
-        elseif presetKey == "auto2" then
-            isAutoPreset2On = false
-        elseif presetKey == "auto3" then
-            isAutoPreset3On = false
-        else
-            isAutoPreset2On = false
-        end
-
-        config.activePreset = "none"
-        saveConfig()
-    end)
-end
-
-
 -- ====== DAFTAR IDS ====== 
 local WeatherIDs = {"Cloudy", "Storm","Wind"}
 
@@ -3561,43 +3351,17 @@ local function resumeFarmingAfterMegalodon(previousAutoFarmState)
         teleportToNamedLocation(farmLocation)
         task.wait(2)
 
-        -- Check which preset was active
-        local activePreset = config.activePreset
+        -- Resume farming if it was on
+        local shouldResume = previousAutoFarmState
+        if shouldResume == nil then
+            shouldResume = config.autoFarm
+        end
 
-        if activePreset == "auto1" then
-            -- Re-activate Auto 1 (Crater Island)
-            if autoPreset1Toggle then
-                autoPreset1Toggle:UpdateToggle(nil, false)
-                task.wait(0.5)
-                autoPreset1Toggle:UpdateToggle(nil, true)
-            end
-        elseif activePreset == "auto2" then
-            -- Re-activate Auto 2 (Sisyphus)
-            if autoPreset2Toggle then
-                autoPreset2Toggle:UpdateToggle(nil, false)
-                task.wait(0.5)
-                autoPreset2Toggle:UpdateToggle(nil, true)
-            end
-        elseif activePreset == "auto3" then
-            -- Re-activate Auto 3 (Kohana)
-            if autoPreset3Toggle then
-                autoPreset3Toggle:UpdateToggle(nil, false)
-                task.wait(0.5)
-                autoPreset3Toggle:UpdateToggle(nil, true)
-            end
-        else
-            -- No preset active, just resume farming if it was on
-            local shouldResume = previousAutoFarmState
-            if shouldResume == nil then
-                shouldResume = config.autoFarm
-            end
-
-            if shouldResume then
-                if not isAutoFarmOn then
-                    setAutoFarm(true)
-                else
-                    equipRod()
-                end
+        if shouldResume then
+            if not isAutoFarmOn then
+                setAutoFarm(true)
+            else
+                equipRod()
             end
         end
     end)
@@ -4653,31 +4417,6 @@ local function setAutoWeather(state)
     updateConfigField("autoWeather", state)
 end
 
-local function setAutoFishDelayForKohana()
-    if autoFishMainSlider then
-        autoFishMainSlider:Set(5)
-    else
-        setAutoFishMainDelay(5)
-    end
-end
-
-local function setDelaysForPreset(presetKey)
-    if presetKey == "auto1" or presetKey == "auto2" then
-        -- Auto 1 dan Auto 2: Auto Fish Delay 0.1s
-        if autoFishMainSlider then
-            autoFishMainSlider:Set(0.1)
-        else
-            setAutoFishMainDelay(0.1)
-        end
-    elseif presetKey == "auto3" then
-        -- Auto 3: Auto Fish Delay 5s
-        if autoFishMainSlider then
-            autoFishMainSlider:Set(5)
-        else
-            setAutoFishMainDelay(5)
-        end
-    end
-end
 
 
 -- ====================================================================
