@@ -1706,17 +1706,14 @@ end
 local defaultConfig = {
     autoFarm = false,
     autoSell = false,
-    autoCatch = false,
     autoWeather = false,
     autoMegalodon = false,
     gpuSaver = false,
     teleportLocation = "Sisyphus Statue",
     autoUpgradeRod = false,
     autoUpgradeBait = false,
-    chargeFishingDelay = 0.01,
-    autoFishDelay = 0.9,
+    delayFarm = 1,
     autoSellDelay = 45,
-    weatherIdDelay = 33,
     weatherCycleDelay = 100
 }
 local config = {}
@@ -1891,14 +1888,11 @@ end
 local function syncConfigFromStates()
     config.autoFarm = isAutoFarmOn
     config.autoSell = isAutoSellOn
-    config.autoCatch = isAutoCatchOn
     config.autoWeather = isAutoWeatherOn
     config.autoMegalodon = isAutoMegalodonOn
     config.gpuSaver = gpuSaverEnabled
-    config.chargeFishingDelay = chargeFishingDelay
-    config.autoFishMainDelay = autoFishMainDelay
+    config.delayFarm = delayFarm
     config.autoSellDelay = autoSellDelay
-    config.weatherIdDelay = weatherIdDelay
     config.weatherCycleDelay = weatherCycleDelay
 end
 
@@ -1927,10 +1921,8 @@ local function applyDelayConfig()
         return clamped
     end
 
-    chargeFishingDelay = applyField("chargeFishingDelay", 0.01, defaultConfig.chargeFishingDelay)
-    autoFishMainDelay = applyField("autoFishDelay", 0.1, defaultConfig.autoFishDelay)
+    delayFarm = applyField("delayFarm", 0.1, defaultConfig.delayFarm)
     autoSellDelay = applyField("autoSellDelay", 30, defaultConfig.autoSellDelay)
-    weatherIdDelay = applyField("weatherIdDelay", 1, defaultConfig.weatherIdDelay)
     weatherCycleDelay = applyField("weatherCycleDelay", 10, defaultConfig.weatherCycleDelay)
 
     if updated then
@@ -1944,15 +1936,15 @@ local function roundDelay(value)
     return math.floor(value * 100 + 0.5) / 100
 end
 
-local function setChargeFishingDelay(value)
-    local numeric = tonumber(value) or chargeFishingDelay
-    local clamped = math.max(0.01, numeric)
+local function setDelayFarm(value)
+    local numeric = tonumber(value) or delayFarm
+    local clamped = math.max(0.1, numeric)
     clamped = roundDelay(clamped)
-    if math.abs(clamped - chargeFishingDelay) < 0.001 then
+    if math.abs(clamped - delayFarm) < 0.001 then
         return
     end
-    chargeFishingDelay = clamped
-    updateConfigField("chargeFishingDelay", clamped)
+    delayFarm = clamped
+    updateConfigField("delayFarm", clamped)
 end
 
 local function setAutoFishMainDelay(value)
@@ -1978,16 +1970,6 @@ local function setAutoSellDelay(value)
 end
 
 
-local function setWeatherIdDelay(value)
-    local numeric = tonumber(value) or weatherIdDelay
-    local clamped = math.max(1, numeric)
-    clamped = roundDelay(clamped)
-    if math.abs(clamped - weatherIdDelay) < 0.001 then
-        return
-    end
-    weatherIdDelay = clamped
-    updateConfigField("weatherIdDelay", clamped)
-end
 
 local function setWeatherCycleDelay(value)
     local numeric = tonumber(value) or weatherCycleDelay
@@ -2428,9 +2410,7 @@ local whiteScreenGui = nil
 local connections = {}
 local fpsCapConnection = nil
 
--- ====== DELAY VARIABLES ======
-local chargeFishingDelay = 0.01
-local autoFishMainDelay = 0.9
+local delayFarm = 1
 local autoSellDelay = 45
 local weatherIdDelay = 33
 local weatherCycleDelay = 100
@@ -2490,12 +2470,6 @@ local function applyRodDelays(rodID)
 
     -- Update delays
     autoFishMainDelay = delaySetting.fish
-
-    -- Save to config
-    if config then
-        config.autoFishDelay = autoFishMainDelay
-        saveConfig()
-    end
 
     print(string.format("[Rod Delay] ✅ Delays updated for rod ID %d: Fish=%.1fs",
         rodID, autoFishMainDelay))
@@ -3172,49 +3146,49 @@ local WeatherIDs = {"Cloudy", "Storm","Wind"}
 
 
 -- ====== CORE FUNCTIONS ====== 
-local function chargeFishingRod()
-    pcall(function()
-        if chargeEvent then
-            chargeEvent:InvokeServer(1755848498.4834)
-            task.wait(chargeFishingDelay)
-        end
-        if requestMinigameEvent then
+-- local function chargeFishingRod()
+    -- pcall(function()
+        --if chargeEvent then
+            --chargeEvent:InvokeServer(1755848498.4834)
+            --task.wait(chargeFishingDelay)
+        --end
+        --if requestMinigameEvent then
             requestMinigameEvent:InvokeServer(1.2854545116425, 1)
-        end
-    end)
-end
+        --end
+    --end)
+--end
 
-local function cancelFishing()
-    pcall(function()
-        if cancelFishingEvent then
-            cancelFishingEvent:InvokeServer()
-        end
-    end)
-end
+--local function cancelFishing()
+   --pcall(function()
+     --   if cancelFishingEvent then
+       --     cancelFishingEvent:InvokeServer()
+        --end
+    --end)
+--end
 
-local function performAutoCatch()
-    pcall(function()
-        if fishingEvent then
-            fishingEvent:FireServer()
-        end
-    end)
-end
+--local function performAutoCatch()
+    --pcall(function()
+        --if fishingEvent then
+            --fishingEvent:FireServer()
+       -- end
+    --end)
+--end
 
-local function equipRod()
-    pcall(function() 
-        if equipEvent then 
-            equipEvent:FireServer(1)
-        end 
-    end)
-end
+--local function equipRod()
+    --pcall(function() 
+        --if equipEvent then 
+            --equipEvent:FireServer(1)
+       --end 
+    --end)
+--end
 
-local function unequipRod()
-    pcall(function() 
-        if unequipEvent then 
-            unequipEvent:FireServer()
-        end 
-    end)
-end
+--local function unequipRod()
+    --pcall(function() 
+        --if unequipEvent then 
+            --unequipEvent:FireServer()
+        --end 
+    ----end)
+--end
 
 
 -- ====== MEGALODON HUNT FUNCTIONS (BODYVELOCITY LOCK) ======
@@ -3643,9 +3617,7 @@ end
 -- discordid = "123456789012345678"  -- Discord User ID (18 digit number)
 local CONNECTION_WEBHOOK_URL = type(webhook3) == "string" and webhook3 or ""  -- URL webhook khusus untuk status koneksi
 
-local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications
-local PING_THRESHOLD = 1000  -- ms, ping monitoring (webhook disabled, console log only)
-local FREEZE_THRESHOLD = 3  -- seconds, if delta > this = game freeze
+local hasSentDisconnectWebhook = false  -- Flag to avoid sending multiple notifications)
 
 -- DISCORD USER ID untuk tag saat disconnect (ganti dengan ID Discord Anda)
 local DISCORD_USER_ID = type(discordid) == "string" and discordid or "701247227959574567"  -- Fallback jika discordid tidak terdefinisi
@@ -3702,34 +3674,6 @@ local lastSessionId = nil
 local lastDisconnectTime = nil
 local RECONNECT_THRESHOLD = 60  -- seconds, if reconnect within this time = quick reconnect
 local NEW_SESSION_THRESHOLD = 60  -- seconds, if offline > 1 minute = treat as new connection
-
--- Compact Discord message edit function
-function editDiscordMessage(messageId, embed, content)
-    if not CONNECTION_WEBHOOK_URL or CONNECTION_WEBHOOK_URL == "" or not messageId then
-        return false, "Invalid config"
-    end
-
-    local webhookId, webhookToken = CONNECTION_WEBHOOK_URL:match("https://discord%.com/api/webhooks/(%d+)/([%w%-_]+)")
-    if not webhookId or not webhookToken then return false, "Invalid URL" end
-
-    local payload = { embeds = {embed} }
-    if content and content ~= "" then
-        payload.content = content
-        payload.allowed_mentions = {users = {tostring(DISCORD_USER_ID)}}
-    end
-
-    local success, err = pcall(function()
-        local req = syn and syn.request or http_request or (fluxus and fluxus.request) or request
-        if not req then error("No HTTP support") end
-        req({
-            Url = string.format("https://discord.com/api/webhooks/%s/%s/messages/%s", webhookId, webhookToken, messageId),
-            Method = "PATCH",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = HttpService:JSONEncode(payload)
-        })
-    end)
-    return success, err
-end
 
 -- Compact new message sender
 function sendNewStatusMessage(embed, content)
@@ -4199,15 +4143,6 @@ local function setupDisconnectNotifier()
 
     print("[Disconnect Monitor] Ping monitor disabled (using other detection methods)")
 
-    -- Monitor for game freezes using Stepped delta
-    RunService.Stepped:Connect(function(_, deltaTime)
-        if deltaTime > FREEZE_THRESHOLD then
-            task.spawn(function()
-                sendDisconnectWebhook(username, "Game Freeze Detected (Delta: " .. string.format("%.2f", deltaTime) .. "s)")
-            end)
-        end
-    end)
-
     -- Monitor for Roblox core errors
     local ScriptContext = game:GetService("ScriptContext")
     ScriptContext.Error:Connect(function(message, stack, script)
@@ -4301,26 +4236,6 @@ else
     warn("⚠️ [Auto Fish] Disconnect monitor setup failed")
 end
 
--- Auto-run test untuk memastikan sistem berfungsi (uncomment untuk testing)
--- task.spawn(function()
---     task.wait(5) -- Wait 5 seconds after startup
---     testDisconnectNotification()
--- end)
-
--- ====== ONLINE STATUS TIMER SYSTEM ======
--- Timer untuk update status online setiap 8 detik
--- ====================================================================
--- ONLINE STATUS SYSTEM REMOVED
--- Reason: Reduce webhook spam and memory usage
--- Replaced by: Connect/Disconnect/Reconnect notifications only
--- ====================================================================
-
--- Old online status functions have been removed to save memory:
--- - startOnlineStatusTimer() [REMOVED]
--- - stopOnlineStatusTimer() [REMOVED]
--- - updateOnlineStatus() loop [REMOVED]
--- - testOnlineStatusUpdate() [REMOVED]
-
 -- ====== TEST FUNCTIONS & ERROR HANDLING ======
 -- Online status test functions removed (no longer needed)
 local function testOfflineStatusUpdate()
@@ -4407,10 +4322,6 @@ end
 
 
 
-local function setAutoCatch(state)
-    isAutoCatchOn = state
-    updateConfigField("autoCatch", state)
-end
 
 local function setAutoWeather(state)
     isAutoWeatherOn = state
@@ -4437,14 +4348,13 @@ if isfile then
 end
 
 -- Variables to use
-local useAutoFarm, useAutoSell, useAutoCatch, useAutoWeather, useAutoMegalodon, useGPUSaver, useTeleportLoc
+local useAutoFarm, useAutoSell, useAutoWeather, useAutoMegalodon, useGPUSaver, useTeleportLoc
 local useAutoUpgradeRod, useAutoUpgradeBait
 
 if configExists then
     -- Config exists, use saved settings from JSON
     useAutoFarm = config.autoFarm
     useAutoSell = config.autoSell
-    useAutoCatch = config.autoCatch
     useAutoWeather = config.autoWeather
     useAutoMegalodon = config.autoMegalodon
     useGPUSaver = config.gpuSaver
@@ -4458,7 +4368,6 @@ else
     -- No config file, use settings from main_noui.lua and save them
     useAutoFarm = AUTO_FARM or false
     useAutoSell = AUTO_SELL or false
-    useAutoCatch = AUTO_CATCH or false
     useAutoWeather = AUTO_WEATHER or false
     useAutoMegalodon = AUTO_MEGALODON or false
     useGPUSaver = GPU_SAVER or false
@@ -4467,26 +4376,21 @@ else
     useAutoUpgradeBait = AUTO_UPGRADE_BAIT or false
 
     -- Apply delays from main_noui.lua
-    chargeFishingDelay = CHARGE_ROD_DELAY or 0.1
-    autoFishMainDelay = AUTO_FISH_DELAY or 0.1
+    delayFarm = DELAY_FARM or 1
     autoSellDelay = AUTO_SELL_DELAY or 34
-    weatherIdDelay = WEATHER_ID_DELAY or 10
     weatherCycleDelay = WEATHER_CYCLE_DELAY or 30
 
     -- Save to config for next time
     config.autoFarm = useAutoFarm
     config.autoSell = useAutoSell
-    config.autoCatch = useAutoCatch
     config.autoWeather = useAutoWeather
     config.autoMegalodon = useAutoMegalodon
     config.gpuSaver = useGPUSaver
     config.teleportLocation = useTeleportLoc
     config.autoUpgradeRod = useAutoUpgradeRod
     config.autoUpgradeBait = useAutoUpgradeBait
-    config.chargeFishingDelay = chargeFishingDelay
-    config.autoFishDelay = autoFishMainDelay
+    config.delayFarm = delayFarm
     config.autoSellDelay = autoSellDelay
-    config.weatherIdDelay = weatherIdDelay
     config.weatherCycleDelay = weatherCycleDelay
 
     saveConfig()
@@ -4526,12 +4430,6 @@ local function startManualConfig()
         task.wait(0.5)
     end
 
-    -- Enable Auto Catch if configured
-    if useAutoCatch then
-        setAutoCatch(true)
-        task.wait(0.5)
-    end
-
     -- Enable Auto Weather if configured
     if useAutoWeather then
         setAutoWeather(true)
@@ -4549,7 +4447,7 @@ local function startManualConfig()
 end
 
 -- ====================================================================
---                    AUTO LOOPS (CORE FISHING LOGIC)
+--                    AUTO LOOPS (CORE FISHING LOGIC) (NEW FARM)
 -- ====================================================================
 
 -- ====== AUTO FARM SYSTEM (v9.1 no burst) ======
@@ -4609,10 +4507,9 @@ local function startFarm()
     task.spawn(function()
         while isAutoFarmOn do
             farmCycle()
-            
-            -- Tunggu waktu yang cukup untuk siklus selesai sebelum memulai lagi.
-            -- Nilai 1 detik adalah default dari skrip referensi.
-            task.wait(1) 
+
+            -- Delay farm cycle (customizable via DELAY_FARM in main.lua)
+            task.wait(delayFarm)
         end
     end)
 end
