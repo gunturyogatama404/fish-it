@@ -1452,6 +1452,10 @@ local function detectAndEquipBestRod()
         if verified then
             print(string.format("[Auto Equip Rod] ✅ Verified: '%s' is equipped!", bestRod.name))
 
+            -- Apply rod-specific delays if auto upgrade is enabled
+            if upgradeState.rod then
+                applyRodDelays(bestRod.id)
+            end
         else
             warn(string.format("[Auto Equip Rod] ⚠️ Equip verification failed for '%s' - retrying...", bestRod.name))
 
@@ -1466,6 +1470,10 @@ local function detectAndEquipBestRod()
                 task.wait(2)
                 print(string.format("[Auto Equip Rod] ✅ Retry successful: '%s' equipped!", bestRod.name))
 
+                -- Apply delays after retry
+                if upgradeState.rod then
+                    applyRodDelays(bestRod.id)
+                end
             else
                 warn(string.format("[Auto Equip Rod] ❌ Retry failed for '%s'", bestRod.name))
             end
@@ -1648,6 +1656,10 @@ local isAutoMegalodonOn = false
 local megalodonLockActive = false
 local megalodonLockConnection = nil
 
+local isAutoPreset1On = false
+local isAutoPreset2On = false
+local isAutoPreset3On = false
+
 -- (Auto Artifact configuration moved to top of script - line 442+)
 
 -- Megalodon event variables
@@ -1701,10 +1713,13 @@ local defaultConfig = {
     autoCatch = false,
     autoWeather = false,
     autoMegalodon = false,
+    activePreset = "none",
     gpuSaver = false,
     teleportLocation = "Sisyphus Statue",
     autoUpgradeRod = false,
     autoUpgradeBait = false,
+    chargeFishingDelay = 0.01,
+    autoFishDelay = 0.9,
     autoSellDelay = 45,
     weatherIdDelay = 33,
     weatherCycleDelay = 100
@@ -1885,6 +1900,8 @@ local function syncConfigFromStates()
     config.autoWeather = isAutoWeatherOn
     config.autoMegalodon = isAutoMegalodonOn
     config.gpuSaver = gpuSaverEnabled
+    config.chargeFishingDelay = chargeFishingDelay
+    config.autoFishMainDelay = autoFishMainDelay
     config.autoSellDelay = autoSellDelay
     config.weatherIdDelay = weatherIdDelay
     config.weatherCycleDelay = weatherCycleDelay
@@ -1915,6 +1932,8 @@ local function applyDelayConfig()
         return clamped
     end
 
+    chargeFishingDelay = applyField("chargeFishingDelay", 0.01, defaultConfig.chargeFishingDelay)
+    autoFishMainDelay = applyField("autoFishDelay", 0.1, defaultConfig.autoFishDelay)
     autoSellDelay = applyField("autoSellDelay", 30, defaultConfig.autoSellDelay)
     weatherIdDelay = applyField("weatherIdDelay", 1, defaultConfig.weatherIdDelay)
     weatherCycleDelay = applyField("weatherCycleDelay", 10, defaultConfig.weatherCycleDelay)
@@ -1926,7 +1945,31 @@ local function applyDelayConfig()
     isApplyingConfig = previousState
 end
 
+local function roundDelay(value)
+    return math.floor(value * 100 + 0.5) / 100
+end
 
+local function setChargeFishingDelay(value)
+    local numeric = tonumber(value) or chargeFishingDelay
+    local clamped = math.max(0.01, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - chargeFishingDelay) < 0.001 then
+        return
+    end
+    chargeFishingDelay = clamped
+    updateConfigField("chargeFishingDelay", clamped)
+end
+
+local function setAutoFishMainDelay(value)
+    local numeric = tonumber(value) or autoFishMainDelay
+    local clamped = math.max(0.1, numeric)
+    clamped = roundDelay(clamped)
+    if math.abs(clamped - autoFishMainDelay) < 0.001 then
+        return
+    end
+    autoFishMainDelay = clamped
+    updateConfigField("autoFishMainDelay", clamped)
+end
 
 local function setAutoSellDelay(value)
     local numeric = tonumber(value) or autoSellDelay
@@ -1938,7 +1981,6 @@ local function setAutoSellDelay(value)
     autoSellDelay = clamped
     updateConfigField("autoSellDelay", clamped)
 end
-
 
 
 local function setWeatherIdDelay(value)
@@ -1980,7 +2022,6 @@ local gpuSaverToggle
 local chargeFishingSlider
 local autoFishMainSlider
 local autoSellSlider
-local autoCatchSlider
 local weatherIdSlider
 local weatherCycleSlider
 local upgradeRodToggle
@@ -2395,12 +2436,95 @@ local whiteScreenGui = nil
 local connections = {}
 local fpsCapConnection = nil
 
--- ====== DELAY VARIABLES (Optimized) ======
+-- ====== DELAY VARIABLES ======
+local chargeFishingDelay = 0.01
+local autoFishMainDelay = 0.9
 local autoSellDelay = 45
 local weatherIdDelay = 33
 local weatherCycleDelay = 100
 
+-- ====== ROD-SPECIFIC DELAY MAPPING (from List Best.lua) ======
+local rodDelaySettings = {
+    [79] = {fish = 7, catch = 1},      -- Luck Rod
+    [76] = {fish = 5, catch = 1},      -- Carbon Rod
+    [85] = {fish = 5, catch = 1},      -- Grass Rod
+    [77] = {fish = 5, catch = 1},      -- Demascus Rod
+    [78] = {fish = 5, catch = 1},      -- Ice Rod
+    [4] = {fish = 4, catch = 1},       -- Lucky Rod
+    [80] = {fish = 4, catch = 1},      -- Midnight Rod
+    [6] = {fish = 1, catch = 0.4},     -- Steampunk Rod
+    [7] = {fish = 0.3, catch = 0.3},   -- Chrome Rod
+    [5] = {fish = 0.1, catch = 0.1},   -- Astral Rod
+    [126] = {fish = 0.1, catch = 0.1}  -- Ares Rod
+}
 
+-- Function to get currently equipped rod ID
+local function getEquippedRodID()
+    if not PlayerData then return nil end
+
+    local success, inventory = pcall(function()
+        return PlayerData:Get("Inventory")
+    end)
+
+    if not success or not inventory then return nil end
+
+    local fishingRods = inventory["Fishing Rods"]
+    if not fishingRods or type(fishingRods) ~= "table" then return nil end
+
+    -- Get equipped items
+    local equippedItems = PlayerData:GetExpect("EquippedItems")
+
+    -- Find which rod is equipped
+    for i, rodItem in ipairs(fishingRods) do
+        for _, equippedUUID in ipairs(equippedItems) do
+            if equippedUUID == rodItem.UUID then
+                return rodItem.Id -- Return equipped rod ID
+            end
+        end
+    end
+
+    return nil
+end
+
+-- Function to apply rod-specific delays
+local function applyRodDelays(rodID)
+    if not rodID then return false end
+
+    local delaySetting = rodDelaySettings[rodID]
+    if not delaySetting then
+        warn("[Rod Delay] No delay setting found for rod ID: " .. tostring(rodID))
+        return false
+    end
+
+    -- Update delays
+    autoFishMainDelay = delaySetting.fish
+
+    -- Save to config
+    if config then
+        config.autoFishDelay = autoFishMainDelay
+        saveConfig()
+    end
+
+    print(string.format("[Rod Delay] ✅ Delays updated for rod ID %d: Fish=%.1fs",
+        rodID, autoFishMainDelay))
+
+    return true
+end
+
+-- Function to detect equipped rod and apply delays
+local function detectAndApplyRodDelays()
+    local equippedRodID = getEquippedRodID()
+
+    if equippedRodID then
+        local rodName = rodNames[equippedRodID] or "Unknown"
+        print(string.format("[Rod Delay] Detected equipped rod: %s (ID: %d)", rodName, equippedRodID))
+        applyRodDelays(equippedRodID)
+        return true
+    else
+        warn("[Rod Delay] No rod equipped - using default delays")
+        return false
+    end
+end
 
 HOTBAR_SLOT = 2 -- Slot hotbar untuk equip tool (global)
 
@@ -2736,60 +2860,87 @@ local function createWhiteScreen()
         buyTotem()
     end)
 
-    -- ====== OPTIMIZED UI UPDATE SYSTEM ======
+    -- ====== IMPROVED UPDATE SYSTEM (from reference) ======
     task.spawn(function()
-        while whiteScreenGui and whiteScreenGui.Parent do
-            pcall(function()
+        local lastUpdate = tick()
+        local frameCount = 0
+
+        connections.renderConnection = RunService.RenderStepped:Connect(function()
+            frameCount = frameCount + 1
+            local currentTime = tick()
+
+            if currentTime - lastUpdate >= 1 then
+                local fps = frameCount / (currentTime - lastUpdate)
+                
+                -- Safe FPS update
+                pcall(function()
+                    if fpsLabel and fpsLabel.Parent then
+                        fpsLabel.Text = string.format("📊 FPS: %.0f", fps)
+                    end
+                end)
+                
                 -- Safe session time update
-                if sessionLabel and sessionLabel.Parent then
-                    local currentUptime = math.max(0, os.time() - startTime)
-                    sessionLabel.Text = "⏱️ Uptime: " .. FormatTime(currentUptime)
-                end
+                pcall(function()
+                    if sessionLabel and sessionLabel.Parent then
+                        local currentUptime = math.max(0, os.time() - startTime)
+                        sessionLabel.Text = "⏱️ Uptime: " .. FormatTime(currentUptime)
+                    end
+                end)
                 
                 -- Safe fishing stats update
-                if fishStatsLabel and fishStatsLabel.Parent then
-                    local fishCount = math.max(0, sessionStats.totalFish)
-                    fishStatsLabel.Text = "🎣 Fish Caught: " .. FormatNumber(fishCount)
-                end
+                pcall(function()
+                    if fishStatsLabel and fishStatsLabel.Parent then
+                        local fishCount = math.max(0, sessionStats.totalFish)
+                        fishStatsLabel.Text = "🎣 Fish Caught: " .. FormatNumber(fishCount)
+                    end
+                end)
                 
                 -- Safe coins update
-                if coinLabel and coinLabel.Parent then
-                    coinLabel.Text = "💰 Coins: " .. FormatCoins(getCurrentCoins())
-                end
+                pcall(function()
+                    if coinLabel and coinLabel.Parent then
+                        coinLabel.Text = "💰 Coins: " .. FormatCoins(getCurrentCoins())
+                    end
+                end)
 
                 -- Safe level update
-                if levelLabel and levelLabel.Parent then
-                    levelLabel.Text = "⭐ " .. getCurrentLevel()
-                end
+                pcall(function()
+                    if levelLabel and levelLabel.Parent then
+                        levelLabel.Text = "⭐ " .. getCurrentLevel()
+                    end
+                end)
                 
                 -- Safe quest updates
-                if quest1Label and quest1Label.Parent then quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1") end
-                if quest2Label and quest2Label.Parent then quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2") end
-                if quest3Label and quest3Label.Parent then quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3") end
-                if quest4Label and quest4Label.Parent then quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4") end
+                pcall(function() if quest1Label and quest1Label.Parent then quest1Label.Text = "🏆 Quest 1: " .. getQuestText("Label1") end end)
+                pcall(function() if quest2Label and quest2Label.Parent then quest2Label.Text = "🏆 Quest 2: " .. getQuestText("Label2") end end)
+                pcall(function() if quest3Label and quest3Label.Parent then quest3Label.Text = "🏆 Quest 3: " .. getQuestText("Label3") end end)
+                pcall(function() if quest4Label and quest4Label.Parent then quest4Label.Text = "🏆 Quest 4: " .. getQuestText("Label4") end end)
 
                 -- Safe status update
-                if statusLabel and statusLabel.Parent then
-                    statusLabel.Text = "🤖 Auto Farm: " .. (isAutoFarmOn and "🟢 ON" or "🔴 OFF") .. 
-                                     " | Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
-                                     " | Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF")
-                end
-                if extraStatusLabel and extraStatusLabel.Parent then
-                    extraStatusLabel.Text = "🦈 Auto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
-                                          " | 🌤️ Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
-                end
-
+                pcall(function()
+                    if statusLabel and statusLabel.Parent then
+                        statusLabel.Text = "🤖 Auto Farm: " .. (isAutoFarmOn and "🟢 ON" or "🔴 OFF") .. 
+                                         " | Auto Sell: " .. (isAutoSellOn and "🟢 ON" or "🔴 OFF") ..
+                                         " | Auto Catch: " .. (isAutoCatchOn and "🟢 ON" or "🔴 OFF")
+                    end
+                    if extraStatusLabel and extraStatusLabel.Parent then
+                        extraStatusLabel.Text = "🦈 Auto Megalodon: " .. (isAutoMegalodonOn and "🟢 ON" or "🔴 OFF") ..
+                                              " | 🌤️ Auto Weather: " .. (isAutoWeatherOn and "🟢 ON" or "🔴 OFF")
+                    end
+                end)
+                
                 -- Safe Total Caught & Best Caught update
-                if titleLabel and titleLabel.Parent then
-                    local currentCaught = (LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught and LocalPlayer.leaderstats.Caught.Value) or 0
-                    local currentBest = (LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] and LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
-                    titleLabel.Text = "🟢 " .. LocalPlayer.Name .. "\nTotal Caught: " .. FormatNumber(currentCaught) .. "\nBest Caught: " .. currentBest
-                end
-            end)
-            
-            -- Wait for 1 second before next update
-            task.wait(1)
-        end
+                pcall(function()
+                    if titleLabel and titleLabel.Parent then
+                        local currentCaught = (LocalPlayer.leaderstats and LocalPlayer.leaderstats.Caught and LocalPlayer.leaderstats.Caught.Value) or 0
+                        local currentBest = (LocalPlayer.leaderstats and LocalPlayer.leaderstats["Rarest Fish"] and LocalPlayer.leaderstats["Rarest Fish"].Value) or "None"
+                        titleLabel.Text = "🟢 " .. LocalPlayer.Name .. "\nTotal Caught: " .. FormatNumber(currentCaught) .. "\nBest Caught: " .. currentBest
+                    end
+                end)
+                
+                frameCount = 0
+                lastUpdate = currentTime
+            end
+        end)
     end)
     
     -- Real-time listeners for Total Caught and Best Caught
@@ -3024,7 +3175,206 @@ local function teleportToNamedLocation(targetName)
     end)
 end
 
+local PRESET_DELAY = 0.5
+local presetActionLock = false
 
+local function runPresetSequence(steps)
+    if type(steps) ~= "table" or #steps == 0 then
+        return
+    end
+
+    while presetActionLock do
+        task.wait(0.05)
+    end
+
+    presetActionLock = true
+    isApplyingConfig = true
+
+    local success, err = pcall(function()
+        for index, step in ipairs(steps) do
+            step()
+            if index < #steps then
+                task.wait(PRESET_DELAY)
+            end
+        end
+    end)
+
+    isApplyingConfig = false
+    syncConfigFromStates()
+    presetActionLock = false
+
+    if not success then
+        warn("[AutoFish] Preset sequence error:", err)
+    end
+end
+
+local function enablePreset(presetKey, locationName)
+    task.spawn(function()
+        local steps = {}
+
+        if config.activePreset and config.activePreset ~= "none" and config.activePreset ~= presetKey then
+            table.insert(steps, function() 
+                if autoMegalodonToggle then 
+                    autoMegalodonToggle:UpdateToggle(nil, false)
+                end
+            end)
+            table.insert(steps, function() 
+                if autoWeatherToggle then 
+                    autoWeatherToggle:UpdateToggle(nil, false)
+                end
+            end)
+            table.insert(steps, function() 
+                if autoCatchToggle then 
+                    autoCatchToggle:UpdateToggle(nil, false)
+                end
+            end)
+            table.insert(steps, function() 
+                if autoSellToggle then 
+                    autoSellToggle:UpdateToggle(nil, false)
+                end
+            end)
+            table.insert(steps, function() 
+                if autoFarmToggle then 
+                    autoFarmToggle:UpdateToggle(nil, false)
+                end
+            end)
+        end
+
+        table.insert(steps, function() 
+            if autoFarmToggle then 
+                autoFarmToggle:UpdateToggle(nil, true)
+            end
+        end)
+        table.insert(steps, function() 
+            if autoSellToggle then 
+                autoSellToggle:UpdateToggle(nil, true)
+            end
+        end)
+        table.insert(steps, function() 
+            if autoCatchToggle then 
+                autoCatchToggle:UpdateToggle(nil, true)
+            end
+        end)
+
+        -- Only enable weather and megalodon for auto1 and auto2, not auto3
+        if presetKey ~= "auto3" then
+            table.insert(steps, function() 
+                if autoWeatherToggle then 
+                    autoWeatherToggle:UpdateToggle(nil, true)
+                end
+            end)
+            table.insert(steps, function() 
+                if autoMegalodonToggle then 
+                    autoMegalodonToggle:UpdateToggle(nil, true)
+                end
+            end)
+        end
+
+        table.insert(steps, function()
+            enableGPUSaver()
+        end)
+
+        -- Set custom delays for each preset
+        table.insert(steps, function()
+            setDelaysForPreset(presetKey)
+        end)
+
+        runPresetSequence(steps)
+
+        if presetKey == "auto1" then
+            isAutoPreset1On = true
+            isAutoPreset2On = false
+            isAutoPreset3On = false
+        elseif presetKey == "auto2" then
+            isAutoPreset1On = false
+            isAutoPreset2On = true
+            isAutoPreset3On = false
+        elseif presetKey == "auto3" then
+            isAutoPreset1On = false
+            isAutoPreset2On = false
+            isAutoPreset3On = true
+        else
+            isAutoPreset1On = false
+            isAutoPreset2On = true
+            isAutoPreset3On = false
+        end
+
+        config.activePreset = presetKey
+        saveConfig()
+        teleportToNamedLocation(locationName)
+    end)
+end
+
+local function disablePreset(presetKey)
+    task.spawn(function()
+        if config.activePreset ~= presetKey then
+            if presetKey == "auto1" then
+                isAutoPreset1On = false
+            elseif presetKey == "auto2" then
+                isAutoPreset2On = false
+            elseif presetKey == "auto3" then
+                isAutoPreset3On = false
+            end
+            return
+        end
+
+        local steps = {
+            function() 
+                if autoMegalodonToggle then 
+                    autoMegalodonToggle:UpdateToggle(nil, false)
+                end
+            end,
+            function() 
+                if autoWeatherToggle then 
+                    autoWeatherToggle:UpdateToggle(nil, false)
+                end
+            end,
+            function() 
+                if autoCatchToggle then 
+                    autoCatchToggle:UpdateToggle(nil, false)
+                end
+            end,
+            function() 
+                if autoSellToggle then 
+                    autoSellToggle:UpdateToggle(nil, false)
+                end
+            end,
+            function() 
+                if autoFarmToggle then 
+                    autoFarmToggle:UpdateToggle(nil, false)
+                end
+            end,
+            function() 
+                disableGPUSaver()
+            end,
+        }
+
+        -- Reset delays when disabling preset
+        table.insert(steps, function()
+            -- Reset to default delays
+            if autoFishMainSlider then
+                autoFishMainSlider:Set(0.9)
+            else
+                setAutoFishMainDelay(0.9)
+            end
+        end)
+
+        runPresetSequence(steps)
+
+        if presetKey == "auto1" then
+            isAutoPreset1On = false
+        elseif presetKey == "auto2" then
+            isAutoPreset2On = false
+        elseif presetKey == "auto3" then
+            isAutoPreset3On = false
+        else
+            isAutoPreset2On = false
+        end
+
+        config.activePreset = "none"
+        saveConfig()
+    end)
+end
 
 
 -- ====== DAFTAR IDS ====== 
@@ -4311,7 +4661,23 @@ local function setAutoFishDelayForKohana()
     end
 end
 
-
+local function setDelaysForPreset(presetKey)
+    if presetKey == "auto1" or presetKey == "auto2" then
+        -- Auto 1 dan Auto 2: Auto Fish Delay 0.1s
+        if autoFishMainSlider then
+            autoFishMainSlider:Set(0.1)
+        else
+            setAutoFishMainDelay(0.1)
+        end
+    elseif presetKey == "auto3" then
+        -- Auto 3: Auto Fish Delay 5s
+        if autoFishMainSlider then
+            autoFishMainSlider:Set(5)
+        else
+            setAutoFishMainDelay(5)
+        end
+    end
+end
 
 
 -- ====================================================================
@@ -4365,7 +4731,6 @@ else
     chargeFishingDelay = CHARGE_ROD_DELAY or 0.1
     autoFishMainDelay = AUTO_FISH_DELAY or 0.1
     autoSellDelay = AUTO_SELL_DELAY or 34
-    autoCatchDelay = AUTO_CATCH_DELAY or 0.1
     weatherIdDelay = WEATHER_ID_DELAY or 10
     weatherCycleDelay = WEATHER_CYCLE_DELAY or 30
 
@@ -4382,7 +4747,6 @@ else
     config.chargeFishingDelay = chargeFishingDelay
     config.autoFishDelay = autoFishMainDelay
     config.autoSellDelay = autoSellDelay
-    config.autoCatchDelay = autoCatchDelay
     config.weatherIdDelay = weatherIdDelay
     config.weatherCycleDelay = weatherCycleDelay
 
@@ -4486,14 +4850,13 @@ farmCycle = function()
         task.spawn(function() if requestMinigameEvent then requestMinigameEvent:InvokeServer(1.2854545116425, 1) end end)
     end)
 
-    -- 2. Mulai spam sinyal "fishingCompleted" (Optimized)
+    -- 2. Mulai spam sinyal "fishingCompleted"
     spamCompletedThread = task.spawn(function()
         while isAutoFarmOn do
             if fishingEvent then
                 fishingEvent:FireServer()
             end
-            -- OPTIMIZED: Increased wait time from 0.01 to 0.1 to reduce CPU load
-            task.wait(0.1)
+            task.wait(0.01)
         end
     end)
 end
@@ -4559,7 +4922,7 @@ task.spawn(function()
     end
 end)
 
--- Auto Catch Loop (Optimized)
+-- Auto Catch Loop
 task.spawn(function()
     while true do
         if isAutoCatchOn then
@@ -4858,6 +5221,11 @@ print("[Startup] ================================================")
 if useAutoUpgradeRod then
     upgradeState.rod = true
     print("[Startup] Auto Upgrade Rod system enabled")
+
+    -- Detect and apply rod delays on startup
+    print("[Startup] Detecting equipped rod and applying delays...")
+    task.wait(1)
+    detectAndApplyRodDelays()
 end
 
 if useAutoUpgradeBait then
